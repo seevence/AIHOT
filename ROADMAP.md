@@ -1,6 +1,6 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：PARALLEL READY，五人可同时开始业务开发；MVP 真实闭环尚未完成  
+> 状态：PARALLEL READY，五人可同时开始业务开发；A 角色 D1 运行集成已通过；MVP 真实闭环尚未完成  
 > 启动日期：2026-11-16  
 > 最近更新：2026-11-16  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
@@ -23,8 +23,16 @@
 | 数据表与后端 | 两张表及两个索引迁移、Repository 接口、三个 GET stub 已建立 | D 实现 SQL repository、队列和真实 API；unavailable stub 当前返回 `503 data_unavailable` |
 | 前端 | 看板/详情骨架、状态组件和独立 fixture server 已建立 | E 接真实 API，完善筛选、证据和响应式页面 |
 | 编译检查 | `npm run typecheck`、`npm run build -w @aihot/web` 已通过 | 后续 PR 和最终验收仍需重新执行相关检查 |
+| Docker 运行验收 | 镜像已重建；`0152`–`0155` 四个 career 迁移已应用；`/career-insights` 显示“数据尚未就绪”错误态，三个 GET 返回 `503 data_unavailable` 或参数 `400` | B/C/D/E 接入真实数据后用 `--require-data` 复验 |
 
 团队唯一启动入口为 `docs/team-startup.md`，契约说明为 `docs/development-contract.md`。正式 route 不引用 fixture；fixture 页面必须显示“联调样例（非真实数据）”。
+
+**A 角色 D1 运行集成记录（2026-11-16，`feat/a-d1-runtime`）：**
+
+- 新增 `scripts/check-career-integration.ts`，默认接受预数据阶段的渲染后 `503` 错误页和 API `503 data_unavailable`；`--require-data` 从 D2 起强制真实数据。
+- 修复基线迁移 `0153_career_job_observations.sql` 的在线安全检查阻塞：`bigint GENERATED ALWAYS AS IDENTITY` 改为语义等价的 `bigserial`，字段与唯一性不变。
+- 验收命令：`node scripts/check-career-integration.ts --base http://localhost:3000` 五项通过；`node scripts/check-migrations.ts --base main` 通过；`npm run typecheck` 通过。
+- 本阶段改动保持独立分支，review 通过后才并入 `feat/integration`；不进入下一阶段。
 
 **尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
