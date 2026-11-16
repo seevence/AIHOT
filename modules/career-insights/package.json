@@ -1,0 +1,19 @@
+{
+  "name": "@aihot/career-insights",
+  "private": true,
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    "./module": "./module.ts",
+    "./server": "./server.ts",
+    "./web": "./web.tsx",
+    "./contracts": "./contracts/index.ts",
+    "./collector": "./collector/index.ts",
+    "./data": "./data/index.ts"
+  },
+  "dependencies": {
+    "@aihot/backend": "*",
+    "@aihot/contracts": "*",
+    "@aihot/web": "*"
+  }
+}
