@@ -170,16 +170,19 @@ gh pr create --repo seevence/AIHOT --base main --head feat/integration --fill
 ```
 
 需要更新已推送的 PR 分支时使用 `git push --force-with-lease`，不使用强制推送覆盖他人提交。任何实际提交、推送、邀请或 Issue 分配都必须由对应负责人明确确认后执行。
+
 ## 7. Docker 重建、迁移与运行级联调检查
 
 集成分支改动涉及 `Dockerfile`、`site/modules/**` 或模块迁移时，用 Docker 重建容器并重新执行迁移：
 
 ```bash
 docker compose build
-docker compose stop api worker web
+docker compose stop worker api web
 docker compose run --rm setup && docker compose up -d
 docker compose logs -f --tail 100 api worker web
 ```
+
+`worker` 的 `stop_grace_period` 是 515 秒（要等它跑完备份和付费调用再关库），`docker compose stop` 可能等待数分钟才会返回，这是正常收尾；不要用 `docker compose kill` 或强杀进程绕过。
 
 `setup` 每次启动先执行 `node scripts/migrate.ts && node scripts/seed.ts` 再退出，所以这次 `run --rm setup` 就是本次的迁移；不要另造迁移命令，也不要改写历史迁移。
 
@@ -189,6 +192,8 @@ docker compose logs -f --tail 100 api worker web
 node scripts/check-career-integration.ts --base http://localhost:3000
 # 真实数据就绪后（D2 起）503 不再被接受：
 node scripts/check-career-integration.ts --base http://localhost:3000 --require-data
+# 根目录 scripts/ 不在 npm run typecheck 覆盖范围内，单独检查本脚本：
+npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2023 --lib es2024 --allowImportingTsExtensions --types node scripts/check-career-integration.ts
 ```
 
 地址解析顺序为 `--base` → `SITE_URL` → `http://localhost:3000`。脚本依次请求 `/api/health`、`/career-insights`、`/api/site/career-insights/summary`、`/api/site/career-insights/jobs`、`/api/site/career-insights/jobs/not-a-uuid`；每次检查打印一行 `✓ <path>` 或 `✗ <path>  <原因>`，最后打印 `all checks passed`（退出码 `0`）或 `<N> check(s) failed`（退出码 `1`）。各检查相互独立，失败不会中断其余请求，也没有重试。
@@ -199,7 +204,7 @@ node scripts/check-career-integration.ts --base http://localhost:3000 --require-
 |---|---|
 | `/api/health` | `200`，JSON `ok=true`、`db="ok"` |
 | `/career-insights` | `text/html` 且页面包含 `职业洞察`（始终要求）；预数据阶段可返回渲染后的 `503` 错误页，且页面还须包含 `数据尚未就绪`；加 `--require-data` 时必须为 `200` |
-| `/api/site/career-insights/summary`、`.../jobs` | 预数据阶段可 `503` + `error.code="data_unavailable"`；`200` 时 `contract_version` 必须等于 `CAREER_CONTRACT_VERSION`（当前 `0.1`），并带 `metrics`/`items` 数组；加 `--require-data` 时拒绝 `503` |
+| `/api/site/career-insights/summary`、`.../jobs` | 预数据阶段可 `503` + `error.code="data_unavailable"`；`200` 时 `contract_version` 以 `CAREER_CONTRACT_VERSION` 为准（当前 `0.1`），并带 `metrics`/`items` 数组；加 `--require-data` 时拒绝 `503` |
 | `/api/site/career-insights/jobs/not-a-uuid` | `400` + `error.code="invalid_parameter"` |
 
 预数据阶段接受渲染后的 `503` 错误页和 `503 data_unavailable` 只是本阶段的过渡，不是空列表或 fixture 的理由，也不代表最终 MVP 验收可以接受 `503`；真实数据到位后一律加 `--require-data` 运行。

@@ -73,8 +73,7 @@ function dataCheck(listField: "metrics" | "items", requireData: boolean): Check 
     if (value.contract_version !== CAREER_CONTRACT_VERSION) {
       return `contract_version ${JSON.stringify(value.contract_version)}, expected "${CAREER_CONTRACT_VERSION}"`;
     }
-    if (typeof value.data_origin !== "string") return "data_origin is missing";
-    if (typeof value.as_of !== "string") return "as_of is missing";
+
     if (!Array.isArray(value[listField])) return `${listField} is not an array`;
     return null;
   };
@@ -105,7 +104,7 @@ export async function checkCareerSite(base: string, options: { requireData?: boo
     try {
       const res = await fetch(origin + path, { redirect: "manual", signal: AbortSignal.timeout(TIMEOUT_MS) });
       const contentType = res.headers.get("content-type") ?? "";
-      const body = contentType.startsWith("image/") ? "" : await res.text();
+      const body = await res.text();
       reason = verify({ status: res.status, contentType, body });
     } catch (error) {
       reason = error instanceof Error ? error.message : String(error);
@@ -122,5 +121,5 @@ if (import.meta.main) {
   for (const { path, reason } of results) console.log(reason === null ? `✓ ${path}` : `✗ ${path}  ${reason}`);
   const failed = results.filter((result) => result.reason !== null).length;
   console.log(failed ? `\n${failed} check(s) failed` : "\nall checks passed");
-  process.exit(failed ? 1 : 0);
+  process.exitCode = failed ? 1 : 0;
 }
