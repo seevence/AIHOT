@@ -1,11 +1,32 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：PLAN ONLY，尚未开始业务开发  
+> 状态：PARALLEL READY，五人可同时开始业务开发；MVP 真实闭环尚未完成  
 > 启动日期：2026-11-16  
+> 最近更新：2026-11-16  
+> 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
+> 私有仓库：`https://github.com/seevence/AIHOT`  
 > 交付目标：下周评审  
 > 开发节奏：**5 天完成真实闭环 + 2 天联调、补证据和排练**  
 > 首发范围：IT 行业中的 **人工智能+** 方向  
 > 核心受众：希望了解行业方向、岗位要求和技能准备路径的大学生
+
+## 0. 当前执行状态
+
+五人并行开发所需的准备工作已经完成并推送到五条远程分支。本文后续勾选状态分为“准备基线”和“最终 MVP 验收”，不能把模块骨架完成当作真实数据闭环完成。
+
+| 准备项 | 当前状态 | 后续业务任务 |
+|---|---|---|
+| 五条远程分支 | `feat/integration`、`feat/career-collector`、`feat/career-data-metrics`、`feat/career-api`、`feat/career-dashboard` 均包含 `42bf4cf` | B/C/D/E 各自提交业务 PR 到 `feat/integration` |
+| 共享契约 | `contracts/job.ts`、`api.ts`、`index.ts`、`openapi.json` 已建立；`contract_version=0.1` | 真实样本验收后升级 `1.0`，破坏性变更需评审 |
+| 模块接入 | `site/modules/` 三份清单、`site/package.json`、根锁文件和 Dockerfile 已接入 | A 维护集成与构建 |
+| 数据底座 | `RawCollectedJobV1`、`NormalizedJobV1`、校验器、五项指标规范、初版词典已建立 | B 真实采集；C 归一化、去重和真实指标计算 |
+| 数据表与后端 | 两张表及两个索引迁移、Repository 接口、三个 GET stub 已建立 | D 实现 SQL repository、队列和真实 API；unavailable stub 当前返回 `503 data_unavailable` |
+| 前端 | 看板/详情骨架、状态组件和独立 fixture server 已建立 | E 接真实 API，完善筛选、证据和响应式页面 |
+| 编译检查 | `npm run typecheck`、`npm run build -w @aihot/web` 已通过 | 后续 PR 和最终验收仍需重新执行相关检查 |
+
+团队唯一启动入口为 `docs/team-startup.md`，契约说明为 `docs/development-contract.md`。正式 route 不引用 fixture；fixture 页面必须显示“联调样例（非真实数据）”。
+
+**尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
 ## 1. 一周能做成什么
 
@@ -118,19 +139,16 @@ flowchart LR
 
 ## 4. 数据与指标定义
 
-### 4.1 职位当前态最小字段
+### 4.1 已建立的职位契约与当前态
 
-```text
-job_key / source_id / title / official_url
-role_family / locations / degree / experience / employment_type
-skills / published_at（未知则空）
-first_seen_at / last_seen_at / content_hash / raw
-```
+B/C/D/E 统一从 `@aihot/career-insights/contracts` 导入类型，不再另写字段定义：
 
-- 优先使用官方职位 ID；没有时使用规范化 URL 哈希作为 `job_key`。
-- `published_at` 只能来自官方页面，不得用首次采集时间冒充。
-- 每次采集更新 `last_seen_at`，并写一条观测；重复内容不产生重复职位。
-- 公司名和来源关联现有 `sources`，第一周不另建公司、城市、技能维度表。
+- B → C：`RawCollectedJobV1`，保存来源、官方职位 ID、公司、标题、官方链接、原始文本、官方发布时间、UTC 采集时间、采集器版本和可选 hints。
+- C → D：`NormalizedJobV1`，包含 `source_key/job_key/company_name/title/official_url`、`role_family/locations/degree/employment_type/student_friendly`、经验区间、技能与证据、`published_at/fetched_at/collector_version/content_hash/raw_text/raw_payload`。
+- 数据库当前态：`career_jobs` 保存 `first_seen_at/last_seen_at` 等当前字段；`career_job_observations` 保存周期观测，API 不公开完整原文。
+- 校验：D 使用 C 的 `validateNormalizedJobV1`；未知值保持 `null`、`unknown` 或 `[]`，不得把缺失经验解释成 0 年或经验不限。
+
+`job_key` 优先使用官方职位 ID，没有时使用规范化 URL 哈希。`published_at` 只能来自官方页面，不得用采集时间冒充。每次成功采集推进 `last_seen_at` 并追加观测；唯一职位键为 `(source_key, job_key)`，精确观测幂等键为 `(job_id, observed_at, content_hash)`。旧观测可追加，但不得覆盖较新的当前态。
 
 ### 4.2 趋势信号与就业建议
 
@@ -156,10 +174,10 @@ first_seen_at / last_seen_at / content_hash / raw
 
 | 时间 | 重点任务 | 当日验收标准 |
 |---|---|---|
-| **D1：底座与真实信源试抓** | 确认站名、公司/政策名单、岗位分类；检查 Node、Docker、PostgreSQL、模型 Key；启动原站；分别试抓 1 个政策源和 1 个招聘源 | 网站可访问；两类真实数据各至少 1 条成功入库；确定 3 家可自动采集公司；无法采集的来源在 2 小时内替换，不恋战 |
-| **D2：招聘数据闭环** | 建 `career-insights` 模块、两张表、归一化、去重、观测记录和采集队列；接入公司来源 | 同一来源连续采集两次不重复；职位能显示公司、方向、技能、学历、城市、采集时间和官方链接 |
-| **D3：政策闭环与指标** | 接至少 2 个官方政策源；调整行业分类和政策提示词；完成 SQL 指标及技能同义词词典 | 政策可跳转原文；看板 API 返回真实聚合结果；空数据和未知字段不会变成误导性结论 |
-| **D4：学生端看板** | 完成总览、趋势图、岗位筛选、证据展开和目标方向建议；补加载、空态、错误态 | 每个指标都可回到职位证据；政策卡片可打开政策条目；手机与桌面均可完成演示 |
+| **D1：复用并行底座，开始真实业务实现** | 五人确认角色和权限并切换各自分支；A 维护集成；B 试抓 1 个政策源和 1 个招聘源；C 基于真实样本归一化；D 实现 SQL repository；E 在已有页面骨架上联调 | 五条线均产生各自写集内的业务增量；两类真实数据各至少 1 条原始样本；确定 3 家可自动采集公司；无法采集的来源在 2 小时内替换 |
+| **D2：招聘数据真实闭环** | 复用已有模块、契约和迁移，完成真实采集、归一化、去重、观测、队列、SQL repository 和 API；E 接真实数据 | 同一来源连续采集两次不重复；至少 1 家公司真实职位经数据库和 API 到页面；职位显示公司、方向、技能、学历、城市、采集时间和官方链接 |
+| **D3：政策闭环与 MVP 冻结** | 接至少 2 个官方政策源；调整政策分类和提示词；完成 SQL 指标、技能词典和证据返回；冻结主链路 | 政策可跳转原文；看板 API 返回真实聚合结果；空数据和未知字段不会变成误导性结论；真实样本验收后契约升级 `1.0`，之后不改指标含义 |
+| **D4：学生端与集中调优** | 在现有看板骨架上完成总览、筛选、证据展开和目标方向建议；优化加载、空态、错误态、桌面和手机；只修既有能力 | 每个指标都可回到职位证据；政策卡片可打开政策条目；手机与桌面均可完成演示；不新增行业、账号或复杂模型 |
 | **D5：第二次真实采集与联调** | 再跑完整采集；验证两个观测时点；修复去重、标签和图表问题；备份真实演示数据 | 真实闭环连续跑通；无手工伪造趋势；主要测试通过；准备断网时可用的真实数据备份 |
 | **D6：验收与评审材料** | 全量检查、真实页面浏览器验收；整理架构图、数据来源表、指标说明、演示脚本和常见质询 | 另一名成员能按文档启动并独立完成 5 分钟演示；只修 P0 缺陷，不加新功能 |
 | **D7：缓冲与排练** | 修复阻塞问题、核对数据时效、排练计时、准备采集失败降级演示 | 冻结代码和演示数据；现场至少可展示本地网站、真实证据和采集记录 |
@@ -171,21 +189,24 @@ first_seen_at / last_seen_at / content_hash / raw
 - 政策模型调用设置预算上限；开发阶段先关闭真实采集和模型安全阀，试抓时再逐项打开。
 - 第一天若环境或模型未跑通，优先使用 Docker 和少量真实样本定位问题，不同时开发新功能。
 
-## 6. 并行分工与协作
+## 6. 五人并行分工与协作
 
-建议按四条线并行，人数不足时严格按 P0 顺序串行：
+五条远程分支已经存在并同步到基线 `42bf4cf`，不要另建同名分支。每个角色只修改自己的写集：
 
-| 角色 | 负责内容 | 建议分支 |
-|---|---|---|
-| 采集与数据 | 公司/政策试抓、归一化、去重、观测、真实数据备份 | `feat/career-collector` |
-| 后端与算法 | 模块、迁移、API、SQL 指标、建议规则、后端测试 | `feat/career-insights` |
-| 前端与演示 | 看板、筛选、证据展开、响应式、浏览器验收 | `feat/career-dashboard` |
-| 政策与评审 | 政策来源、样本标注、提示词校准、方法说明、演示脚本 | `docs/policy-and-demo` |
+| 角色 | 负责内容 | 远程分支 | 独占写集 |
+|---|---|---|---|
+| A：技术集成 | 权限、环境、共享契约、模块注册、PR 集成、部署与验收 | `feat/integration` | `package.json`、`module.ts`、`contracts/`、`site/modules/`、`site/package.json`、Dockerfile、协作契约文档 |
+| B：数据源采集 | 公司/政策试抓、真实原始样本、来源适配器、失败记录和采集说明 | `feat/career-collector` | `modules/career-insights/collector/**` |
+| C：数据治理与指标 | 归一化、去重、技能/主题词典、指标口径与计算、fixture | `feat/career-data-metrics` | `modules/career-insights/{data/**,fixtures/**}` |
+| D：后端与 API | SQL repository、迁移、队列、真实 API、建议规则和后端测试 | `feat/career-api` | `modules/career-insights/{server.ts,backend/**,migrations/**}` |
+| E：前端与演示 | 看板、筛选、证据展开、响应式和浏览器验收 | `feat/career-dashboard` | `modules/career-insights/{web.tsx,web/**}` |
 
-- 不直接推 `main`，小步 Pull Request，合并前跑相关检查。
-- 每天固定一次集成：先验证真实采集，再合并页面，最后更新演示数据。
-- `.env`、密钥、个人数据和 `.data/` 不进仓库；示例配置只写占位符。
-- 使用独立名称和品牌，不使用 AIHOT 名称及 Logo。
+- B/C/D/E 的 Pull Request 一律以 `feat/integration` 为目标，不直接推 `main`；A 收齐并整合后再向 `main` 提 PR。
+- `package-lock.json` 由 A 在集成阶段统一更新，其他四人的 PR 不夹带锁文件。
+- 契约版本当前为 `0.1`；只允许新增可选字段。删除、改名、改类型、改枚举或改指标含义必须由 A/C/D/E 评审并同步 B。
+- 每天固定一次集成：先验证真实采集和数据链路，再合并页面，最后更新演示数据；合并前执行相关检查。
+- `.env`、密钥、个人数据和 `.data/` 不进仓库；示例配置只写占位符。正式页面不使用 fixture 冒充真实数据。
+- 使用独立名称和品牌，不使用 AIHOT 名称及 Logo。完整命令和 PR 示例见 `docs/team-startup.md`。
 
 ## 7. 降级与止损规则
 
@@ -225,13 +246,23 @@ first_seen_at / last_seen_at / content_hash / raw
 - [ ] 额外验证 `/career-insights` 页面及其 API；现有 smoke 不自动覆盖新模块。
 - [ ] 仓库无密钥、`.env`、个人信息和虚构演示数据。
 
-## 9. D1 上午必须锁定的事项
+## 9. 当前锁定状态与待确认事项
 
-- [ ] 正式站名与一句话定位。
-- [ ] 3 家主用公司、2 家备选公司及各自官方招聘入口。
-- [ ] 2 个主用政策来源、1 个备选来源。
-- [ ] 四类岗位和首版技能同义词词典。
-- [ ] 评审准确日期、演示时长、是否允许联网。
-- [ ] 团队成员分工、模型提供方和预算上限。
+### 准备基线已锁定
 
-完成以上事项后，不再扩大一周 MVP 范围；新增想法统一进入评审后的迭代清单。
+- [x] 五人角色、五条远程分支和各自文件写集。
+- [x] 四类岗位、首版技能/主题词典及五项指标规范。
+- [x] `RawCollectedJobV1`、`NormalizedJobV1`、HTTP API 和数据库迁移，当前 `contract_version=0.1`。
+- [x] `career-insights` 模块注册、API stub、页面骨架和独立 fixture 联调路径。
+- [x] 模型提供方为 DeepSeek；开发和准备阶段采集、模型安全阀保持关闭。
+
+### 仍需本人或团队确认
+
+- [ ] 正式站名与一句话定位；不得擅自使用 AIHOT 名称和 Logo。
+- [ ] B 真实试抓后确认 3 家主用公司、2 家备选公司及官方招聘入口；候选配置当前均为 `enabled=false`。
+- [ ] 确认 2 个主用政策来源和 1 个备选来源的真实可采集性。
+- [ ] 评审准确日期、演示时长、现场是否允许联网。
+- [ ] 团队成员姓名/GitHub 账号、仓库邀请和模型预算上限。
+- [ ] C/D 使用真实样本验收契约后，将 `contract_version` 升级为 `1.0`。
+
+完成以上确认后，不再扩大一周 MVP 范围；新增想法统一进入评审后的迭代清单。
