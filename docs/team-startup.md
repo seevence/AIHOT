@@ -198,7 +198,7 @@ node scripts/check-career-integration.ts --base http://localhost:3000 --require-
 npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target es2023 --lib es2024 --allowImportingTsExtensions --types node scripts/check-career-integration.ts
 ```
 
-地址解析顺序为 `--base` → `SITE_URL` → `http://localhost:3000`。脚本依次请求 `/api/health`、`/career-insights`、`/api/site/career-insights/summary`、`/api/site/career-insights/jobs`、`/api/site/career-insights/jobs/not-a-uuid`；每次检查打印一行 `✓ <path>` 或 `✗ <path>  <原因>`，最后打印 `all checks passed`（退出码 `0`）或 `<N> check(s) failed`（退出码 `1`）。各检查相互独立，失败不会中断其余请求，也没有重试。
+地址解析顺序为 `--base` → `SITE_URL` → `http://localhost:3000`。脚本依次请求 `/api/health`、`/career-insights`、`/api/site/career-insights/summary`、`/api/site/career-insights/jobs`、`/api/site/career-insights/jobs/not-a-uuid`；加 `--require-data` 时在 jobs 之后额外请求首条职位的详情 `/api/site/career-insights/jobs/<id>`（请求地址中的 id 按 `encodeURIComponent` 编码）。每次检查打印一行 `✓ <path>` 或 `✗ <path>  <原因>`；`--require-data` 下 jobs 未通过时详情行固定为 `✗ /api/site/career-insights/jobs/<id>  skipped: jobs list has no usable item`；最后打印 `all checks passed`（退出码 `0`）或 `<N> check(s) failed`（退出码 `1`）。各检查相互独立，失败不会中断其余请求，也没有重试。
 
 预期响应：
 
@@ -206,7 +206,10 @@ npx tsc --noEmit --strict --module nodenext --moduleResolution nodenext --target
 |---|---|
 | `/api/health` | `200`，JSON `ok=true`、`db="ok"` |
 | `/career-insights` | `text/html` 且页面包含 `职业洞察`（始终要求）；预数据阶段可返回渲染后的 `503` 错误页，且页面还须包含 `数据尚未就绪`；加 `--require-data` 时必须为 `200` |
-| `/api/site/career-insights/summary`、`.../jobs` | 预数据阶段可 `503` + `error.code="data_unavailable"`；`200` 时 `contract_version` 以 `CAREER_CONTRACT_VERSION` 为准（当前 `0.1`），并带 `metrics`/`items` 数组；加 `--require-data` 时拒绝 `503` |
+| `/api/site/career-insights/summary`、`.../jobs`（默认，不加 `--require-data`） | 预数据阶段可 `503` + `error.code="data_unavailable"`；`200` 时 `contract_version` 以 `CAREER_CONTRACT_VERSION` 为准（当前 `0.1`），并带 `metrics`/`items` 数组；加 `--require-data` 时拒绝 `503` |
+| `/api/site/career-insights/summary`（`--require-data`） | `200`；`sample_size`、`company_count` 均为 `> 0` 的数字；`metrics` 非空；`data_origin` 为字符串且不是 `synthetic_fixture`；`warnings` 是数组时不含 `code="synthetic_fixture"` |
+| `/api/site/career-insights/jobs`（`--require-data`） | `200`；`items` 非空、`total > 0`；`data_origin` 不是 `synthetic_fixture`；首条带非空字符串 `id`、`company_name`、`title`、`official_url`、`first_seen_at`、`last_seen_at` |
+| `/api/site/career-insights/jobs/<首条 id>`（`--require-data`） | `200`；契约版本一致；`data_origin` 不是 `synthetic_fixture`；`job.id` 等于首条 `id`；`observations` 非空，且每条带非空字符串 `observed_at`、`content_hash`、`collector_version`、`source_url` |
 | `/api/site/career-insights/jobs/not-a-uuid` | `400` + `error.code="invalid_parameter"` |
 
-预数据阶段接受渲染后的 `503` 错误页和 `503 data_unavailable` 只是本阶段的过渡，不是空列表或 fixture 的理由，也不代表最终 MVP 验收可以接受 `503`；真实数据到位后一律加 `--require-data` 运行。
+预数据阶段接受渲染后的 `503` 错误页和 `503 data_unavailable` 只是本阶段的过渡，不是空列表或 fixture 的理由，也不代表最终 MVP 验收可以接受 `503`；真实数据到位后一律加 `--require-data` 运行，空样本、空职位、`synthetic_fixture` 数据和无证据的详情报错都算验收失败。
