@@ -10,9 +10,10 @@ import type {
   ObservationPublicV1,
   SummaryResponseV1,
 } from "../contracts/api.ts";
-import type { DegreeLevel, EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
+import type { DataOrigin, DegreeLevel, EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
 import { DataUnavailableError } from "./errors.ts";
 import { ingestBatch } from "./ingest.ts";
+import { resolveDataOrigin } from "./provenance.ts";
 import type { CareerRepository } from "./repository.ts";
 import { buildSummary } from "./summary.ts";
 
@@ -30,7 +31,7 @@ const LIST_COLUMNS = sql`
 
 const DETAIL_COLUMNS = sql`
   ${LIST_COLUMNS}, source_key, job_key, degree, degree_raw, experience_min_years,
-  experience_max_years, experience_raw, skill_evidence, collector_version`;
+  experience_max_years, experience_raw, skill_evidence, collector_version, data_origin`;
 
 interface JobRow {
   id: string;
@@ -54,6 +55,7 @@ interface JobRow {
   experience_raw: string | null;
   skill_evidence: Array<{ skill_id: string; evidence_text: string }> | null;
   collector_version: string;
+  data_origin: DataOrigin;
 }
 
 interface ObservationRow {
@@ -145,8 +147,16 @@ export class SqlCareerRepository implements CareerRepository {
           WHERE TRUE ${condition}
           ORDER BY last_seen_at DESC, id ASC
           LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
-        this.db<{ total: number }[]>`
-          SELECT COUNT(*)::int AS total
+        this.db<{
+          total: number;
+          live_count: number;
+          import_count: number;
+          synthetic_count: number;
+        }[]>`
+          SELECT COUNT(*)::int AS total,
+                 COUNT(*) FILTER (WHERE data_origin = 'live')::int AS live_count,
+                 COUNT(*) FILTER (WHERE data_origin = 'verified_import')::int AS import_count,
+                 COUNT(*) FILTER (WHERE data_origin = 'synthetic_fixture')::int AS synthetic_count
           FROM career_jobs
           WHERE TRUE ${condition}`,
         this.db<{ as_of: Date | null }[]>`
@@ -154,13 +164,20 @@ export class SqlCareerRepository implements CareerRepository {
           FROM career_jobs`,
       ]);
 
+      const total = totals[0];
+      const dataOrigin = resolveDataOrigin({
+        live: total?.live_count ?? 0,
+        verified_import: total?.import_count ?? 0,
+        synthetic_fixture: total?.synthetic_count ?? 0,
+      });
+
       return {
         contract_version: "0.1",
-        data_origin: "live",
+        data_origin: dataOrigin,
         items: rows.map(toListItem),
         page,
         page_size: pageSize,
-        total: totals[0]?.total ?? 0,
+        total: total?.total ?? 0,
         as_of: iso(latest[0]?.as_of),
         filters,
       };
@@ -184,9 +201,15 @@ export class SqlCareerRepository implements CareerRepository {
         ORDER BY observed_at DESC, id DESC
         LIMIT ${OBSERVATION_LIMIT}`;
 
+      const dataOrigin = resolveDataOrigin({
+        live: row.data_origin === "live" ? 1 : 0,
+        verified_import: row.data_origin === "verified_import" ? 1 : 0,
+        synthetic_fixture: row.data_origin === "synthetic_fixture" ? 1 : 0,
+      });
+
       return {
         contract_version: "0.1",
-        data_origin: "live",
+        data_origin: dataOrigin,
         job: toDetail(row),
         observations: observations.map(toObservation),
         notice: NOTICE,

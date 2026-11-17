@@ -8,6 +8,7 @@ import type {
 import type { MetricSpecV1, RoleFamily } from "../contracts/job.ts";
 import { SKILL_DICTIONARY_VERSION } from "../data/dictionaries.ts";
 import { METRIC_SPECS_V1 } from "../data/metrics.ts";
+import { resolveDataOrigin } from "./provenance.ts";
 
 const ROLE_FAMILY_ORDER: readonly RoleFamily[] = [
   "ai_algorithm",
@@ -24,6 +25,9 @@ interface SummaryCounts {
   sample_size: number;
   company_count: number;
   source_count: number;
+  live_count: number;
+  import_count: number;
+  synthetic_count: number;
   first_observed_at: Date | null;
   last_observed_at: Date | null;
 }
@@ -118,6 +122,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
       SELECT COUNT(*)::int AS sample_size,
              COUNT(DISTINCT company_name)::int AS company_count,
              COUNT(DISTINCT source_key)::int AS source_count,
+             COUNT(*) FILTER (WHERE data_origin = 'live')::int AS live_count,
+             COUNT(*) FILTER (WHERE data_origin = 'verified_import')::int AS import_count,
+             COUNT(*) FILTER (WHERE data_origin = 'synthetic_fixture')::int AS synthetic_count,
              MIN(first_seen_at) AS first_observed_at,
              MAX(last_seen_at) AS last_observed_at
       FROM career_jobs`,
@@ -272,9 +279,18 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   }
   warnings.push({ code: "insufficient_data", message: "政策证据尚未接入，共享主题暂为空。" });
 
+  const dataOrigin = resolveDataOrigin(
+    {
+      live: count.live_count,
+      verified_import: count.import_count,
+      synthetic_fixture: count.synthetic_count,
+    },
+    warnings,
+  );
+
   return {
     contract_version: "0.1",
-    data_origin: "live",
+    data_origin: dataOrigin,
     as_of: asOf,
     sample_size: sampleSize,
     company_count: count.company_count,
