@@ -1,17 +1,18 @@
-import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router";
+import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import type { JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import { careerApiPath, loadCareerApi, serializeJobFilters } from "../api";
+import { careerApiPath, loadCareerApi, parseDashboardFilters, serializeJobFilters } from "../api";
 import { CareerDashboard } from "../components/CareerDashboard";
 import { CareerError, CareerLoading } from "../components/CareerStates";
 
 export async function loader({ request }: LoaderArgs) {
-  const query = serializeJobFilters({ page: 1, page_size: 20 });
+  const filters = parseDashboardFilters(new URL(request.url).searchParams);
+  const query = serializeJobFilters(filters);
   const [summary, jobs] = await Promise.all([
     loadCareerApi<SummaryResponseV1>(careerApiPath("/summary"), request.signal),
     loadCareerApi<JobListResponseV1>(`${careerApiPath("/jobs")}?${query}`, request.signal),
   ]);
-  return { summary, jobs };
+  return { summary, jobs, filters };
 }
 
 export function headers() {
@@ -31,5 +32,7 @@ export function ErrorBoundary() {
 
 export default function CareerDashboardRoute() {
   const data = useLoaderData<typeof loader>();
-  return <CareerDashboard summary={data.summary} jobs={data.jobs} />;
+  const navigation = useNavigation();
+  if (navigation.state === "loading") return <CareerLoading />;
+  return <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} />;
 }
