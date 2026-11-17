@@ -47,7 +47,9 @@
 - `docs/development-contract.md` §8.5 已明确逐项错误 `{ index, code, message }` 与 `path: message` 格式，和 D 的 ingest 实现对齐。
 - 验证：`npm run typecheck`、`npx tsc -p modules/tsconfig.json`、Web 构建通过；standalone `311/311` 通过；D SQL+ingest `12/12` 通过（临时 PostgreSQL 5433）。
 - Docker 重建后 `node scripts/check-career-integration.ts --base http://localhost:3000` 五项通过，通用 `node scripts/smoke.ts --base http://localhost:3000` 通过，`db/api/worker/web` 全部运行。
-- 当前仍在独立集成分支，等待独立 review；尚未合回 `feat/integration`，未推送，真实采集闭环未完成。
+- 首轮独立 review **FAIL**：D SQL summary 的空样本职族/无技能占位与观测新增分母不符合 C 指标口径，E 多维指标卡片存在重复 React key。D 修复 `7851ff3`、E 修复 `b88662c` 已合回阶段分支（E 修复合并提交 `5cd1415`）；复验 D SQL+ingest `13/13`、模块与前端类型检查、Web 构建均通过。
+- 政策 `shared_themes`、来源覆盖校验、未识别技能比例仍为 D3 遗留，不在本阶段扩展实现。
+- 当前仍在独立集成分支，等待二次独立 review；尚未合回 `feat/integration`，未推送，真实采集闭环未完成。
 
 **尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
