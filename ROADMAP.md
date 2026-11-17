@@ -2,7 +2,7 @@
 
 > 状态：PARALLEL READY，五人可同时开始业务开发；A 角色 D1 运行集成开发完成，review 门禁见阶段记录；MVP 真实闭环尚未完成  
 > 启动日期：2026-11-16  
-> 最近更新：2026-11-16  
+> 最近更新：2026-11-17  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
 > 私有仓库：`https://github.com/seevence/AIHOT`  
 > 交付目标：下周评审  
@@ -33,6 +33,12 @@
 - 基线迁移 `0153_career_job_observations.sql` 的在线安全检查阻塞已在 `feat/integration` 提交 `9affed2` 修复：`id` 列类型仍为 `bigint`、默认值由序列生成，不再强制 identity 约束；repository 写入不得显式提供 `id`。字段与唯一性不变。
 - 验收命令：`node scripts/check-career-integration.ts --base http://localhost:3000` 五项通过；`node scripts/check-migrations.ts --base feat/integration` 通过；`npm run typecheck` 与脚本单文件 `tsc --noEmit` 通过。
 - 本阶段改动保持独立分支，独立 review 通过后才并入 `feat/integration`；不进入下一阶段。
+
+**A 角色 D2 集成门禁记录（2026-11-17，`feat/a-d2-gates`）：**
+
+- `.github/workflows/check.yml` 的 Docker job 在通用 smoke 后用同一镜像执行 `scripts/check-career-integration.ts --base http://web:3000`，覆盖模块注册、页面、health、summary/jobs 和非法 ID 路由；不再依赖手工“额外验证”。
+- 容器内 CI 同款命令已实测五项通过；`docs/team-startup.md` 补充 CI 行为说明，工程质量清单改为可直接执行的脚本命令。
+- 本阶段仅改 CI、启动文档和路线图，保持独立分支，独立 review 通过后才并入 `feat/integration`。
 
 **尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
@@ -251,7 +257,7 @@ B/C/D/E 统一从 `@aihot/career-insights/contracts` 导入类型，不再另写
 - [ ] `npm run build -w @aihot/web && npm run test:web`
 - [ ] `node scripts/check-migrations.ts --base HEAD`
 - [ ] `node scripts/smoke.ts --base http://localhost:3000`
-- [ ] 额外验证 `/career-insights` 页面及其 API；现有 smoke 不自动覆盖新模块。
+- [ ] `node scripts/check-career-integration.ts --base http://localhost:3000`（CI Docker job 已自动执行预数据模式；真实数据后加 `--require-data`）
 - [ ] 仓库无密钥、`.env`、个人信息和虚构演示数据。
 
 ## 9. 当前锁定状态与待确认事项

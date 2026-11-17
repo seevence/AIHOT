@@ -186,6 +186,8 @@ docker compose logs -f --tail 100 api worker web
 
 `setup` 每次启动先执行 `node scripts/migrate.ts && node scripts/seed.ts` 再退出，所以这次 `run --rm setup` 就是本次的迁移；不要另造迁移命令，也不要改写历史迁移。
 
+CI 的 Docker job 会在通用 smoke 之后用同一镜像自动执行这项检查（`--base http://web:3000`，预数据模式），PR 不需要另建服务；本地重建容器后同样执行：
+
 站点启动后执行运行级联调检查（脚本只读：不写库、不调模型、不启动服务）：
 
 ```bash
