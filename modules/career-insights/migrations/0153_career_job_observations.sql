@@ -1,5 +1,5 @@
 CREATE TABLE career_job_observations (
-  id bigserial PRIMARY KEY,
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   job_id uuid NOT NULL REFERENCES career_jobs(id),
   observed_at timestamptz NOT NULL,
   content_hash text NOT NULL,
