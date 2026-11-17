@@ -195,3 +195,57 @@
   - 本阶段未启动任何 web/api 服务，未使用 3000/3001 端口。
   - B 的本地未提交改动（`collector/**`、`scripts/collect-career*.ts`）与 `.env` 全程未 `git add`。
 - 评审结论：待独立 review。
+### S2 后端（完成，待 review）
+
+- 范围与写集：仅 `modules/career-insights/backend/policy-repository.ts`（新增）、`modules/career-insights/backend/summary.ts`（修改）、本路线图。`contracts/**`、`data/**`、`collector/**`、`scripts/collect-career*.ts`、`.env` 均未改动、未暂存。
+- 类型检查（`npx tsc -p modules/tsconfig.json`）：
+  - 首次运行 exit 1，1 条错误：`policy-repository.ts(2,31): error TS2459: Module '“../contracts/api.ts”' declares 'PolicyEvidenceRefV1' locally, but it is not exported.`
+  - 仅改 `backend/policy-repository.ts`：`PolicyEvidenceRefV1` 改为从 `../contracts/index.ts` 导入（该类型实际定义在 `contracts/job.ts:83`，经 `index.ts` 再导出），`IngestResultV1` 仍从 `contracts/api.ts` 导入。
+  - 复跑 exit 0，无错误、无警告。
+- 后端测试（`aihot_test`，`--test-concurrency=2`，命令与任务书一致）：
+  - 共 **13 项：pass 12、fail 1**，exit 1，耗时约 1.58s。
+  - 通过项覆盖：批次幂等/去重、`first_seen_at` 与 `last_seen_at` 单调性、内容变更原地更新、按索引拒绝非法项、超 100 条整批拒绝、空表 summary、列表过滤/分页、详情与观测。
+  - 唯一失败项：`repository.test.ts:126` 仍断言旧文案 `"政策证据尚未接入，共享主题暂为空。"`，而新后端输出（以及 `docs/specs/2026-11-18-career-hot-design.md:784`、`docs/specs/tasks.md:451`）已定为 `"尚未接入政策证据，共享主题暂不计算。"`。为守住本阶段写集隔离，未修改 `tests/**`；该断言需随 `tests/**` 写集归属（BLK-06）一并更新。
+  - 旁证：临时把该断言改为新文案后复跑得到 `tests 13 / pass 13 / fail 0`，exit 0；确认失败仅由陈旧文案断言引起，后端逻辑无其他红灯。改动已还原，未进入提交。
+- 运行方式（未使用 3000/3001）：
+  - API：`DATABASE_URL="postgres://postgres@127.0.0.1:5432/aihot" API_PORT=3002 node apps/api/src/main.ts` → `Server listening at http://127.0.0.1:3002`（PID 40600）。
+  - web：`apps/web` 下 `DATABASE_URL=... API_BASE_URL="http://127.0.0.1:3002" npx react-router dev --port 3010 --host 127.0.0.1` → `http://127.0.0.1:3010/`（PID 32704）。启动前 3010 空闲，无需杀旧进程。
+  - 收尾：`Stop-Process -Id 32704,40600`（不带 `-Force`；带 `-Force` 的组合命令被执行策略拦截）后，`netstat` 上 3002/3010 无 `LISTENING`，仅余正常 `TIME_WAIT`。
+- 空政策语义实测（`GET http://127.0.0.1:3010/api/site/career-insights/summary`，HTTP 200，库内 `career_policies` 0 行）：
+  ```json
+  {
+    "contract_version": "0.1",
+    "data_origin": "verified_import",
+    "sample_size": 70,
+    "company_count": 3,
+    "source_count": 3,
+    "has_multiple_snapshots": true,
+    "shared_themes": [],
+    "policy_job_shared_themes": {
+      "status": "insufficient_data",
+      "value": null,
+      "numerator_count": 0,
+      "denominator_count": null,
+      "sample_size": 70,
+      "dictionary_version": "0.1"
+    },
+    "warnings": [
+      { "code": "unknown_fields", "message": "存在未识别职族的职位，已单列 unknown。" },
+      { "code": "unknown_fields", "message": "存在未标记应届友好度的职位，unknown 不表示不友好。" },
+      { "code": "insufficient_data", "message": "尚未接入政策证据，共享主题暂不计算。" },
+      { "code": "unknown_fields", "message": "样本混合自动采集与人工核验导入（verified_import），整体按较保守口径标注。" }
+    ]
+  }
+  ```
+  - 期望项全部命中：`shared_themes=[]`、`status=insufficient_data`、`value=null`、`sample_size=70`、`data_origin=verified_import`、warning 含 `"尚未接入政策证据，共享主题暂不计算。"`。
+- 技能未知识别实测：
+  - `skill_demand_share` 共 10 条（按 `job_count` 降序取前 10），每条均含数值型 `unknown_count` 与 `unknown_ratio`。样例两条：
+    ```json
+    { "skill_id": "ai_agents", "status": "ok", "value": 0.4142857142857143, "numerator_count": 29, "unknown_count": 8, "unknown_ratio": 0.11428571428571428 }
+    { "skill_id": "cpp", "status": "ok", "value": 0.08571428571428572, "numerator_count": 6, "unknown_count": 8, "unknown_ratio": 0.11428571428571428 }
+    ```
+  - 库核对：`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE COALESCE(skills, '[]'::jsonb) = '[]'::jsonb)::int AS empty_skills FROM career_jobs` → `{"total":70,"empty_skills":8}`。接口 `unknown_count=8` 与 `empty_skills=8` 完全一致；`unknown_ratio=8/70=0.11428571428571428`。
+- 未完成项：
+  - **T-S2-07 仍受阻**（BLK-03）：真实政策源口径未定（政务 `.gov.cn` 本机不可达），库内无真实政策样本（`career_policies=0`）；本次只验证了空政策路径，未写入任何政策记录。
+  - **T-S2-13 仍受阻**（BLK-09）：契约 `PolicyEvidenceRefV1.published_at` 仍为 `string`（`contracts/job.ts:87`、`openapi.json` 的 `required` 与 `type: "string"` 均不可空），因此 `listPolicyEvidence` 只读取 `published_at IS NOT NULL` 的记录；发布日期缺失的政策暂不入库。待 A 在 `contracts/**` 放开可空后再补读取路径。
+- 评审结论：待独立 review。
