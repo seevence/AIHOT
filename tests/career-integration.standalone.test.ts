@@ -226,7 +226,7 @@ test("--require-data rejects an empty jobs list and skips the detail", async () 
 });
 
 test("--require-data rejects the first job without display fields", async () => {
-  for (const field of ["id", "title", "official_url", "last_seen_at"]) {
+  for (const field of ["id", "company_name", "title", "official_url", "first_seen_at", "last_seen_at"]) {
     const item: Record<string, unknown> = { ...jobItem };
     delete item[field];
     responses = realSite({ [PATHS.jobs]: json(jobsBody({ items: [item] })) });

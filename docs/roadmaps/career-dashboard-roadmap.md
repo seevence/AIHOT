@@ -111,12 +111,12 @@
 
 | # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |
 |---|---|---|---|---|
-| 1 | `apps/web/app/lib/api.server.ts` 把 API 500 映射为 503，R5 的 500 分支不可达 | A | 未处理 | 后端 500 时页面显示“数据尚未就绪”而非“暂时无法加载” |
-| 2 | 手机 fixed 底栏与页尾内容遮挡（间距/层级） | A（`apps/web` 外壳） | 未处理 | 手机滚动到底部时内容可能被底栏压住；E 无写集权限 |
+| 1 | `apps/web/app/lib/api.server.ts` 把 API 500 映射为 503，R5 的 500 分支不可达 | A | **已闭环**：career API opt-in 保留 500，全站默认仍 503 | 后端 500 时页面显示“数据尚未就绪”而非“暂时无法加载” |
+| 2 | 手机 fixed 底栏与页尾内容遮挡（间距/层级） | A（`apps/web` 外壳） | **已核验**：390×844 滚到底间隔 22.5px，无遮挡 | 手机滚动到底部时内容可能被底栏压住；E 无写集权限 |
 | 3 | 真实数据链路（`summary`/`jobs`/`jobs/:id` 走真实 SQL 与迁移） | C / D | 未完成 | 当前只能显示 503 状态或 fixture 样例 |
 | 4 | 真实备份页面核对（D5 范围项） | A + C / D | 未执行 | 需后端链路可用后在集成分支复验前端展示口径 |
-| 5 | 站点公共静态资源 404（`manifest.webmanifest`/`icon.png`/`favicon.ico`） | A | 未处理 | 浏览器控制台 404，不影响业务功能 |
-| 6 | `feat/career-dashboard` 合并与 push | A（集成） | 待 E5 审查 PASS | 合入 `feat/integration` 并做集成门禁 |
+| 5 | 站点公共静态资源 404（`manifest.webmanifest`/`icon.png`/`favicon.ico`） | A | **已核验**：正式 Docker 全 200；404 仅 fixture 控制台 | 浏览器控制台 404，不影响业务功能 |
+| 6 | `feat/career-dashboard` 合并与 push | A（集成） | **已闭环**：已合入 `feat/integration` 并推送 | 合入 `feat/integration` 并做集成门禁 |
 | 7 | 后端时间序列化统一为 UTC `Z`（`as_of`/`observed_at`/`published_at`） | C / D | 约定已在前端契约（非 Z 偏移降级为原文） | 后端若返回 `+08:00` 等偏移，前端按原文显示、不做可读化 |
 | 8 | 真实数据下 `as_of` 可读化复验（含跨月/跨年与闰年边界） | C / D + A | 待后端链路 | 前端已覆盖，需真实数据样例再确认一次 |
 | 9 | 政策卡片 `policy.published_at` 日期格式确认（是否也按 `Asia/Shanghai` 可读化） | C / D（政策数据与格式） | 未确认 | 当前 `SharedThemeList` 按原文展示；格式确认后由 E 接入 `CareerTime` |

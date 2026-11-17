@@ -1,6 +1,6 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1、C、E1–E5；A 交接的 500、时间可读化和移动端底栏项已闭环；MVP 真实采集闭环尚未完成  
+> 状态：集成分支已包含 A、D1、C、E1–E5；A 独立验收项已闭环；等待 2026-11-18 真实数据接入后的 MVP 闭环  
 > 启动日期：2026-11-16  
 > 最近更新：2026-11-17  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
@@ -67,16 +67,22 @@
 - 门禁：`check-migrations --base main` 通过；模块/前端 typecheck、Web 构建、standalone `311/311`、D 全新测试库 `13/13`、migration-safety 测试全部通过。
 - A 交接闭环：500 保留、手机底栏实测无遮挡、观测时间可读化。静态资源 404 仅在 E 的 fixture 控制台出现，正式 Docker smoke 全部通过。
 
+**A 验收收口记录（2026-11-17）：**
+
+- A-01 已修复：`--require-data` 现在拒绝空样本、空职位、`synthetic_fixture` 数据和无观测证据详情；默认预数据模式不变。行为测试 `10/10` 通过，空库实测默认 exit 0、require-data 3 项失败 exit 1（提交 `c666b46`）。
+- A-02 已修复：本地 `career_job_observations.id` 从 `nextval` 漂移改为 `GENERATED ALWAYS AS IDENTITY`，`is_identity=YES`；两表均为 0 行，无数据损失。
+- 静态资源已复核：`/`、`/career-insights`、`manifest.webmanifest`、`icon.png`、`favicon.ico` 正式 Docker 全部 `200`；E 的 404 仅是 fixture 控制台假象。
+- A-03 仍被真实数据阻塞，待 2026-11-18 数据到位后执行。
+
 **跨角色未解决任务（云端标记，2026-11-17）：**
 
 | ID | 未解决事项 | 负责 | 当前阻塞 | 完成标准 |
 |---|---|---|---|---|
-| A-01 | `scripts/check-career-integration.ts --require-data` 仍会在空样本上通过 | A | 无代码阻塞 | 要求 `sample_size>0`、职位列表非空、详情含观测证据，空库必须失败 |
-| A-02 | 任何已应用过 `0153` 早期版本（`bigserial` 或 `uuid DEFAULT gen_random_uuid()`）的数据库不会因本次改文件而重跑；`schema_migrations` 只记 name、无 checksum | A / 运维 | 仅环境层 | 真实数据接入前重建库，或核验 `information_schema.columns.is_identity` / `column_default` 与 fresh migration 一致 |
+
 | B-01 | 真实招聘与政策采集样本未完成 | B | 外部来源可用性 | 至少 3 家公司 + 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
 | B-02 | 自动来源不足时的替换/人工核验流程未执行 | B | 来源可达性 | D2 结束仍不足 3 家时，保留真实岗位快照并明确标为“导入” |
 | C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | B-01 | 用真实样本跑通词典、去重与五项指标，不把 fixture 当真实数据 |
-| D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | B-01、C-01、A-01 | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
+| D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | B-01、C-01、真实数据（预计 2026-11-18） | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
 | D-02 | 政策 `shared_themes` 真实证据、来源覆盖变化、未识别技能比例 | D / C | 政策真实样本 | 政策可跳原文，空数据/未知值不误导，真实样本后冻结契约 `1.0` |
 | CD-01 | 后端时间统一 UTC `Z`；政策 `published_at` 日期格式确认 | C / D | 真实数据格式 | `as_of`/`observed_at`/`published_at` 格式一致，前端 `CareerTime` 可读化复验 |
 | E-01 | 真实数据下页面全链路复验 | E | D-01 | 总览/方向/详情/证据/分页在真实数据上复验，保留桌面与手机截图 |
