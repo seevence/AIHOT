@@ -1,18 +1,35 @@
 import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import type { JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import { careerApiPath, loadCareerApi, parseDashboardFilters, serializeJobFilters } from "../api";
+import { JOB_PAGE_SIZES, careerApiPath, loadCareerApi, parseDashboardFilters, parseDirectionView, serializeJobFilters } from "../api";
 import { CareerDashboard } from "../components/CareerDashboard";
 import { CareerError, CareerLoading } from "../components/CareerStates";
 
 export async function loader({ request }: LoaderArgs) {
-  const filters = parseDashboardFilters(new URL(request.url).searchParams);
+  const search = new URL(request.url).searchParams;
+  const filters = parseDashboardFilters(search);
+  const { view, roleFamily } = parseDirectionView(search);
   const query = serializeJobFilters(filters);
-  const [summary, jobs] = await Promise.all([
+  const directionRoleFamily = view === "direction" ? roleFamily : undefined;
+  const [summary, jobs, studentFriendlyJobs] = await Promise.all([
     loadCareerApi<SummaryResponseV1>(careerApiPath("/summary"), request.signal),
     loadCareerApi<JobListResponseV1>(`${careerApiPath("/jobs")}?${query}`, request.signal),
+    directionRoleFamily
+      ? loadCareerApi<JobListResponseV1>(
+          `${careerApiPath("/jobs")}?${serializeJobFilters({
+            role_family: directionRoleFamily,
+            student_friendly: "yes",
+            page: 1,
+            page_size: JOB_PAGE_SIZES[0],
+          })}`,
+          request.signal,
+        )
+      : Promise.resolve(null),
   ]);
-  return { summary, jobs, filters };
+  const direction = directionRoleFamily
+    ? { roleFamily: directionRoleFamily, studentFriendlyTotal: studentFriendlyJobs?.total ?? 0 }
+    : undefined;
+  return { summary, jobs, filters, direction };
 }
 
 export function headers() {
@@ -34,5 +51,5 @@ export default function CareerDashboardRoute() {
   const data = useLoaderData<typeof loader>();
   const navigation = useNavigation();
   if (navigation.state === "loading") return <CareerLoading />;
-  return <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} />;
+  return <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} direction={data.direction} />;
 }

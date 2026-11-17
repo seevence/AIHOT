@@ -1,7 +1,7 @@
 import { Form, Link } from "react-router";
 import type { EmploymentType, JobFiltersV1, RoleFamily, StudentFriendly } from "@aihot/career-insights/contracts";
 import { serializeJobFilters } from "../filters";
-import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
+import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, SKILL_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
 
 const ROLE_FAMILY_VALUES: readonly RoleFamily[] = ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown"];
 const EMPLOYMENT_TYPE_VALUES: readonly EmploymentType[] = ["campus", "internship", "experienced", "other", "unknown"];
@@ -61,6 +61,15 @@ export function CareerFilters({ filters }: { filters: JobFiltersV1 }) {
             ))}
           </select>
         </label>
+
+        <label className={LABEL_CLASS}>
+          技能
+          <input type="text" name="skill" list="career-skill-options" defaultValue={filters.skill ?? ""} placeholder="技能标识，如 python" className={FIELD_CLASS} />
+        </label>
+
+        <datalist id="career-skill-options">
+          {Object.entries(SKILL_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </datalist>
 
         <div className="flex items-end gap-2">
           <button type="submit" className="h-9 rounded-full bg-accent px-5 text-[13px] font-medium text-accent-contrast">
