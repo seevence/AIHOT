@@ -83,8 +83,9 @@ export function migrationPlan(text: string): MigrationPlan {
   // scoped to named columns of one table; SKIP_LOCKED could silently leave its statistics unbuilt.
   if (new RegExp(`^create statistics ${RELATION} \\( mcv \\) on ${IDENT}(?: , ${IDENT}){1,7} from ${RELATION}$`, "i").test(sql)
     || new RegExp(`^analyze ${RELATION} \\( ${IDENT}(?: , ${IDENT})* \\)$`, "i").test(sql)) return { kind: "statistics" };
+  const tableWords = words.replace(/\bgenerated\s+(?:always|by\s+default)\s+as\s+identity\b/i, "");
   if (new RegExp(`^create table (?:if not exists )?${RELATION} \\(.*\\)$`, "i").test(sql)
-    && !/\b(as|like|inherits|partition)\b/i.test(words)) return { kind: "transaction" };
+    && !/\b(as|like|inherits|partition)\b/i.test(tableWords)) return { kind: "transaction" };
   // Dropping a table, column or constraint that no code uses changes the catalog only: no scan or rewrite,
   // and the runner bounds the wait for its lock. One object and no CASCADE, so an object that still depends
   // on it fails the migration instead of disappearing with it. Whether its data may go is settled before
