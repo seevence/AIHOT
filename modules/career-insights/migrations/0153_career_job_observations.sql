@@ -1,5 +1,5 @@
 CREATE TABLE career_job_observations (
-  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   job_id uuid NOT NULL REFERENCES career_jobs(id),
   observed_at timestamptz NOT NULL,
   content_hash text NOT NULL,
