@@ -314,3 +314,30 @@
 - 库内分组核对：`people-policy=1`、`xinhuanet-policy=1`；两条均为 `source_tier=official_media`、`data_origin=live`、`published_at` 非空。
 - 端口：API 3002、web 3010，实测后已停止（PID 17444、35352）；全程未使用 3000/3001。
 - **BLK-03 口径仍待队长确认**：本阶段以 `official_media`（新华网、人民网）作为 T-S2-07 的真实政策源，未使用政务 `.gov.cn`；该口径是否满足“政策入库”定义、是否需要补政务源，仍待拍板。两条政策主题与当前 70 条职位无交集（`shared_themes=[]`、`insufficient_data`），属合法结果，不代表无共同方向。
+### S3 两时点（完成，待 review）
+
+- 执行时间与库：2026-11-17/18（本地 CST），`postgres://postgres@127.0.0.1:5432/aihot`，只读查询；未改业务代码、未改 `contracts/`、`collector/`、`scripts/collect-career*`、`.env`。端口只用 3002（API）与 3010（web），未使用 3000/3001。
+- 时点数（复采前）：`select count(distinct observed_at)::int from career_job_observations;` → `8`（≥2）。
+- 时点分布（复采前，`select observed_at, count(*) from career_job_observations group by 1 order by 1;`）：
+  ```json
+  [{"observed_at":"2026-11-17T13:25:21.303Z","count":30},{"observed_at":"2026-11-17T13:38:13.330Z","count":30},{"observed_at":"2026-11-17T13:38:17.257Z","count":30},{"observed_at":"2026-11-17T13:42:48.161Z","count":30},{"observed_at":"2026-11-17T13:42:57.410Z","count":30},{"observed_at":"2026-11-17T13:43:00.338Z","count":10},{"observed_at":"2026-11-17T15:29:46.131Z","count":30},{"observed_at":"2026-11-17T15:29:55.792Z","count":30}]
+  ```
+  合计 220 行。实际时点多于两个：每个来源的每个采集批次各写一个 `observed_at`（腾讯/小米各两次 live、网易一次 verified_import）；13:43 为网易 10 条导入批次，15:29 为腾讯/小米 live 批次。任务书中“约 13:43 与 15:29Z 两个时点”是批次层面的概括，精确到 `observed_at` 为 8 个。
+- 观测幂等：`select job_id, observed_at, content_hash, count(*) ... having count(*)>1;` → `[]`（0 行）；`select count(*)::int from career_jobs;` → `70`（未出现 140/220）。
+- 批次幂等：`select source_key, kind, fetched_at, count(*) ... having count(*)>1;` → `[]`（0 行）。复采前 `career_ingest_runs` 5 行：netease/jobs/13:43、tencent/jobs/15:29:46、xiaomi/jobs/15:29:55、people-policy/policy/16:12:03、xinhuanet-policy/policy/16:12:03。
+- 同源重复采集（腾讯，真实访问外网）：
+  ```json
+  {"source_key":"tencent-official-careers","fetched":30,"normalized":30,"rejected":0,"accepted":0,"updated":0,"duplicates":30,"errors":[],"run_id":"132edb34-ee58-41c1-9949-6343d02d0017","status":"ok"}
+  ```
+  复采后复核：`career_jobs` 仍为 `70`；`career_job_observations` 220 → `250`（新增一个 30 条观测时点 `2026-11-17T16:16:30.798Z`，符合“每次采集记录新时点”语义）；观测重复分组仍 `[]`、批次重复分组仍 `[]`；`count(distinct observed_at)` → `9`。`accepted=0/updated=0/duplicates=30` 证明同源同内容复采不新增职位、不翻倍。
+- summary 实测（`GET http://127.0.0.1:3010/api/site/career-insights/summary`，经 web 代理，HTTP 200）：
+  - `has_multiple_snapshots=true`；`sample_size=70`；`shared_themes=[]`。
+  - `observed_new_jobs`：`status=ok`、`value=0`、`numerator_count=0`、`denominator_count=null`、`evidence=[]`（0 条）。
+  - `policy_job_shared_themes`：`status=insufficient_data`、`value=null`、`numerator_count=0`、`denominator_count=null`、`evidence=[]`（政策与职位当前无共同主题）。
+  - warnings 4 条：职族 unknown、应届友好度 unknown、政策与职位暂无共同主题、混合 `verified_import` 口径。
+  - `observed_new_jobs=0` 的依据与合法性：`summary.ts:152-156` 取最近两个 `distinct observed_at`（降序 LIMIT 2），复采后为 `16:16:30.798Z` 与 `15:29:55.792Z`（`summary.ts:261-262`）；`newJobsMetric` 统计 `first_seen_at > previous AND first_seen_at <= latest`，而全部 70 条职位的 `first_seen_at` 为 `13:25:21`（30）、`13:38:17`（30）、`13:43:00`（10），均早于 15:29:55，故两时点间观测新增确为 0。这是 `status=ok + value=0` 的合法结果（最近两批次无新增），不是 `insufficient_data`。
+  - 语义注意：接口的“两时点”是最近两个 distinct 时点（本次为 15:29 与 16:16 的两个不同来源批次），不是跨日或跨小时窗口；跨更长窗口的“新增”需等后续批次时点自然拉开，指标口径本身不改。
+- 单快照语义（不改主库）：在 `aihot_test` 用最小 fixture 实跑 —— 插入 1 条 `career_jobs`（skills=`[]`）+ 1 条 `career_job_observations`（单一 `observed_at`），调用真实 `buildSummary`，得到 `snapshots=1`、`has_multiple_snapshots=false`、`observed_new_jobs.status=insufficient_data`、`value=null`、`numerator_count=0`、`denominator_count=null`、`evidence=[]`；验证后删除 fixture，`career_jobs=0`、`career_job_observations=0`。代码路径同时确认：`summary.ts:168` 为 `snapshots.length >= 2`，`<2` 时走 `summary.ts:263-272` 的 `insufficient_data` 分支。局限：fixture 为最小字段（无政策、无技能），只验证单快照分支语义，不覆盖真实数据的全部字段组合；主库 250 条观测全程未删除、未 truncate。
+- 端口与服务：API 监听 3002、web 3010，获取 summary 后已停止（PID 36924、39108），复查 3002/3010 均无监听。
+- 本阶段 commit：两份清单文档 `5254d3b docs: add brand and contract-1.0 proposals`；本路线图记录随 `docs(roadmap): record S3 two-snapshot evidence` 提交并推送 `origin feat/career-api-d2`。
+- 未完成/局限：未验证跨自然日的新增窗口；单快照未用完整真实样本验证；`policy_job_shared_themes` 仍受政策样本量与主题交集限制。
