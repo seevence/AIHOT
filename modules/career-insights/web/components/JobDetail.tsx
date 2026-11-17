@@ -6,10 +6,9 @@ import {
   STUDENT_FRIENDLY_LABELS,
   skillLabel,
 } from "../labels";
+import { CareerTime } from "../time";
 
 type Fact = { label: string; value: string; dateTime?: boolean };
-
-const isValidDateTime = (value: string) => !Number.isNaN(new Date(value).getTime());
 
 export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string }) {
   const experience =
@@ -55,7 +54,7 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
             <div key={fact.label} className="min-w-0">
               <dt className="text-ink-4">{fact.label}</dt>
               <dd className="mt-1 text-ink-2 break-words">
-                {fact.dateTime && isValidDateTime(fact.value) ? <time dateTime={fact.value}>{fact.value}</time> : fact.value}
+                {fact.dateTime ? <CareerTime value={fact.value} /> : fact.value}
               </dd>
             </div>
           ))}

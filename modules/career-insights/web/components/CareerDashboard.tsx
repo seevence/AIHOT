@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import type { JobFiltersV1, JobListItemV1, JobListResponseV1, RoleFamily, SummaryResponseV1 } from "@aihot/career-insights/contracts";
 import { buildDirectionHref, buildJobHref, buildJobsHref } from "../filters";
 import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
+import { CareerTime } from "../time";
 import { CareerEmpty, FixtureNotice, SingleSnapshotNotice } from "./CareerStates";
 import { CareerFilters } from "./CareerFilters";
 import { DIRECTION_VALUES, DirectionView } from "./DirectionView";
@@ -85,7 +86,7 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
           <div><dt className="text-[12px] text-ink-4">公司</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.company_count}</dd></div>
           <div><dt className="text-[12px] text-ink-4">来源</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.source_count}</dd></div>
         </dl>
-        <p className="mt-4 text-[12px] text-ink-4 break-words">数据截至 <time dateTime={summary.as_of}>{summary.as_of}</time> · 词典 {summary.dictionary_version}</p>
+        <p className="mt-4 text-[12px] text-ink-4 break-words">数据截至 <CareerTime value={summary.as_of} /> · 词典 {summary.dictionary_version}</p>
       </section>
 
       {summary.warnings.length > 0 && (

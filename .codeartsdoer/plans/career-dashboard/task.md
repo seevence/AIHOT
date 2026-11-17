@@ -78,6 +78,26 @@
 - **Blocked by**: none
 - **Deliverable**: 方向视图技能项展示 `统计时间`/`disclaimer`/占比与样本量，并有证据展开（职位站内、政策外链）；`status=not_applicable` 显示“不适用”；`dimension.skill_id` 缺失显示“未指定技能”；`MetricList` 同步该状态语义与标签回退（`ROLE_FAMILY_LABELS[...] ?? 原值`）。
 
+## T22: 时间可读化、严格 ISO 校验与 FilterEmpty 结构收尾
+
+- **Objective**: 把详情页时间显示为可读的中文时间，严格校验 ISO 值，统一筛选空态的可访问结构。
+- **Requirements**: R3, R5, R7
+- **Write set**: `modules/career-insights/web/components/JobDetail.tsx`, `modules/career-insights/web/routes/job.tsx`, `modules/career-insights/web/components/FilterEmpty.tsx`
+- **Provides**: C-WEB-JOB-DETAIL@1（时间展示补充条款）、C-WEB-DASH-BIND@1（FilterEmpty 结构补充条款）(design.md §2.2)
+- **Consumes**: C-WEB-LABELS@1 (design.md §2.2)
+- **Blocked by**: none
+- **Deliverable**: `JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at` 与 `routes/job.tsx` 观测记录时间显示为 `Asia/Shanghai` 固定时区的中文日期时间，`<time dateTime>` 仅在严格 ISO 且可解析时使用；`FilterEmpty` 用单个 `role="status"` 容器包裹标题与说明、清除链接在容器外；三个文件均以单个换行结尾。
+
+## T24: 时间组件抽取与全站可读时间（E5 复审修复）
+
+- **Objective**: 修正非法日历日期被顺延的问题，并把可读时间统一到所有展示 `as_of` 的位置。
+- **Requirements**: R3
+- **Write set**: `modules/career-insights/web/time.ts`, `modules/career-insights/web/components/JobDetail.tsx`, `modules/career-insights/web/routes/job.tsx`, `modules/career-insights/web/components/CareerDashboard.tsx`, `modules/career-insights/web/components/MetricList.tsx`, `modules/career-insights/web/components/DirectionView.tsx`
+- **Provides**: C-WEB-TIME@1 (design.md §2.2)；C-WEB-JOB-DETAIL@1 时间展示条款
+- **Consumes**: C-WEB-METRIC@1, C-WEB-SKILL-TRACE@1 (design.md §2.2)
+- **Blocked by**: none
+- **Deliverable**: 新增 `time.ts` 导出 `formatCareerDateTime`（严格 `Z` 后缀 ISO 且可解析；允许 JS `Date` 自然顺延）与 `CareerTime`（`dateTime` 输出 canonical `toISOString()`）；`JobDetail` 不再导出时间组件并改从 `../time` 导入；`routes/job.tsx`、`CareerDashboard`（数据截至）、`MetricList`（统计时间）、`DirectionView`（统计时间）统一使用 `CareerTime`；不可解析（如 `2026-13-01`、`+08:00` 偏移）渲染原文且不输出 `dateTime`。
+
 ## 后续阶段
 
 - E4（D5）：浏览器验收、真实备份页面核对、演示兜底

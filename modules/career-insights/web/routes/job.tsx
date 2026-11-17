@@ -5,6 +5,7 @@ import { careerApiPath, loadCareerApi } from "../api";
 import { safeBackHref } from "../filters";
 import { CareerError, CareerLoading, FixtureNotice, SingleSnapshotNotice } from "../components/CareerStates";
 import { JobDetail } from "../components/JobDetail";
+import { CareerTime } from "../time";
 
 export async function loader({ params, request }: LoaderArgs) {
   if (!params.id) throw data({ message: "not_found" }, { status: 404 });
@@ -48,7 +49,7 @@ export default function CareerJobRoute() {
           <ol className="mt-3 space-y-3">
             {observations.map((observation) => (
               <li key={observation.id} className="rounded-card border border-line bg-surface p-4">
-                <time dateTime={observation.observed_at} className="text-[12px] text-ink-4">{observation.observed_at}</time>
+                <CareerTime value={observation.observed_at} className="text-[12px] text-ink-4" />
                 <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{observation.evidence_excerpt}</p>
                 <a href={observation.source_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex text-[12px] text-accent">查看观测来源</a>
                 <div className="mono mt-2 break-all text-[11px] text-ink-4">{observation.content_hash} · {observation.collector_version}</div>

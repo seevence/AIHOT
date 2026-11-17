@@ -83,6 +83,7 @@
   - `export function CareerDashboard({ summary, jobs, filters }: { summary: SummaryResponseV1; jobs: JobListResponseV1; filters: JobFiltersV1 })`
   - 组装顺序：header → fixture/单快照提示 → `CareerFilters`（props `{ filters }`）→ 样本概况 → warnings → `<MetricList metrics={summary.metrics} />` → `<SharedThemeList themes={summary.shared_themes} />` → 职位列表（列表由本文件内的 `JobRow` 渲染）→ `<Pagination page={jobs.page} pageSize={jobs.page_size} total={jobs.total} />`
   - 空态规则：`summary.sample_size === 0 || jobs.items.length === 0` 时渲染 `CareerEmpty`；当 `jobs.total === 0` 且存在任一筛选条件时改为渲染 `FilterEmpty`（T1 在 `components/Pagination.tsx` 同级新增 `components/FilterEmpty.tsx`，内容含清除筛选链接 `/career-insights`）。
+  - `FilterEmpty` 结构（2026-11-17 补充，E5 收尾）：`<section>` 内用一个 `<div role="status">` 同时包裹标题 `<h2>` 与说明 `<p>`；“清除筛选”链接位于该 `div` 之外、`<section>` 之内。
 - 向后兼容扩展（2026-11-17，补充 Contract 空白）：`CareerDashboard` 新增可选 prop `direction?: { roleFamily: RoleFamily; studentFriendlyTotal: number }`；存在时在职位列表区块之前渲染 `<DirectionView roleFamily={direction.roleFamily} summary={summary} jobs={jobs} studentFriendlyTotal={direction.studentFriendlyTotal} filters={filters} />`；缺失时保持 E1 组装顺序不变。`routes/dashboard.tsx` 的 loader 返回 `direction` 字段，取值由 `parseDirectionView` 决定。
 - 组装顺序补充（2026-11-17 复审后）：总览视图下在 `CareerFilters` 之后、样本概况之前渲染“按目标方向查看”四个方向的 `DirectionLinks`（使用 `buildDirectionHref`）；方向视图下 `CareerFilters` 的表单必须携带 `view=direction` 与 `role_family=<当前方向>` 两个隐藏字段，避免应用筛选时静默退出方向视图。
 - Ownership: T9 独占 `components/CareerDashboard.tsx`、`components/CareerFilters.tsx`、`components/Pagination.tsx`、`components/FilterEmpty.tsx`、`components/DirectionView.tsx`、`routes/dashboard.tsx`、`web/filters.ts`、`web/labels.ts`。
@@ -161,8 +162,19 @@
   - `routes/job.tsx`：loader 中 `const back = new URL(request.url).searchParams.get("back");`，向组件传 `backHref={safeBackHref(back)}`（`safeBackHref` 从 `../filters` 导入）。
   - `export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string })`：返回链接 `<Link to={backHref}>返回职位列表</Link>`。
   - 新增展示（存在才渲染）：`skills` 逐项用 `skillLabel(skill_id)`；`skill_evidence` 显示 `skillLabel(skill_id)` + `evidence_text`；`published_at`、`first_seen_at`、`last_seen_at`；`student_friendly` 用 `STUDENT_FRIENDLY_LABELS`、`employment_type` 用 `EMPLOYMENT_TYPE_LABELS`、`role_family` 用 `ROLE_FAMILY_LABELS`；`city`、`company`、`source_key` 原样显示；`official_url` 外链带 `target="_blank" rel="noopener noreferrer"`。
+  - 时间展示（2026-11-17 补充，E5 收尾；同日按用户裁定修订）：所有面向用户的时间字段（`as_of`、`published_at`、`first_seen_at`、`last_seen_at`、观测 `observed_at`）必须由 `web/time.ts` 导出的 `CareerTime` 渲染。合法性判定：匹配 `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$` 且 `new Date(value)` 可解析；**允许自然顺延**（按该年该月实际天数：闰年 2 月 29 天、平年 28 天；`2024-02-29` 保持 2 月 29 日，`2025-02-29` 顺延为 3 月 1 日，`2026-02-30` 顺延为 3 月 2 日），不做回填比对拒绝。展示为 `Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium", timeStyle: "short" })` 的结果，`dateTime` 属性输出 `new Date(value).toISOString()` 的 canonical 值（与可见日期一致）；不可解析时渲染原文纯文本。`JobDetail.tsx` 不导出时间组件；`routes/job.tsx`、`CareerDashboard.tsx`、`MetricList.tsx`、`DirectionView.tsx` 统一从 `../time` 导入。
   - 原有观测记录区块与错误/未找到状态保持不变。
 - Ownership: T10 独占 `routes/job.tsx`、`components/JobDetail.tsx`。
+
+### C-WEB-TIME@1: 时间展示组件（E5 补充）
+- Provider / Consumers: T24 提供 `modules/career-insights/web/time.ts`；T24 的 `components/JobDetail.tsx`、`routes/job.tsx`、`components/CareerDashboard.tsx`、`components/MetricList.tsx`、`components/DirectionView.tsx` 消费。Requirements: R3
+- Public surface (exact, copy-paste):
+  - `export function formatCareerDateTime(value: string): string | null` — 严格 `Z` 后缀 ISO 且 `new Date(value)` 可解析即返回格式化文本（允许自然顺延）；否则 `null`。
+  - `export function CareerTime({ value, className }: { value: string; className?: string })` — 合法时 `<time dateTime={new Date(value).toISOString()} className={className}>{formatCareerDateTime(value)}</time>`；否则 `<span className={className}>{value}</span>`。
+- 使用点：`JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at`；`routes/job.tsx` 观测 `observed_at`；`CareerDashboard` 的“数据截至 {summary.as_of}”；`MetricList` 的“统计时间 {metric.as_of}”；`DirectionView` 技能项“统计时间 {m.as_of}”。政策卡片 `SharedThemeList` 的 `policy.published_at` 暂保留原文（后端政策日期格式待 D 确认，见协同表第 9 项）。
+- Ownership: T24 独占上述 6 个文件；`web/time.ts` 不得 import 任何 `.server` 模块或 React 以外依赖。
+- Failure semantics: 不可解析的时间渲染原文，不抛错；合法但日期越界的值按 JS `Date` 自然顺延（预期行为，用户已裁定）；`dateTime` 只对可解析值输出 canonical ISO。
+- Interaction semantics / status: READY
 - Failure semantics: 缺失字段省略对应行；不展示未在 API 返回中的推测值。
 - Interaction semantics / status: READY
 
