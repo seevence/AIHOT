@@ -7,7 +7,13 @@ import type {
 } from "../contracts/api.ts";
 import type { MetricSpecV1, RoleFamily } from "../contracts/job.ts";
 import { SKILL_DICTIONARY_VERSION } from "../data/dictionaries.ts";
-import { METRIC_SPECS_V1 } from "../data/metrics.ts";
+import {
+  computePolicyJobSharedThemesMetric,
+  computeSharedThemes,
+  METRIC_SPECS_V1,
+} from "../data/metrics.ts";
+
+import { listMetricJobs, listPolicyEvidence } from "./policy-repository.ts";
 import { resolveDataOrigin } from "./provenance.ts";
 
 const ROLE_FAMILY_ORDER: readonly RoleFamily[] = [
@@ -117,7 +123,7 @@ async function studentEvidence(db: Db): Promise<EvidenceLinkV1[]> {
 }
 
 export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
-  const [counts, familyRows, skillRows, student, snapshots] = await Promise.all([
+  const [counts, familyRows, skillRows, student, snapshots, unknownSkill] = await Promise.all([
     db<SummaryCounts[]>`
       SELECT COUNT(*)::int AS sample_size,
              COUNT(DISTINCT company_name)::int AS company_count,
@@ -148,6 +154,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
       FROM career_job_observations
       ORDER BY observed_at DESC
       LIMIT 2`,
+    db<{ unknown_count: number }[]>`
+      SELECT COUNT(*) FILTER (WHERE COALESCE(skills, '[]'::jsonb) = '[]'::jsonb)::int AS unknown_count
+      FROM career_jobs`,
   ]);
 
   const count = counts[0];
@@ -157,6 +166,8 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   const sampleSize = count.sample_size;
   const asOf = toIsoOrEpoch(count.last_observed_at);
   const hasMultipleSnapshots = snapshots.length >= 2;
+  const unknownSkillCount = unknownSkill[0]?.unknown_count ?? 0;
+  const unknownSkillRatio = ratioValue(unknownSkillCount, sampleSize);
   const familyCounts = new Map<RoleFamily, number>(
     familyRows.map((row) => [row.role_family as RoleFamily, row.job_count]),
   );
@@ -210,6 +221,8 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
             as_of: asOf,
             dimension: {},
             dictionary_version: SKILL_DICTIONARY_VERSION,
+            unknown_count: unknownSkillCount,
+            unknown_ratio: unknownSkillRatio,
             evidence: [],
           }),
         ]
@@ -225,6 +238,8 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
               as_of: asOf,
               dimension: { skill_id: row.skill_id },
               dictionary_version: SKILL_DICTIONARY_VERSION,
+              unknown_count: unknownSkillCount,
+              unknown_ratio: unknownSkillRatio,
               evidence,
             });
           }),
@@ -256,16 +271,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
         evidence: [],
       });
 
-  const policyMetric = metric("policy_job_shared_themes", {
-    status: "insufficient_data",
-    value: null,
-    numerator_count: 0,
-    denominator_count: null,
-    sample_size: sampleSize,
-    as_of: asOf,
-    dimension: {},
-    evidence: [],
-  });
+  const [policies, metricJobs] = await Promise.all([listPolicyEvidence(db), listMetricJobs(db)]);
+  const sharedThemes = computeSharedThemes(policies, metricJobs);
+  const policyMetric = computePolicyJobSharedThemesMetric(policies, metricJobs, sharedThemes, { as_of: asOf });
 
   const warnings: CareerWarningV1[] = [];
   if (sampleSize === 0) {
@@ -277,7 +285,11 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   if (sampleSize > 0 && students.unknown_count > 0) {
     warnings.push({ code: "unknown_fields", message: "存在未标记应届友好度的职位，unknown 不表示不友好。" });
   }
-  warnings.push({ code: "insufficient_data", message: "政策证据尚未接入，共享主题暂为空。" });
+  if (policies.length === 0) {
+    warnings.push({ code: "insufficient_data", message: "尚未接入政策证据，共享主题暂不计算。" });
+  } else if (sharedThemes.length === 0) {
+    warnings.push({ code: "insufficient_data", message: "政策与职位暂未出现同一主题，不代表无共同方向。" });
+  }
 
   const dataOrigin = resolveDataOrigin(
     {
@@ -299,7 +311,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
     last_observed_at: asOf,
     has_multiple_snapshots: hasMultipleSnapshots,
     metrics: [...jobFamilyMetrics, ...skillMetrics, studentFriendlyMetric, observedNewJobsMetric, policyMetric],
-    shared_themes: [],
+    shared_themes: sharedThemes,
     dictionary_version: SKILL_DICTIONARY_VERSION,
     warnings,
   };
