@@ -78,6 +78,16 @@
 - **Blocked by**: none
 - **Deliverable**: 方向视图技能项展示 `统计时间`/`disclaimer`/占比与样本量，并有证据展开（职位站内、政策外链）；`status=not_applicable` 显示“不适用”；`dimension.skill_id` 缺失显示“未指定技能”；`MetricList` 同步该状态语义与标签回退（`ROLE_FAMILY_LABELS[...] ?? 原值`）。
 
+## T22: 时间可读化、严格 ISO 校验与 FilterEmpty 结构收尾
+
+- **Objective**: 把详情页时间显示为可读的中文时间，严格校验 ISO 值，统一筛选空态的可访问结构。
+- **Requirements**: R3, R5, R7
+- **Write set**: `modules/career-insights/web/components/JobDetail.tsx`, `modules/career-insights/web/routes/job.tsx`, `modules/career-insights/web/components/FilterEmpty.tsx`
+- **Provides**: C-WEB-JOB-DETAIL@1（时间展示补充条款）、C-WEB-DASH-BIND@1（FilterEmpty 结构补充条款）(design.md §2.2)
+- **Consumes**: C-WEB-LABELS@1 (design.md §2.2)
+- **Blocked by**: none
+- **Deliverable**: `JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at` 与 `routes/job.tsx` 观测记录时间显示为 `Asia/Shanghai` 固定时区的中文日期时间，`<time dateTime>` 仅在严格 ISO 且可解析时使用；`FilterEmpty` 用单个 `role="status"` 容器包裹标题与说明、清除链接在容器外；三个文件均以单个换行结尾。
+
 ## 后续阶段
 
 - E4（D5）：浏览器验收、真实备份页面核对、演示兜底

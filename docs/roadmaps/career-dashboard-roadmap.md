@@ -13,6 +13,7 @@
 | E2 | D3：主路径、筛选、建议和证据展开 | 目标方向视图（组合后端已算指标与证据）、技能筛选、完整主路径 | 已完成 | PASS（2026-11-17，两轮审查） |
 | E3 | D4：集中调优 | 空态/错误态、长文本、大屏与手机响应式、筛选体验、方向视图可回溯性、E1/E2 遗留 minor | 已完成 | PASS（2026-11-17，两轮审查） |
 | E4 | D5：第二次采集与联调 | 浏览器验收、真实备份页面核对、演示兜底（截图/录屏说明） | 已完成 | PASS（2026-11-17，收尾审查） |
+| E5 | 收尾补丁（用户追加） | 时间可读化、严格 ISO、`FilterEmpty` 结构、文档与行尾 | 开发完成 | 审查中 |
 
 ## 不可妥协约束（摘自共享路线图与开发契约）
 
@@ -69,7 +70,7 @@
 - 提交：`91810b0`（功能）、`682cda6`（review 修复：移动端 aria-current、grid 断点、role=status 收窄、技能 unknown 与证据条件、key 兜底）
 - Review：首轮 FAIL（1 major：移动端丢失 aria-current；14 minor）→ 修复 → 复审 PASS
 - 遗留（转入 E4）：① `FilterEmpty.tsx` 空态缺 `role="status"`；② `CareerStates.tsx`/`JobDetail.tsx` 末尾换行与 `<time dateTime>` 校验；③ `CareerFilters.tsx` 不可达兜底 `?? "unknown"`；④ 计划文档 `.codeartsdoer/` 未入库（本阶段一并提交以便追溯）
-### E4（开发完成，收尾审查中）
+### E4（已完成，收尾审查 PASS）
 
 - 清理：`FilterEmpty` 空态 `role="status"`；`CareerStates`/`JobDetail` 末尾换行；`<time dateTime>` 仅对可解析时间生效；移除 `CareerFilters` 不可达兜底并收窄类型
 - 浏览器验收（fixture 联调：fixture 服务 3101 + web 3010，`API_BASE_URL=http://127.0.0.1:3101`）：
@@ -77,5 +78,28 @@
   - 手机 390：筛选单列与按钮全宽、方向视图与指标卡单列、分页仅上一页/下一页 + 页码文本
   - 控制台仅静态资源 404（`manifest.webmanifest`/`icon.png`/`favicon.ico`），属站点公共资源，不在角色 E 写集
   - 截图：`docs/verification/e4-dashboard-desktop.png`、`e4-direction-desktop.png`、`e4-job-detail.png`、`e4-dashboard-mobile.png`、`e4-direction-mobile.png`
-- 遗留（跨角色/可选）：① 手机 fixed 底栏与页尾内容的遮挡关系由 `apps/web` 外壳负责（角色 A）；② 观测时间显示 ISO 原文，可读性可再优化；③ 真实数据链路需角色 C/D 完成后在集成分支复验- 收尾审查：PASS（无 blocker/major，10 minor）。minor 记录：`FilterEmpty.tsx`/路线图末尾换行、路线图未写明 3010 端口覆盖方式、手机与桌面截图 URL 不同（筛选与方向视图）、缺手机详情与筛选空态截图、`isValidDateTime` 宽松解析边界、`hidden` 的 `?? ""` 保留、`FilterEmpty` 的 role 覆盖范围、桌面证据展开为折叠态、"真实备份页面核对"责任方待跨角色确认
+- 遗留（跨角色/可选）：① 手机 fixed 底栏与页尾内容的遮挡关系由 `apps/web` 外壳负责（角色 A）；② 观测时间显示 ISO 原文，可读性可再优化（E5 已处理）；③ 真实数据链路需角色 C/D 完成后在集成分支复验
+- 收尾审查：PASS（无 blocker/major，10 minor）。minor 记录：`FilterEmpty.tsx`/路线图末尾换行、路线图未写明 3010 端口覆盖方式、手机与桌面截图 URL 不同（筛选与方向视图）、缺手机详情与筛选空态截图、`isValidDateTime` 宽松解析边界、`hidden` 的 `?? ""` 保留、`FilterEmpty` 的 role 覆盖范围、桌面证据展开为折叠态、"真实备份页面核对"责任方待跨角色确认
+
+### E5（收尾补丁，用户追加；开发完成，审查中）
+
+- 范围（E 职责内可修项）：观测/发布时间可读化、严格 ISO 校验、`FilterEmpty` 可访问结构、文档与行尾
+- 契约补充：C-WEB-JOB-DETAIL@1「时间展示」（`Asia/Shanghai` 固定时区，`zh-CN` medium/short，严格 `Z` 后缀 ISO 才用 `<time dateTime>`）；C-WEB-DASH-BIND@1「FilterEmpty 结构」（单个 `role="status"` 包裹标题与说明，链接在外）
+- 交付：
+  - `JobDetail.tsx` 导出 `CareerTime`，`published_at`/`first_seen_at`/`last_seen_at` 显示如 `2026年11月17日 16:30`
+  - `routes/job.tsx` 观测记录时间复用 `CareerTime`（字段 `observed_at`）
+  - `FilterEmpty.tsx` 单个 `role="status"` 容器，清除链接在容器外
+- 验证：`npm run typecheck -w @aihot/web`、`npm run build -w @aihot/web` 通过
+- 待审：T23
+
+## 待多角色协同（非 E 职责，需 A / C / D 处理）
+
+| # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |
+|---|---|---|---|---|
+| 1 | `apps/web/app/lib/api.server.ts` 把 API 500 映射为 503，R5 的 500 分支不可达 | A | 未处理 | 后端 500 时页面显示“数据尚未就绪”而非“暂时无法加载” |
+| 2 | 手机 fixed 底栏与页尾内容遮挡（间距/层级） | A（`apps/web` 外壳） | 未处理 | 手机滚动到底部时内容可能被底栏压住；E 无写集权限 |
+| 3 | 真实数据链路（`summary`/`jobs`/`jobs/:id` 走真实 SQL 与迁移） | C / D | 未完成 | 当前只能显示 503 状态或 fixture 样例 |
+| 4 | 真实备份页面核对（D5 范围项） | A + C / D | 未执行 | 需后端链路可用后在集成分支复验前端展示口径 |
+| 5 | 站点公共静态资源 404（`manifest.webmanifest`/`icon.png`/`favicon.ico`） | A | 未处理 | 浏览器控制台 404，不影响业务功能 |
+| 6 | `feat/career-dashboard` 合并与 push | A（集成） | 待 E5 审查 PASS | 合入 `feat/integration` 并做集成门禁 |
 - 说明：以上均为记录/风格级问题，不阻塞阶段完成；真实数据与外壳层问题留待集成分支处理
