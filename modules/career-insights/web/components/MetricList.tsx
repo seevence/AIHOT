@@ -1,4 +1,5 @@
 import type { MetricResultV1 } from "@aihot/career-insights/contracts";
+import { ROLE_FAMILY_LABELS } from "../labels";
 import { EvidenceList } from "./EvidenceList";
 
 function formatValue(metric: MetricResultV1): string {
@@ -20,6 +21,10 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
     unknownRatioPercent ? `未识别占比 ${unknownRatioPercent}` : undefined,
   ].filter((part): part is string => part !== undefined);
   const unknownText = unknownParts.length > 0 ? unknownParts.join(" · ") : undefined;
+  const roleFamily = metric.dimension.role_family;
+  const roleFamilyLabel = roleFamily
+    ? (ROLE_FAMILY_LABELS as Readonly<Record<string, string>>)[roleFamily] ?? roleFamily
+    : undefined;
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
@@ -35,6 +40,13 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
           <dt>统计时间</dt>
           <dd className="mono text-ink-2">{metric.as_of}</dd>
         </div>
+
+        {roleFamilyLabel !== undefined && (
+          <div className="flex gap-2">
+            <dt>方向</dt>
+            <dd className="text-ink-2">{roleFamilyLabel}</dd>
+          </div>
+        )}
 
         {metric.dictionary_version !== undefined && (
           <div className="flex gap-2">
@@ -64,7 +76,10 @@ export function MetricList({ metrics }: { metrics: MetricResultV1[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {metrics.map((metric) => (
-        <MetricCard key={metric.metric_id} metric={metric} />
+        <MetricCard
+          key={`${metric.metric_id}:${metric.dimension.skill_id ?? metric.dimension.role_family ?? metric.dimension.theme_id ?? "global"}`}
+          metric={metric}
+        />
       ))}
     </div>
   );

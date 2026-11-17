@@ -27,8 +27,8 @@ function JobRow({ job, back }: { job: JobListItemV1; back: string }) {
   return (
     <li>
       <Link to={buildJobHref(job.id, back)} className="block px-4 py-4 transition-colors hover:bg-bg-sunk">
-        <div className="text-[15px] font-semibold text-ink">{job.title}</div>
-        <div className="mt-1 text-[13px] text-ink-3">{job.company_name} · {job.locations.length > 0 ? job.locations.join("、") : "地点未知"}</div>
+        <div className="text-[15px] font-semibold text-ink break-words">{job.title}</div>
+        <div className="mt-1 text-[13px] text-ink-3 break-words">{job.company_name} · {job.locations.length > 0 ? job.locations.join("、") : "地点未知"}</div>
         <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-ink-4">
           <span>{ROLE_FAMILY_LABELS[job.role_family]}</span>
           <span>{EMPLOYMENT_TYPE_LABELS[job.employment_type]}</span>
@@ -85,13 +85,13 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
           <div><dt className="text-[12px] text-ink-4">公司</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.company_count}</dd></div>
           <div><dt className="text-[12px] text-ink-4">来源</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.source_count}</dd></div>
         </dl>
-        <p className="mt-4 text-[12px] text-ink-4">数据截至 <time dateTime={summary.as_of}>{summary.as_of}</time> · 词典 {summary.dictionary_version}</p>
+        <p className="mt-4 text-[12px] text-ink-4 break-words">数据截至 <time dateTime={summary.as_of}>{summary.as_of}</time> · 词典 {summary.dictionary_version}</p>
       </section>
 
       {summary.warnings.length > 0 && (
         <section aria-label="数据提示" className="rounded-card border border-line bg-surface p-4">
           <ul className="space-y-1 text-[13px] text-ink-3">
-            {summary.warnings.map((warning) => <li key={`${warning.code}:${warning.message}`}>{warning.message}</li>)}
+            {summary.warnings.map((warning) => <li key={`${warning.code}:${warning.message}`} className="break-words">{warning.message}</li>)}
           </ul>
         </section>
       )}
@@ -111,14 +111,14 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
           <SharedThemeList themes={summary.shared_themes} />
 
           <section aria-labelledby="career-jobs">
-            <div className="flex items-baseline justify-between">
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
               <h2 id="career-jobs" className="text-[18px] font-semibold text-ink">职位列表</h2>
               <span className="num text-[12px] text-ink-4">共 {jobs.total} 条</span>
             </div>
 
             {noJobs ? (
               outOfRange ? (
-                <div className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
+                <div role="status" className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
                   <p className="text-[14px] text-ink-2">当前页没有职位，可能已超出结果页数。</p>
                   <Link to={buildJobsHref({ ...filters, page: 1 })} className="mt-3 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2">
                     回到第 1 页

@@ -25,36 +25,38 @@ export function Pagination({ page, pageSize, total }: { page: number; pageSize: 
 
   return (
     <nav aria-label="职位分页" className="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <span className="num text-[12px] text-ink-4">第 {current} / {totalPages} 页 · 共 {total} 条</span>
+      <span className="num whitespace-nowrap text-[12px] text-ink-4">第 {current} / {totalPages} 页 · 共 {total} 条</span>
       <div className="flex flex-wrap items-center gap-1">
         {current > 1 ? (
-          <Link to={hrefFor(current - 1)} className={`${ITEM_CLASS} border border-line text-ink-2 hover:bg-bg-sunk`}>
+          <Link to={hrefFor(current - 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
             上一页
           </Link>
         ) : (
-          <span aria-disabled="true" className={`${ITEM_CLASS} border border-line text-ink-4 opacity-60`}>上一页</span>
+          <span aria-disabled="true" className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-4 opacity-60`}>上一页</span>
         )}
 
-        {pageNumbers(current, totalPages).map((item, index) =>
-          item === "gap" ? (
-            <span key={`gap-${index}`} className="px-1 text-[12px] text-ink-4">…</span>
-          ) : item === current ? (
-            <span key={item} aria-current="page" className={`${ITEM_CLASS} bg-accent font-medium text-accent-contrast`}>
-              {item}
-            </span>
-          ) : (
-            <Link key={item} to={hrefFor(item)} className={`${ITEM_CLASS} border border-line text-ink-2 hover:bg-bg-sunk`}>
-              {item}
-            </Link>
-          ),
-        )}
+        <div className="hidden items-center gap-1 sm:flex">
+          {pageNumbers(current, totalPages).map((item, index) =>
+            item === "gap" ? (
+              <span key={`gap-${index}`} className="px-1 text-[12px] text-ink-4">…</span>
+            ) : item === current ? (
+              <span key={item} aria-current="page" className={`${ITEM_CLASS} bg-accent font-medium text-accent-contrast`}>
+                {item}
+              </span>
+            ) : (
+              <Link key={item} to={hrefFor(item)} className={`${ITEM_CLASS} border border-line text-ink-2 hover:bg-bg-sunk`}>
+                {item}
+              </Link>
+            ),
+          )}
+        </div>
 
         {current < totalPages ? (
-          <Link to={hrefFor(current + 1)} className={`${ITEM_CLASS} border border-line text-ink-2 hover:bg-bg-sunk`}>
+          <Link to={hrefFor(current + 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
             下一页
           </Link>
         ) : (
-          <span aria-disabled="true" className={`${ITEM_CLASS} border border-line text-ink-4 opacity-60`}>下一页</span>
+          <span aria-disabled="true" className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-4 opacity-60`}>下一页</span>
         )}
       </div>
     </nav>

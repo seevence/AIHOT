@@ -7,6 +7,8 @@ import {
   skillLabel,
 } from "../labels";
 
+type Fact = { label: string; value: string; dateTime?: boolean };
+
 export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string }) {
   const experience =
     job.experience_raw ??
@@ -14,9 +16,9 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
       ? `${job.experience_min_years ?? "未知"}–${job.experience_max_years ?? "未知"} 年`
       : null);
 
-  const facts: Array<{ label: string; value: string }> = [];
-  const addFact = (label: string, value: string | null | undefined) => {
-    if (value) facts.push({ label, value });
+  const facts: Fact[] = [];
+  const addFact = (label: string, value: string | null | undefined, dateTime = false) => {
+    if (value) facts.push({ label, value, dateTime });
   };
   addFact("职位类别", ROLE_FAMILY_LABELS[job.role_family] ?? job.role_family);
   addFact("用工类型", EMPLOYMENT_TYPE_LABELS[job.employment_type] ?? job.employment_type);
@@ -26,31 +28,33 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
   addFact("公司", job.company_name);
   addFact("城市", job.locations.join("、"));
   addFact("来源", job.source_key);
-  addFact("发布时间", job.published_at);
-  addFact("首次观测", job.first_seen_at);
-  addFact("最近观测", job.last_seen_at);
+  addFact("发布时间", job.published_at, true);
+  addFact("首次观测", job.first_seen_at, true);
+  addFact("最近观测", job.last_seen_at, true);
 
   return (
     <>
       <Link to={backHref} className="inline-flex text-[13px] text-ink-3 hover:text-ink">← 返回职位列表</Link>
 
       <header>
-        <h1 data-page-title="" className="text-[26px] font-bold leading-snug text-ink">{job.title}</h1>
-        <p className="mt-2 text-[15px] text-ink-3">
+        <h1 data-page-title="" className="text-[26px] font-bold leading-snug text-ink break-words">{job.title}</h1>
+        <p className="mt-2 text-[15px] text-ink-3 break-words">
           {[job.company_name, job.locations.join("、")].filter(Boolean).join(" · ")}
         </p>
-        <a href={job.official_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex h-10 items-center rounded-full bg-accent px-5 text-[13px] font-medium text-accent-contrast">
+        <a href={job.official_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex h-10 max-w-full items-center rounded-full bg-accent px-5 text-[13px] font-medium text-accent-contrast">
           查看官方职位
         </a>
       </header>
 
       <section aria-labelledby="job-facts" className="rounded-card border border-line bg-surface p-5">
         <h2 id="job-facts" className="text-[17px] font-semibold text-ink">职位信息</h2>
-        <dl className="mt-4 grid gap-x-5 gap-y-3 text-[13px] sm:grid-cols-2">
+        <dl className="mt-4 grid grid-cols-1 gap-x-5 gap-y-3 text-[13px] sm:grid-cols-2">
           {facts.map((fact) => (
-            <div key={fact.label}>
+            <div key={fact.label} className="min-w-0">
               <dt className="text-ink-4">{fact.label}</dt>
-              <dd className="mt-1 text-ink-2">{fact.value}</dd>
+              <dd className="mt-1 text-ink-2 break-words">
+                {fact.dateTime ? <time dateTime={fact.value}>{fact.value}</time> : fact.value}
+              </dd>
             </div>
           ))}
         </dl>
@@ -61,7 +65,7 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
           <h2 id="job-skills" className="text-[17px] font-semibold text-ink">技能要求</h2>
           <ul className="mt-3 flex flex-wrap gap-2">
             {job.skills.map((skillId) => (
-              <li key={skillId} className="rounded-full border border-line bg-bg-sunk px-3 py-1 text-[12px] text-ink-2">
+              <li key={skillId} className="max-w-full rounded-full border border-line bg-bg-sunk px-3 py-1 text-[12px] text-ink-2 break-words">
                 {skillLabel(skillId)}
               </li>
             ))}
@@ -77,8 +81,8 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
           <ul className="mt-3 space-y-2">
             {job.skill_evidence.map((evidence) => (
               <li key={evidence.skill_id} className="rounded-card border border-line bg-surface p-4">
-                <div className="text-[13px] font-semibold text-ink">{skillLabel(evidence.skill_id)}</div>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-3">{evidence.evidence_text}</p>
+                <div className="text-[13px] font-semibold text-ink break-words">{skillLabel(evidence.skill_id)}</div>
+                <p className="mt-1 text-[13px] leading-relaxed text-ink-3 break-words">{evidence.evidence_text}</p>
               </li>
             ))}
           </ul>

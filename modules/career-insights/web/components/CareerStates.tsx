@@ -2,7 +2,7 @@ import { Link, useRevalidator } from "react-router";
 
 export function FixtureNotice() {
   return (
-    <div role="note" className="rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-900">
+    <div role="note" className="rounded-card border border-amber-300 bg-amber-50 px-4 py-3 text-[13px] font-medium text-amber-900 break-words">
       联调样例（非真实数据）
     </div>
   );
@@ -18,7 +18,7 @@ export function CareerLoading() {
 
 export function CareerEmpty() {
   return (
-    <section className="rounded-card border border-line bg-surface px-5 py-8 text-center">
+    <section role="status" className="rounded-card border border-line bg-surface px-5 py-8 text-center">
       <h2 className="text-[16px] font-semibold text-ink">暂无职位数据</h2>
       <p className="mt-2 text-[13px] leading-relaxed text-ink-3">当前查询没有职位记录；这不代表市场没有岗位。</p>
     </section>
@@ -27,7 +27,7 @@ export function CareerEmpty() {
 
 export function SingleSnapshotNotice() {
   return (
-    <div role="note" className="rounded-card border border-line bg-bg-sunk px-4 py-3 text-[13px] leading-relaxed text-ink-3">
+    <div role="note" className="rounded-card border border-line bg-bg-sunk px-4 py-3 text-[13px] leading-relaxed text-ink-3 break-words">
       当前仅有单快照，新增岗位与变化趋势数据不足，不作趋势推断。
     </div>
   );
@@ -48,11 +48,11 @@ export function CareerError({ status = 500 }: { status?: number }) {
         : "职业洞察 API 请求失败，请稍后重试。";
 
   return (
-    <div role="alert" className="mx-auto max-w-md py-24 text-center">
+    <div role="alert" className="mx-auto max-w-md px-4 py-16 text-center sm:py-24">
       <div className="mono text-[12px] text-ink-4">{status}</div>
-      <h1 className="mt-2 text-[20px] font-bold text-ink">{title}</h1>
-      <p className="mt-2 text-[14px] leading-relaxed text-ink-3">{description}</p>
-      <div className="mt-6 flex justify-center gap-3">
+      <h1 className="mt-2 text-[20px] font-bold text-ink break-words">{title}</h1>
+      <p className="mt-2 text-[14px] leading-relaxed text-ink-3 break-words">{description}</p>
+      <div className="mt-6 flex flex-wrap justify-center gap-3">
         {!notFound && (
           <button
             type="button"
