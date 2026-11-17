@@ -12,7 +12,7 @@
 | E1 | D2：接真实 API，总览 + 基础筛选 + 职位证据展开 | 总览、职位筛选（方向/公司/城市/用工类型/学生友好）、分页、指标证据展开、政策—岗位共享主题两侧证据 | 已完成 | PASS（2026-11-17，两轮审查） |
 | E2 | D3：主路径、筛选、建议和证据展开 | 目标方向视图（组合后端已算指标与证据）、技能筛选、完整主路径 | 已完成 | PASS（2026-11-17，两轮审查） |
 | E3 | D4：集中调优 | 空态/错误态、长文本、大屏与手机响应式、筛选体验、方向视图可回溯性、E1/E2 遗留 minor | 已完成 | PASS（2026-11-17，两轮审查） |
-| E4 | D5：第二次采集与联调 | 浏览器验收、真实备份页面核对、演示兜底（截图/录屏说明） | 开发中 | - |
+| E4 | D5：第二次采集与联调 | 浏览器验收、真实备份页面核对、演示兜底（截图/录屏说明） | 开发完成 | 收尾审查中 |
 
 ## 不可妥协约束（摘自共享路线图与开发契约）
 
@@ -69,3 +69,12 @@
 - 提交：`91810b0`（功能）、`682cda6`（review 修复：移动端 aria-current、grid 断点、role=status 收窄、技能 unknown 与证据条件、key 兜底）
 - Review：首轮 FAIL（1 major：移动端丢失 aria-current；14 minor）→ 修复 → 复审 PASS
 - 遗留（转入 E4）：① `FilterEmpty.tsx` 空态缺 `role="status"`；② `CareerStates.tsx`/`JobDetail.tsx` 末尾换行与 `<time dateTime>` 校验；③ `CareerFilters.tsx` 不可达兜底 `?? "unknown"`；④ 计划文档 `.codeartsdoer/` 未入库（本阶段一并提交以便追溯）
+### E4（开发完成，收尾审查中）
+
+- 清理：`FilterEmpty` 空态 `role="status"`；`CareerStates`/`JobDetail` 末尾换行；`<time dateTime>` 仅对可解析时间生效；移除 `CareerFilters` 不可达兜底并收窄类型
+- 浏览器验收（fixture 联调：fixture 服务 3101 + web 3010，`API_BASE_URL=http://127.0.0.1:3101`）：
+  - 桌面 1440：总览、指标证据展开、方向视图（口径说明 + 技能证据 + 方向切换）、职位详情（信息/技能/技能证据/观测）
+  - 手机 390：筛选单列与按钮全宽、方向视图与指标卡单列、分页仅上一页/下一页 + 页码文本
+  - 控制台仅静态资源 404（`manifest.webmanifest`/`icon.png`/`favicon.ico`），属站点公共资源，不在角色 E 写集
+  - 截图：`docs/verification/e4-dashboard-desktop.png`、`e4-direction-desktop.png`、`e4-job-detail.png`、`e4-dashboard-mobile.png`、`e4-direction-mobile.png`
+- 遗留（跨角色/可选）：① 手机 fixed 底栏与页尾内容的遮挡关系由 `apps/web` 外壳负责（角色 A）；② 观测时间显示 ISO 原文，可读性可再优化；③ 真实数据链路需角色 C/D 完成后在集成分支复验

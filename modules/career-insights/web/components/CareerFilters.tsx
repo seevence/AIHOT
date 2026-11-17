@@ -16,7 +16,8 @@ const FIELD_CLASS = "mt-1 h-9 w-full min-w-0 rounded-lg border border-line bg-su
 const LABEL_CLASS = "block text-[12px] text-ink-4";
 
 export function CareerFilters({ filters, view }: { filters: JobFiltersV1; view?: DashboardView }) {
-  const directionView = view === "direction" && filters.role_family !== undefined;
+  const directionRoleFamily = view === "direction" ? filters.role_family : undefined;
+  const directionView = directionRoleFamily !== undefined;
 
   return (
     <section aria-labelledby="career-filters" className="rounded-card border border-line bg-surface p-4">
@@ -28,7 +29,7 @@ export function CareerFilters({ filters, view }: { filters: JobFiltersV1; view?:
         <input type="hidden" name="page_size" value={filters.page_size} />
 
         {directionView ? (
-          <div className="text-[12px] text-ink-4 break-words">方向：{ROLE_FAMILY_LABELS[filters.role_family ?? "unknown"]}</div>
+          <div className="text-[12px] text-ink-4 break-words">方向：{ROLE_FAMILY_LABELS[directionRoleFamily]}</div>
         ) : (
           <div>
             <label htmlFor="career-role-family" className={LABEL_CLASS}>方向</label>
