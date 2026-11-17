@@ -10,6 +10,16 @@ function formatValue(metric: MetricResultV1): string {
   return String(metric.value);
 }
 
+function getMetricKey(metric: MetricResultV1): string {
+  const dimensions = [
+    metric.dimension.role_family,
+    metric.dimension.skill_id,
+    metric.dimension.theme_id,
+  ].filter((value): value is string => value !== undefined);
+
+  return [metric.metric_id, ...dimensions].join(":");
+}
+
 function MetricCard({ metric }: { metric: MetricResultV1 }) {
   const expandable = metric.status === "ok" && metric.evidence.length > 0;
   const unknownRatioPercent = metric.unknown_ratio !== undefined && metric.unknown_ratio !== null
@@ -64,7 +74,7 @@ export function MetricList({ metrics }: { metrics: MetricResultV1[] }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       {metrics.map((metric) => (
-        <MetricCard key={metric.metric_id} metric={metric} />
+        <MetricCard key={getMetricKey(metric)} metric={metric} />
       ))}
     </div>
   );
