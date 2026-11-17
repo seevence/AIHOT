@@ -1,5 +1,6 @@
 import type { MetricResultV1 } from "@aihot/career-insights/contracts";
 import { ROLE_FAMILY_LABELS } from "../labels";
+import { CareerTime } from "../time";
 import { EvidenceList } from "./EvidenceList";
 
 function formatValue(metric: MetricResultV1): string {
@@ -36,7 +37,7 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
         </div>
         <div className="flex gap-2">
           <dt>统计时间</dt>
-          <dd className="mono text-ink-2">{metric.as_of}</dd>
+          <dd className="mono text-ink-2"><CareerTime value={metric.as_of} /></dd>
         </div>
 
         {roleFamilyLabel !== undefined && (

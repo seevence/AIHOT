@@ -88,6 +88,16 @@
 - **Blocked by**: none
 - **Deliverable**: `JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at` 与 `routes/job.tsx` 观测记录时间显示为 `Asia/Shanghai` 固定时区的中文日期时间，`<time dateTime>` 仅在严格 ISO 且可解析时使用；`FilterEmpty` 用单个 `role="status"` 容器包裹标题与说明、清除链接在容器外；三个文件均以单个换行结尾。
 
+## T24: 时间组件抽取与全站可读时间（E5 复审修复）
+
+- **Objective**: 修正非法日历日期被顺延的问题，并把可读时间统一到所有展示 `as_of` 的位置。
+- **Requirements**: R3
+- **Write set**: `modules/career-insights/web/time.ts`, `modules/career-insights/web/components/JobDetail.tsx`, `modules/career-insights/web/routes/job.tsx`, `modules/career-insights/web/components/CareerDashboard.tsx`, `modules/career-insights/web/components/MetricList.tsx`, `modules/career-insights/web/components/DirectionView.tsx`
+- **Provides**: C-WEB-TIME@1 (design.md §2.2)；C-WEB-JOB-DETAIL@1 时间展示条款
+- **Consumes**: C-WEB-METRIC@1, C-WEB-SKILL-TRACE@1 (design.md §2.2)
+- **Blocked by**: none
+- **Deliverable**: 新增 `time.ts` 导出 `formatCareerDateTime`（严格 `Z` ISO + 回填比对）与 `CareerTime`；`JobDetail` 不再导出时间组件并改从 `../time` 导入；`routes/job.tsx`、`CareerDashboard`（数据截至）、`MetricList`（统计时间）、`DirectionView`（统计时间）统一使用 `CareerTime`；非法日期（如 `2026-02-30`）渲染原文且不输出 `dateTime`。
+
 ## 后续阶段
 
 - E4（D5）：浏览器验收、真实备份页面核对、演示兜底

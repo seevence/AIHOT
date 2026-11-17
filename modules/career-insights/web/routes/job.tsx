@@ -4,7 +4,8 @@ import type { JobDetailResponseV1 } from "@aihot/career-insights/contracts";
 import { careerApiPath, loadCareerApi } from "../api";
 import { safeBackHref } from "../filters";
 import { CareerError, CareerLoading, FixtureNotice, SingleSnapshotNotice } from "../components/CareerStates";
-import { CareerTime, JobDetail } from "../components/JobDetail";
+import { JobDetail } from "../components/JobDetail";
+import { CareerTime } from "../time";
 
 export async function loader({ params, request }: LoaderArgs) {
   if (!params.id) throw data({ message: "not_found" }, { status: 404 });

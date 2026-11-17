@@ -6,29 +6,9 @@ import {
   STUDENT_FRIENDLY_LABELS,
   skillLabel,
 } from "../labels";
+import { CareerTime } from "../time";
 
 type Fact = { label: string; value: string; dateTime?: boolean };
-
-const ISO_UTC_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$/;
-
-const dateTimeFormatter = new Intl.DateTimeFormat("zh-CN", {
-  timeZone: "Asia/Shanghai",
-  dateStyle: "medium",
-  timeStyle: "short",
-});
-
-function formatCareerDateTime(value: string): string | null {
-  if (!ISO_UTC_PATTERN.test(value)) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return null;
-  return dateTimeFormatter.format(date);
-}
-
-export function CareerTime({ value, className }: { value: string; className?: string }) {
-  const formatted = formatCareerDateTime(value);
-  if (formatted === null) return <span className={className}>{value}</span>;
-  return <time dateTime={value} className={className}>{formatted}</time>;
-}
 
 export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string }) {
   const experience =

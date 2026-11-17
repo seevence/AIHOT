@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import type { JobFiltersV1, JobListResponseV1, MetricResultV1, RoleFamily, SummaryResponseV1 } from "@aihot/career-insights/contracts";
 import { buildDirectionHref, buildJobHref, buildJobsHref } from "../filters";
 import { ROLE_FAMILY_LABELS, skillLabel } from "../labels";
+import { CareerTime } from "../time";
 import { MetricList } from "./MetricList";
 import { SharedThemeList } from "./SharedThemeList";
 
@@ -46,7 +47,7 @@ function SkillMetricItem({ metric, directionHref }: { metric: MetricResultV1; di
         </div>
         <div className="flex gap-2">
           <dt>统计时间</dt>
-          <dd className="mono text-ink-2">{metric.as_of}</dd>
+          <dd className="mono text-ink-2"><CareerTime value={metric.as_of} /></dd>
         </div>
       </dl>
 

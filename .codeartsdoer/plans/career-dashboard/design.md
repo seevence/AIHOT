@@ -162,9 +162,19 @@
   - `routes/job.tsx`：loader 中 `const back = new URL(request.url).searchParams.get("back");`，向组件传 `backHref={safeBackHref(back)}`（`safeBackHref` 从 `../filters` 导入）。
   - `export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string })`：返回链接 `<Link to={backHref}>返回职位列表</Link>`。
   - 新增展示（存在才渲染）：`skills` 逐项用 `skillLabel(skill_id)`；`skill_evidence` 显示 `skillLabel(skill_id)` + `evidence_text`；`published_at`、`first_seen_at`、`last_seen_at`；`student_friendly` 用 `STUDENT_FRIENDLY_LABELS`、`employment_type` 用 `EMPLOYMENT_TYPE_LABELS`、`role_family` 用 `ROLE_FAMILY_LABELS`；`city`、`company`、`source_key` 原样显示；`official_url` 外链带 `target="_blank" rel="noopener noreferrer"`。
-  - 时间展示（2026-11-17 补充，E5 收尾）：时间字段（`published_at`/`first_seen_at`/`last_seen_at` 与观测记录 `observed_at`）显示为 `Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium", timeStyle: "short" })` 的结果（固定时区，保证 SSR 与客户端一致），外层仍为 `<time dateTime={原始值}>`；仅当原始值匹配 `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$` 且可解析时使用 `<time>`，否则渲染原文纯文本；原始值不得丢失（`dateTime` 保留）。
+  - 时间展示（2026-11-17 补充，E5 收尾；同日按用户裁定修订）：所有面向用户的时间字段（`as_of`、`published_at`、`first_seen_at`、`last_seen_at`、观测 `observed_at`）必须由 `web/time.ts` 导出的 `CareerTime` 渲染。合法性判定：匹配 `^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z$` 且 `new Date(value)` 可解析；**允许自然顺延**（按该年该月实际天数：闰年 2 月 29 天、平年 28 天；`2024-02-29` 保持 2 月 29 日，`2025-02-29` 顺延为 3 月 1 日，`2026-02-30` 顺延为 3 月 2 日），不做回填比对拒绝。展示为 `Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", dateStyle: "medium", timeStyle: "short" })` 的结果，`dateTime` 属性输出 `new Date(value).toISOString()` 的 canonical 值（与可见日期一致）；不可解析时渲染原文纯文本。`JobDetail.tsx` 不导出时间组件；`routes/job.tsx`、`CareerDashboard.tsx`、`MetricList.tsx`、`DirectionView.tsx` 统一从 `../time` 导入。
   - 原有观测记录区块与错误/未找到状态保持不变。
 - Ownership: T10 独占 `routes/job.tsx`、`components/JobDetail.tsx`。
+
+### C-WEB-TIME@1: 时间展示组件（E5 补充）
+- Provider / Consumers: T24 提供 `modules/career-insights/web/time.ts`；T24 的 `components/JobDetail.tsx`、`routes/job.tsx`、`components/CareerDashboard.tsx`、`components/MetricList.tsx`、`components/DirectionView.tsx` 消费。Requirements: R3
+- Public surface (exact, copy-paste):
+  - `export function formatCareerDateTime(value: string): string | null` — 严格 `Z` 后缀 ISO 且 `new Date(value)` 可解析即返回格式化文本（允许自然顺延）；否则 `null`。
+  - `export function CareerTime({ value, className }: { value: string; className?: string })` — 合法时 `<time dateTime={new Date(value).toISOString()} className={className}>{formatCareerDateTime(value)}</time>`；否则 `<span className={className}>{value}</span>`。
+- 使用点：`JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at`；`routes/job.tsx` 观测 `observed_at`；`CareerDashboard` 的“数据截至 {summary.as_of}”；`MetricList` 的“统计时间 {metric.as_of}”；`DirectionView` 技能项“统计时间 {m.as_of}”。
+- Ownership: T24 独占上述 6 个文件；`web/time.ts` 不得 import 任何 `.server` 模块或 React 以外依赖。
+- Failure semantics: 不可解析的时间渲染原文，不抛错；合法但日期越界的值按 JS `Date` 自然顺延（预期行为，用户已裁定）；`dateTime` 只对可解析值输出 canonical ISO。
+- Interaction semantics / status: READY
 - Failure semantics: 缺失字段省略对应行；不展示未在 API 返回中的推测值。
 - Interaction semantics / status: READY
 
