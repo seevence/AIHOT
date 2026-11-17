@@ -4,7 +4,7 @@ import type {
   NormalizedJobV1,
   RoleFamily,
   StudentFriendly,
-} from "../contracts";
+} from "../contracts/index.ts";
 
 export interface ValidationIssueV1 {
   path: string;
