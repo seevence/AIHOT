@@ -48,8 +48,8 @@ function policy(themeIds: string[]): PolicyEvidenceRefV1 {
 }
 
 const TWO_SNAPSHOTS: ObservationSnapshotV1[] = [
-  { observed_at: "2026-11-15T00:00:00.000Z", job_ids: ["job-001"] },
-  { observed_at: "2026-11-16T00:00:00.000Z", job_ids: ["job-001", "job-002"] },
+  { observed_at: "2026-11-15T00:00:00.000Z", job_ids: ["a"] },
+  { observed_at: "2026-11-16T00:00:00.000Z", job_ids: ["a", "b"] },
 ];
 
 test("空样本时占比指标全部 insufficient_data，不返回 0", () => {

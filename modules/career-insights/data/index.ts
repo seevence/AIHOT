@@ -54,3 +54,12 @@ export type {
   DedupeResultV1,
   NearDuplicateGroupV1,
 } from "./dedupe.ts";
+export { inspectMetricSample } from "./quality.ts";
+export type {
+  DedupeSummaryV1,
+  FieldCoverageV1,
+  QualityJobInputV1,
+  SampleInspectionOptionsV1,
+  SampleInspectionV1,
+  SkillCoverageV1,
+} from "./quality.ts";

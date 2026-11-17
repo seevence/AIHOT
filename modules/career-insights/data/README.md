@@ -56,6 +56,14 @@ const { unique, duplicates } = dedupeNormalizedJobs(jobs);
 - `skill_demand_share` 每个技能一个维度，一个职位可贡献多个技能，各技能占比之和可以超过 100%。
 - `policy_job_shared_themes` 只承载 `shared_themes` 列表，`value=null`；只表示文本证据重合，不表示因果。
 
+## 样本抽查
+
+`QualityJobInputV1` 在指标输入上补充三个经验字段，`inspectMetricSample` 输出字段覆盖率、技能识别覆盖、去重摘要与 `limitations`。空样本比例返回 `null`，不产生 `NaN`；用于 D3 抽查未知字段和生成 API 样本限制文案。
+
+## 明确样例
+
+`../fixtures/sample.ts` 提供 6 条虚构职位、2 条虚构政策和两个观测快照，通过真实 `normalizeRawJobs` 与 `computeCareerMetrics` 生成，覆盖学生友好 `yes` / `no` / `unknown`、未知学历与经验、未识别技能和政策共享主题，固定标记 `synthetic_fixture`。
+
 ## 词典
 
 `SKILL_ALIASES` 将技能别名映射到稳定技能 ID，`SKILL_LABELS` 提供展示名，`THEME_LABELS` 与 `THEME_KEYWORDS` 提供主题展示名和识别关键词。版本常量均为 `0.1`；词典只提供映射与确定性规则，不自动修改职位数据。

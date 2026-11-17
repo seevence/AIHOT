@@ -271,16 +271,42 @@ export function computeObservedNewJobsMetric(
     });
   }
 
-  const previous = distinctTimes[distinctTimes.length - 2];
-  const windowStart = options.observed_window_start ?? previous;
-  const windowStartMs = windowStart === undefined ? Number.NaN : Date.parse(windowStart);
-  const windowEndMs = Date.parse(options.as_of);
+  const sortedSnapshots = [...snapshots].sort(
+    (left, right) => Date.parse(left.observed_at) - Date.parse(right.observed_at),
+  );
+  const previousSnapshot = sortedSnapshots[sortedSnapshots.length - 2];
+  const latestSnapshot = sortedSnapshots[sortedSnapshots.length - 1];
+
+  if (previousSnapshot === undefined || latestSnapshot === undefined) {
+    return makeMetricResult({
+      spec,
+      status: "insufficient_data",
+      value: null,
+      numeratorCount: 0,
+      denominatorCount: null,
+      sampleSize,
+      asOf: options.as_of,
+      dimension: {},
+      evidence: [],
+    });
+  }
+
+  // 必须比较前后两个快照的 job_id 差集；只看 first_seen_at 会把旧职位误判为新增。
+  const previousIds = new Set(previousSnapshot.job_ids);
+  const newIds = new Set(
+    [...latestSnapshot.job_ids].filter((jobId) => !previousIds.has(jobId)),
+  );
+  const windowStartMs =
+    options.observed_window_start === undefined
+      ? Number.NaN
+      : Date.parse(options.observed_window_start);
 
   const matched = jobs.filter((job) => {
-    const firstSeenMs = Date.parse(job.first_seen_at);
-    if (Number.isNaN(firstSeenMs)) return false;
-    if (!Number.isNaN(windowStartMs) && firstSeenMs < windowStartMs) return false;
-    if (!Number.isNaN(windowEndMs) && firstSeenMs > windowEndMs) return false;
+    if (!newIds.has(job.id)) return false;
+    if (!Number.isNaN(windowStartMs)) {
+      const firstSeenMs = Date.parse(job.first_seen_at);
+      if (Number.isNaN(firstSeenMs) || firstSeenMs < windowStartMs) return false;
+    }
     return true;
   });
 
