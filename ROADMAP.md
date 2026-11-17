@@ -46,7 +46,8 @@
 - C 与 D 在 `data/metrics.ts` 的导入处冲突已按 C 的完整指标实现解决，保留 `.ts` 扩展名；`data/validate.ts` 的 `.ts` 基线修复随合并同步。
 - `docs/development-contract.md` §8.5 已明确逐项错误 `{ index, code, message }` 与 `path: message` 格式，和 D 的 ingest 实现对齐。
 - 验证：`npm run typecheck`、`npx tsc -p modules/tsconfig.json`、Web 构建通过；standalone `311/311` 通过；D SQL+ingest `12/12` 通过（临时 PostgreSQL 5433）。
-- 当前仍在独立集成分支，等待 Docker 重建运行验收和独立 review；尚未合回 `feat/integration`，未推送，真实采集闭环未完成。
+- Docker 重建后 `node scripts/check-career-integration.ts --base http://localhost:3000` 五项通过，通用 `node scripts/smoke.ts --base http://localhost:3000` 通过，`db/api/worker/web` 全部运行。
+- 当前仍在独立集成分支，等待独立 review；尚未合回 `feat/integration`，未推送，真实采集闭环未完成。
 
 **尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
