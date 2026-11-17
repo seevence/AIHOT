@@ -25,7 +25,7 @@ export function Pagination({ page, pageSize, total }: { page: number; pageSize: 
 
   return (
     <nav aria-label="职位分页" className="mt-4 flex flex-wrap items-center justify-between gap-3">
-      <span className="num whitespace-nowrap text-[12px] text-ink-4">第 {current} / {totalPages} 页 · 共 {total} 条</span>
+      <span aria-current="page" className="num whitespace-nowrap text-[12px] text-ink-4">第 {current} / {totalPages} 页 · 共 {total} 条</span>
       <div className="flex flex-wrap items-center gap-1">
         {current > 1 ? (
           <Link to={hrefFor(current - 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
@@ -40,7 +40,7 @@ export function Pagination({ page, pageSize, total }: { page: number; pageSize: 
             item === "gap" ? (
               <span key={`gap-${index}`} className="px-1 text-[12px] text-ink-4">…</span>
             ) : item === current ? (
-              <span key={item} aria-current="page" className={`${ITEM_CLASS} bg-accent font-medium text-accent-contrast`}>
+              <span key={item} className={`${ITEM_CLASS} bg-accent font-medium text-accent-contrast`}>
                 {item}
               </span>
             ) : (

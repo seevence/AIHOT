@@ -24,11 +24,18 @@ function formatShare(metric: MetricResultV1): string {
 
 function SkillMetricItem({ metric, directionHref }: { metric: MetricResultV1; directionHref: string }) {
   const skillId = metric.dimension.skill_id;
+  const unknownRatioPercent = metric.unknown_ratio !== undefined && metric.unknown_ratio !== null
+    ? `${(metric.unknown_ratio * 100).toFixed(1)}%`
+    : undefined;
+  const unknownText = [
+    metric.unknown_count !== undefined ? `未识别 ${metric.unknown_count} 个` : undefined,
+    unknownRatioPercent ? `未识别占比 ${unknownRatioPercent}` : undefined,
+  ].filter((part): part is string => part !== undefined).join(" · ");
 
   return (
     <li data-skill-id={skillId ?? "global"} className="rounded-card border border-line bg-surface p-4">
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-        <h4 className="break-words text-[14px] font-medium text-ink">{skillId ? skillLabel(skillId) : UNSPECIFIED_SKILL_LABEL}</h4>
+      <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h4 className="min-w-0 break-words text-[14px] font-medium text-ink">{skillId ? skillLabel(skillId) : UNSPECIFIED_SKILL_LABEL}</h4>
         <span className="num text-[14px] text-ink-2">{formatShare(metric)}</span>
       </div>
 
@@ -43,9 +50,11 @@ function SkillMetricItem({ metric, directionHref }: { metric: MetricResultV1; di
         </div>
       </dl>
 
+      {unknownText && <p className="mt-1 text-[12px] text-ink-4">{unknownText}</p>}
+
       {metric.disclaimer && <p className="mt-2 break-words text-[12px] leading-relaxed text-ink-3">{metric.disclaimer}</p>}
 
-      {metric.evidence.length > 0 && (
+      {metric.status === "ok" && metric.evidence.length > 0 && (
         <details className="mt-3 border-t border-line pt-2">
           <summary className="cursor-pointer text-[13px] font-medium text-ink-2">证据（{metric.evidence.length}）</summary>
           <ul className="mt-2 space-y-1 text-[12px]">

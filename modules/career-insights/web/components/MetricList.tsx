@@ -22,9 +22,7 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
   ].filter((part): part is string => part !== undefined);
   const unknownText = unknownParts.length > 0 ? unknownParts.join(" · ") : undefined;
   const roleFamily = metric.dimension.role_family;
-  const roleFamilyLabel = roleFamily
-    ? (ROLE_FAMILY_LABELS as Readonly<Record<string, string>>)[roleFamily] ?? roleFamily
-    : undefined;
+  const roleFamilyLabel = roleFamily ? ROLE_FAMILY_LABELS[roleFamily] ?? roleFamily : undefined;
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
@@ -75,9 +73,9 @@ export function MetricList({ metrics }: { metrics: MetricResultV1[] }) {
 
   return (
     <div className="grid gap-4 sm:grid-cols-2">
-      {metrics.map((metric) => (
+      {metrics.map((metric, index) => (
         <MetricCard
-          key={`${metric.metric_id}:${metric.dimension.skill_id ?? metric.dimension.role_family ?? metric.dimension.theme_id ?? "global"}`}
+          key={`${metric.metric_id}:${metric.dimension.skill_id ?? metric.dimension.role_family ?? metric.dimension.theme_id ?? index}`}
           metric={metric}
         />
       ))}

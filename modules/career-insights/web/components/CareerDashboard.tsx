@@ -80,7 +80,7 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
 
       <section aria-labelledby="career-sample" className="rounded-card border border-line bg-surface p-5">
         <h2 id="career-sample" className="text-[16px] font-semibold text-ink">样本概况</h2>
-        <dl className="mt-4 grid grid-cols-3 gap-3 text-center">
+        <dl className="mt-4 grid grid-cols-1 gap-3 text-center sm:grid-cols-2 lg:grid-cols-3">
           <div><dt className="text-[12px] text-ink-4">职位样本</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.sample_size}</dd></div>
           <div><dt className="text-[12px] text-ink-4">公司</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.company_count}</dd></div>
           <div><dt className="text-[12px] text-ink-4">来源</dt><dd className="num mt-1 text-[20px] font-semibold text-ink">{summary.source_count}</dd></div>
@@ -118,8 +118,8 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
 
             {noJobs ? (
               outOfRange ? (
-                <div role="status" className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
-                  <p className="text-[14px] text-ink-2">当前页没有职位，可能已超出结果页数。</p>
+                <div className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
+                  <p role="status" className="text-[14px] text-ink-2">当前页没有职位，可能已超出结果页数。</p>
                   <Link to={buildJobsHref({ ...filters, page: 1 })} className="mt-3 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2">
                     回到第 1 页
                   </Link>
