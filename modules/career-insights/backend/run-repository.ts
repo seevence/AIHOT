@@ -56,12 +56,22 @@ function safeError(error: string | null | undefined): string | null {
 }
 
 export async function startRun(db: Db, key: IngestRunKey): Promise<StartedRun> {
+  const inserted = await db<{ id: string }[]>`
+    INSERT INTO career_ingest_runs (
+      kind, source_key, fetched_at, collector_version, data_origin, status, error
+    ) VALUES (
+      ${key.kind}, ${key.source_key}, ${key.fetched_at}::timestamptz, ${key.collector_version},
+      ${key.data_origin}, 'failed', 'run started but did not finish'
+    )
+    ON CONFLICT (source_key, kind, fetched_at) DO NOTHING
+    RETURNING id`;
+  if (inserted[0] !== undefined) return { id: inserted[0].id, existing: false };
+
   const rows = await db<{ id: string }[]>`
     SELECT id FROM career_ingest_runs
     WHERE source_key = ${key.source_key} AND kind = ${key.kind} AND fetched_at = ${key.fetched_at}::timestamptz
     LIMIT 1`;
-  const existing = rows[0];
-  return { id: existing?.id ?? null, existing: existing !== undefined };
+  return { id: rows[0]?.id ?? null, existing: true };
 }
 
 export async function finishRun(

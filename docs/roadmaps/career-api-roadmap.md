@@ -92,3 +92,42 @@
   ```
   期望：第 1 条仅显示本阶段意图修改的文件；第 3、4 条无输出。基线实测两条均为空（当前 HEAD 等于基线）。
 - S0 遗留：ENV-01（Node 版本）；BLK-01～10 仍待拍板，S1/S2 迁移可本地编写但不可推送。
+### S1（完成，待独立 review）
+
+- 基线：`feat/career-api-d2` 的 `61f2f56`（S0 基线 `21d07eb` 之后 5 个 D2 提交，`23699e7`/`99294a6`/`61f2f56` 等）。
+- 迁移已应用：`0156_career_ingest_runs`（批次表）+ `0157_career_jobs_data_origin`、`0158_career_job_observations_batch` 两列，作用于 `postgres://postgres@127.0.0.1:5432/aihot`。
+- 运行方式（旧 3000/3001 服务全程未使用）：
+  - API：`DATABASE_URL="postgres://postgres@127.0.0.1:5432/aihot" API_PORT=3002 node apps/api/src/main.ts` → 日志 `Server listening at http://127.0.0.1:3002`，summary 探测返回 `200`。
+  - web：`apps/web` 下 `API_BASE_URL="http://127.0.0.1:3002" npx react-router dev --port 3010 --host 127.0.0.1` → `http://127.0.0.1:3010/api/site/career-insights/summary` 返回 `200`。
+  - 旧 3010 监听进程按端口定位为 PID 24424（node），`Stop-Process -Id 24424 -Force` 后端口释放；未触碰 3000/3001。
+- 批次实跑（`career_ingest_runs` 查询，时间为 UTC）：
+
+  | source_key | data_origin | status | job_count | accepted | duplicates | rejected | fetched_at |
+  |---|---|---|---|---|---|---|---|
+  | `netease-official-careers` | `verified_import` | `ok` | 10 | 10 | 0 | 0 | `2026-11-17T13:43:00.338Z` |
+  | `tencent-official-careers` | `live` | `ok` | 30 | 0 | 30 | 0 | `2026-11-17T15:29:46.131Z` |
+  | `xiaomi-official-careers` | `live` | `ok` | 30 | 0 | 30 | 0 | `2026-11-17T15:29:55.792Z` |
+
+  - 3 条批次全部 `status=ok`。网易 `error` 字段实测为 `网易公开接口返回 404；按 B-02 降级使用上次成功采集的真实快照并标注 verified_import`。
+  - 腾讯/小米 `duplicates=30`：本次复跑同一 `fetched_at` 批次，全部命中 `(source_key, kind, fetched_at)` 幂等键，未产生重复职位。
+- 读回：`career_jobs` 70 条（netease 10 `verified_import` / tencent 30 `live` / xiaomi 30 `live`）；`career_job_observations` 220 条（netease 10、tencent 120、xiaomi 90，每源 1 个 `batch_id`）。
+- summary 实测（`GET http://127.0.0.1:3010/api/site/career-insights/summary`，HTTP 200）：`data_origin=verified_import`、`sample_size=70`、`company_count=3`、`source_count=3`；`warnings` 4 条，含混合口径条目 `{"code":"unknown_fields","message":"样本混合自动采集与人工核验导入（verified_import），整体按较保守口径标注。"}`，另有 `unknown_fields` 2 条（未识别职族 / 未标记应届友好度）与 `insufficient_data` 1 条（政策证据未接入）。
+- list 实测：`GET /api/site/career-insights/jobs?company=网易&page=1&page_size=2` → HTTP 200，`total=10`、`data_origin=verified_import`、`items=2`；全量 `GET /api/site/career-insights/jobs?page=1&page_size=5` → `total=70`、`data_origin=verified_import`、`items=5`。
+- detail 实测（首个 id `1290279a-bc6a-4a34-9580-e0df7d0fe936`）：HTTP 200，顶层键 `contract_version,data_origin,job,observations,notice`；`data_origin=verified_import`；`observations` 1 条；`job.official_url=https://hr.163.com/job-detail.html?id=79801`；响应文本不含 `"raw_text"`、`"raw_payload"`。
+- UTC Z 检查：summary `as_of=2026-11-17T15:29:55.792Z`、`first_observed_at=2026-11-17T13:25:21.303Z`、`last_observed_at=2026-11-17T15:29:55.792Z`；detail `job.first_seen_at`、`job.last_seen_at`、`observations[0].observed_at=2026-11-17T13:43:00.338Z`，全部以 `Z` 结尾；与库内 `fetched_at AT TIME ZONE 'UTC'` 渲染值一致，无时区偏移。
+- 门禁实跑：
+  - `node scripts/check-career-integration.ts --base http://127.0.0.1:3010 --require-data` → 6 项均 `✓`（`/api/health`、`/career-insights`、summary、jobs、`/jobs/02d201e0-159c-4948-8da8-7bb056976000`、`/jobs/not-a-uuid`），末行 `all checks passed`，exit 0。
+  - 同 base 不带 `--require-data` → 5 项均 `✓`，`all checks passed`，exit 0。
+  - 脚本用法与本阶段调用一致（`--base` / `--require-data`），无需改参数。
+- 收尾：3002（PID 17052）与 3010（PID 14324）已停止；仅保留原有 3000/3001 旧服务。
+- 已知偏差：
+  - `0156` 的 `status` CHECK 约束不含 `running`，`startRun` 无法先写入进行态；当前以 `'failed'` + `error='run started but did not finish'` 占位插入，成功路径由 `finishRun` 覆盖为 `ok`/`partial`。若进程在 `finishRun` 前中断，该批次会如实保留为 `failed`。补 `running` 需新增迁移并重跑门禁。
+  - `scripts/collect-career-run.local.ts` 为本地验收脚本（依赖 B 未提交的采集实现），**不提交**；B 的 `collector/{index,sources,tencent,xiaomi,netease}.ts`、`scripts/collect-career.ts`、`.env` 均未进入本提交。
+  - 网易覆盖仅首批 10 条（分页失效），因此整体口径按 `verified_import` 保守标注。
+- BLK-06（`tests/**`、`scripts/**` 写集未拍板）：仍开放。本阶段只执行 `scripts/check-career-integration.ts` 与本地采集脚本，未提交任何 `scripts/**`、`collector/**` 改动；采集在当前 worktree 无法独立复现（依赖 B 提交 + A 合入）。
+- BLK-07（3 家 70 条样本底线、网易分页失效是否接受“首批 + 去重”）：仍开放，待队长/B 拍板；本阶段验收结论仅在“3 家 / 70 条、网易仅首批”范围内成立。
+- 遗留：
+  - `0156` 补 `running` 状态（新增迁移，需独立 review）。
+  - ENV-01（本机 Node 版本低于 `>=24.22.1`）继承自 S0，未处理。
+  - 3000/3001 旧服务仍在运行，后续门禁须继续显式使用 3002/3010，避免命中旧代码。
+  - 写集隔离实测：提交前 `git status --short` 为 `M docs/roadmaps/career-api-roadmap.md`、`M modules/career-insights/backend/run-repository.ts`、`?? modules/career-insights/backend/run-ingest.ts`，另有 B 的本地未提交改动（`M collector/{index,sources}.ts`、`?? collector/{netease,tencent,xiaomi}.ts`、`?? scripts/collect-career.ts`、`?? scripts/collect-career-run.local.ts`）；本次只 `git add` 上述 3 个 D 写集文件，B 文件、脚本与 `.env` 均未暂存。
