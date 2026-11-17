@@ -1,7 +1,7 @@
 import { Link, useSearchParams } from "react-router";
 import { buildJobsHref, parseDashboardFilters } from "../filters";
 
-const ITEM_CLASS = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px]";
+const ITEM_CLASS = "inline-flex h-8 min-w-8 items-center justify-center rounded-control px-2 text-[13px]";
 
 function pageNumbers(current: number, totalPages: number): Array<number | "gap"> {
   const numbers = new Set<number>([1, totalPages, current - 1, current, current + 1]);

@@ -12,7 +12,7 @@ const ROLE_FAMILY_OPTIONS = ROLE_FAMILY_VALUES.map((value) => ({ value, label: R
 const EMPLOYMENT_TYPE_OPTIONS = EMPLOYMENT_TYPE_VALUES.map((value) => ({ value, label: EMPLOYMENT_TYPE_LABELS[value] }));
 const STUDENT_FRIENDLY_OPTIONS = STUDENT_FRIENDLY_VALUES.map((value) => ({ value, label: STUDENT_FRIENDLY_LABELS[value] }));
 
-const FIELD_CLASS = "mt-1 h-9 w-full min-w-0 rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-2 focus:border-line-strong focus:outline-none";
+const FIELD_CLASS = "mt-1 h-9 w-full min-w-0 rounded-control border border-line bg-surface px-2 text-[13px] text-ink-2 focus:border-line-strong focus:outline-none";
 const LABEL_CLASS = "block text-[12px] text-ink-4";
 
 export function CareerFilters({ filters, view }: { filters: JobFiltersV1; view?: DashboardView }) {

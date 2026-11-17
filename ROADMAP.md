@@ -72,6 +72,7 @@
 - A-01 已修复：`--require-data` 现在拒绝空样本、空职位、`synthetic_fixture` 数据和无观测证据详情；默认预数据模式不变。行为测试 `10/10` 通过，空库实测默认 exit 0、require-data 3 项失败 exit 1（提交 `c666b46`）。
 - A-02 已修复：本地 `career_job_observations.id` 从 `nextval` 漂移改为 `GENERATED ALWAYS AS IDENTITY`，`is_identity=YES`；两表均为 0 行，无数据损失。
 - 静态资源已复核：`/`、`/career-insights`、`manifest.webmanifest`、`icon.png`、`favicon.ico` 正式 Docker 全部 `200`；E 的 404 仅是 fixture 控制台假象。
+- 首次云端 CI 发现两条全局规范问题并已修复：`CareerTime` 的北京时间转换登记为唯一例外，筛选/分页按钮改用圆角标尺 `rounded-control`；不改业务行为。
 - A-03 仍被真实数据阻塞，待 2026-11-18 数据到位后执行。
 
 **跨角色未解决任务（云端标记，2026-11-17）：**
