@@ -171,7 +171,7 @@
 - Public surface (exact, copy-paste):
   - `export function formatCareerDateTime(value: string): string | null` — 严格 `Z` 后缀 ISO 且 `new Date(value)` 可解析即返回格式化文本（允许自然顺延）；否则 `null`。
   - `export function CareerTime({ value, className }: { value: string; className?: string })` — 合法时 `<time dateTime={new Date(value).toISOString()} className={className}>{formatCareerDateTime(value)}</time>`；否则 `<span className={className}>{value}</span>`。
-- 使用点：`JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at`；`routes/job.tsx` 观测 `observed_at`；`CareerDashboard` 的“数据截至 {summary.as_of}”；`MetricList` 的“统计时间 {metric.as_of}”；`DirectionView` 技能项“统计时间 {m.as_of}”。
+- 使用点：`JobDetail` 的 `published_at`/`first_seen_at`/`last_seen_at`；`routes/job.tsx` 观测 `observed_at`；`CareerDashboard` 的“数据截至 {summary.as_of}”；`MetricList` 的“统计时间 {metric.as_of}”；`DirectionView` 技能项“统计时间 {m.as_of}”。政策卡片 `SharedThemeList` 的 `policy.published_at` 暂保留原文（后端政策日期格式待 D 确认，见协同表第 9 项）。
 - Ownership: T24 独占上述 6 个文件；`web/time.ts` 不得 import 任何 `.server` 模块或 React 以外依赖。
 - Failure semantics: 不可解析的时间渲染原文，不抛错；合法但日期越界的值按 JS `Date` 自然顺延（预期行为，用户已裁定）；`dateTime` 只对可解析值输出 canonical ISO。
 - Interaction semantics / status: READY

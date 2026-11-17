@@ -96,7 +96,7 @@
 - **Provides**: C-WEB-TIME@1 (design.md §2.2)；C-WEB-JOB-DETAIL@1 时间展示条款
 - **Consumes**: C-WEB-METRIC@1, C-WEB-SKILL-TRACE@1 (design.md §2.2)
 - **Blocked by**: none
-- **Deliverable**: 新增 `time.ts` 导出 `formatCareerDateTime`（严格 `Z` ISO + 回填比对）与 `CareerTime`；`JobDetail` 不再导出时间组件并改从 `../time` 导入；`routes/job.tsx`、`CareerDashboard`（数据截至）、`MetricList`（统计时间）、`DirectionView`（统计时间）统一使用 `CareerTime`；非法日期（如 `2026-02-30`）渲染原文且不输出 `dateTime`。
+- **Deliverable**: 新增 `time.ts` 导出 `formatCareerDateTime`（严格 `Z` 后缀 ISO 且可解析；允许 JS `Date` 自然顺延）与 `CareerTime`（`dateTime` 输出 canonical `toISOString()`）；`JobDetail` 不再导出时间组件并改从 `../time` 导入；`routes/job.tsx`、`CareerDashboard`（数据截至）、`MetricList`（统计时间）、`DirectionView`（统计时间）统一使用 `CareerTime`；不可解析（如 `2026-13-01`、`+08:00` 偏移）渲染原文且不输出 `dateTime`。
 
 ## 后续阶段
 

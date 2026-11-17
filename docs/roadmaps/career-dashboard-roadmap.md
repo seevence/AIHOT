@@ -13,7 +13,7 @@
 | E2 | D3：主路径、筛选、建议和证据展开 | 目标方向视图（组合后端已算指标与证据）、技能筛选、完整主路径 | 已完成 | PASS（2026-11-17，两轮审查） |
 | E3 | D4：集中调优 | 空态/错误态、长文本、大屏与手机响应式、筛选体验、方向视图可回溯性、E1/E2 遗留 minor | 已完成 | PASS（2026-11-17，两轮审查） |
 | E4 | D5：第二次采集与联调 | 浏览器验收、真实备份页面核对、演示兜底（截图/录屏说明） | 已完成 | PASS（2026-11-17，收尾审查） |
-| E5 | 收尾补丁（用户追加） | 时间可读化、严格 ISO、`FilterEmpty` 结构、文档与行尾 | 开发完成 | 审查中 |
+| E5 | 收尾补丁（用户追加） | 时间可读化（含闰年/平年顺延口径）、全站 `as_of`、`FilterEmpty` 结构、文档与行尾 | 已完成 | PASS（2026-11-17，两轮） |
 
 ## 不可妥协约束（摘自共享路线图与开发契约）
 
@@ -81,16 +81,31 @@
 - 遗留（跨角色/可选）：① 手机 fixed 底栏与页尾内容的遮挡关系由 `apps/web` 外壳负责（角色 A）；② 观测时间显示 ISO 原文，可读性可再优化（E5 已处理）；③ 真实数据链路需角色 C/D 完成后在集成分支复验
 - 收尾审查：PASS（无 blocker/major，10 minor）。minor 记录：`FilterEmpty.tsx`/路线图末尾换行、路线图未写明 3010 端口覆盖方式、手机与桌面截图 URL 不同（筛选与方向视图）、缺手机详情与筛选空态截图、`isValidDateTime` 宽松解析边界、`hidden` 的 `?? ""` 保留、`FilterEmpty` 的 role 覆盖范围、桌面证据展开为折叠态、"真实备份页面核对"责任方待跨角色确认
 
-### E5（收尾补丁，用户追加；开发完成，审查中）
+### E5（收尾补丁，用户追加；已完成，复审 PASS）
 
-- 范围（E 职责内可修项）：观测/发布时间可读化、严格 ISO 校验、`FilterEmpty` 可访问结构、文档与行尾
-- 契约补充：C-WEB-JOB-DETAIL@1「时间展示」（`Asia/Shanghai` 固定时区，`zh-CN` medium/short，严格 `Z` 后缀 ISO 才用 `<time dateTime>`）；C-WEB-DASH-BIND@1「FilterEmpty 结构」（单个 `role="status"` 包裹标题与说明，链接在外）
+- 范围（E 职责内可修项）：观测/发布时间可读化、严格 ISO 校验、`FilterEmpty` 可访问结构、`as_of` 全站统一、文档与行尾
+- 契约补充：
+  - C-WEB-JOB-DETAIL@1「时间展示」+ C-WEB-TIME@1：时间统一由 `web/time.ts` 的 `CareerTime` 渲染，固定 `Asia/Shanghai`、`zh-CN` medium/short
+  - 合法性：严格 `Z` 后缀 ISO 且可解析；**允许自然顺延**（用户裁定）——闰年 2 月 29 天、平年 28 天
+  - `dateTime` 输出 canonical `toISOString()`，与可见文本一致，不写无效日期字符串
+  - C-WEB-DASH-BIND@1「FilterEmpty 结构」：单个 `role="status"` 包裹标题与说明，清除链接在外
 - 交付：
-  - `JobDetail.tsx` 导出 `CareerTime`，`published_at`/`first_seen_at`/`last_seen_at` 显示如 `2026年11月17日 16:30`
-  - `routes/job.tsx` 观测记录时间复用 `CareerTime`（字段 `observed_at`）
-  - `FilterEmpty.tsx` 单个 `role="status"` 容器，清除链接在容器外
+  - `time.ts`：`formatCareerDateTime` + `CareerTime`
+  - 使用点：`JobDetail`（`published_at`/`first_seen_at`/`last_seen_at`）、`routes/job.tsx`（`observed_at`）、`CareerDashboard`（数据截至 `as_of`）、`MetricList`（统计时间）、`DirectionView`（统计时间）
+  - `FilterEmpty.tsx` 单个 `role="status"` 容器
+- 实测（`npx tsx` + `renderToStaticMarkup`）：
+
+| 输入 | 显示 | `dateTime` |
+|---|---|---|
+| `2024-02-29T00:00:00Z` | 2024年2月29日 08:00（闰年，不顺延） | `2024-02-29T00:00:00.000Z` |
+| `2025-02-29T00:00:00Z` | 2025年3月1日 08:00（平年顺延 1 天） | `2025-03-01T00:00:00.000Z` |
+| `2026-02-28T00:00:00Z` | 2026年2月28日 08:00 | `2026-02-28T00:00:00.000Z` |
+| `2026-02-30T00:00:00Z` | 2026年3月2日 08:00（平年顺延 2 天） | `2026-03-02T00:00:00.000Z` |
+| `2026-13-01T00:00:00Z` | 原文（不可解析） | 无（`<span>`） |
+
 - 验证：`npm run typecheck -w @aihot/web`、`npm run build -w @aihot/web` 通过
-- 待审：T23
+- Review：首轮 FAIL（M1 按“必须拒绝顺延”判级）→ 用户裁定“顺延是对的，闰年与平年顺延不同” → 口径改为允许自然顺延 + canonical `dateTime` → 复审 PASS（0 blocker / 0 major，6 minor）
+- 剩余 minor（不阻塞）：`time.ts` 重复解析两次（风格）、仅 Node SSR 实测未浏览器复验 hydration（Intl 配置一致，风险低）、文档末尾换行、政策卡片日期未纳入可读化（见协同表第 9 项）
 
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）
 
@@ -102,4 +117,8 @@
 | 4 | 真实备份页面核对（D5 范围项） | A + C / D | 未执行 | 需后端链路可用后在集成分支复验前端展示口径 |
 | 5 | 站点公共静态资源 404（`manifest.webmanifest`/`icon.png`/`favicon.ico`） | A | 未处理 | 浏览器控制台 404，不影响业务功能 |
 | 6 | `feat/career-dashboard` 合并与 push | A（集成） | 待 E5 审查 PASS | 合入 `feat/integration` 并做集成门禁 |
-- 说明：以上均为记录/风格级问题，不阻塞阶段完成；真实数据与外壳层问题留待集成分支处理
+| 7 | 后端时间序列化统一为 UTC `Z`（`as_of`/`observed_at`/`published_at`） | C / D | 约定已在前端契约（非 Z 偏移降级为原文） | 后端若返回 `+08:00` 等偏移，前端按原文显示、不做可读化 |
+| 8 | 真实数据下 `as_of` 可读化复验（含跨月/跨年与闰年边界） | C / D + A | 待后端链路 | 前端已覆盖，需真实数据样例再确认一次 |
+| 9 | 政策卡片 `policy.published_at` 日期格式确认（是否也按 `Asia/Shanghai` 可读化） | C / D（政策数据与格式） | 未确认 | 当前 `SharedThemeList` 按原文展示；格式确认后由 E 接入 `CareerTime` |
+
+说明：以上均为记录/风格级问题，不阻塞阶段完成；真实数据与外壳层问题留待集成分支处理
