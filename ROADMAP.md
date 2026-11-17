@@ -1,6 +1,6 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：A 角色 D1/E1/C 集成已通过二次独立 review；MVP 真实采集与完整业务闭环尚未完成  
+> 状态：A 角色 D1/E1/C 与 E1–E4、外壳/500 交接项均已通过独立 review；MVP 真实采集与完整业务闭环尚未完成  
 > 启动日期：2026-11-16  
 > 最近更新：2026-11-17  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
@@ -57,7 +57,8 @@
 - 远程 `92c0677` 是 C 直接合入旧 `15b7661` 的分叉提交；已核对它相对原集成树无代码差异，用 `332a5ea` 本地合回消除分叉，不回滚、不强推。C 的代码本身已包含在本地集成中。
 - 修复 A 交接的 500 映射：`loadOr404` 新增可选 `preserveServerErrorStatus`，career API 客户端启用；探针验证默认仍 `500→503`，career 保留 `500`，404 不变。
 - 手机底栏遮挡核查：390×844 真机视口滚到底，页尾内容底部 `771.5px`、底栏顶部 `794px`，间隔 `22.5px`，无遮挡；E 截图中的“遮挡”是 full-page 截图对 `fixed` 元素的视觉假象，外壳 padding 无需修改。
-- 验证：模块与前端 typecheck、Web 构建、standalone `311/311` 通过；Docker 重建后 career 五项与通用 smoke 全部通过。待独立 review。E worktree 中未提交的 `labels.ts` 不在本次合入范围。
+- 验证：模块与前端 typecheck、Web 构建、standalone `311/311` 通过；Docker 重建后 career 五项与通用 smoke 全部通过。
+- 独立 review **PASS**（T9）：`preserveServerErrorStatus` 为唯一 career 显式启用点；探针确认默认 `500→503`、career `500`、404/400 不变；E1–E4 合并树、远程 C 分叉合回和 390px 底栏测量均核对通过。现合回本地 `feat/integration`，不推送。E worktree 中未提交的 `labels.ts` 不在本次合入范围。
 
 **尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
