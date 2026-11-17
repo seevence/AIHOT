@@ -1,7 +1,7 @@
 import { sql as postgresSql, type Sql, type Tx, type Db } from "@aihot/backend/db";
 import type { JSONValue, Parameter } from "postgres";
 import type { CareerObservationBatchV1, IngestResultV1 } from "../contracts/api.ts";
-import type { NormalizedJobV1 } from "../contracts/index.ts";
+import type { DataOrigin, NormalizedJobV1 } from "../contracts/index.ts";
 import { validateNormalizedJobV1, type ValidationIssueV1 } from "../data/validate.ts";
 import { InvalidParameterError } from "./errors.ts";
 
@@ -10,6 +10,13 @@ const MAX_REPORTED_ISSUES = 3;
 const EXCERPT_LIMIT = 500;
 
 type JobOutcome = "accepted" | "updated" | "duplicates";
+
+export interface IngestContext {
+  data_origin?: DataOrigin;
+  batch_id?: string | null;
+}
+
+const DEFAULT_ORIGIN: DataOrigin = "live";
 
 function isTransaction(db: Db): db is Tx {
   return typeof (db as { savepoint?: unknown }).savepoint === "function";
@@ -34,7 +41,8 @@ function describeIssues(issues: readonly ValidationIssueV1[]): string {
     .join("; ");
 }
 
-async function writeJob(tx: Db, job: NormalizedJobV1): Promise<JobOutcome> {
+async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): Promise<JobOutcome> {
+  const dataOrigin = context.data_origin ?? DEFAULT_ORIGIN;
   const rows = await tx<{ id: string; content_hash: string }[]>`
     SELECT id, content_hash FROM career_jobs
     WHERE source_key = ${job.source_key} AND job_key = ${job.job_key}
@@ -50,7 +58,7 @@ async function writeJob(tx: Db, job: NormalizedJobV1): Promise<JobOutcome> {
         source_key, job_key, company_name, title, official_url, role_family, degree,
         employment_type, student_friendly, collector_version, content_hash, raw_text,
         degree_raw, experience_raw, published_at, experience_min_years, experience_max_years,
-        locations, skills, skill_evidence, raw_payload,
+        locations, skills, skill_evidence, raw_payload, data_origin,
         fetched_at, first_seen_at, last_seen_at, created_at, updated_at
       ) VALUES (
         ${job.source_key}, ${job.job_key}, ${job.company_name}, ${job.title}, ${job.official_url},
@@ -60,6 +68,7 @@ async function writeJob(tx: Db, job: NormalizedJobV1): Promise<JobOutcome> {
         ${job.experience_min_years}, ${job.experience_max_years},
         ${jsonColumn(job.locations)}::jsonb, ${jsonColumn(job.skills)}::jsonb,
         ${jsonColumn(job.skill_evidence)}::jsonb, ${jsonColumn(job.raw_payload)}::jsonb,
+        ${dataOrigin},
         ${job.fetched_at}::timestamptz, ${job.fetched_at}::timestamptz, ${job.fetched_at}::timestamptz,
         ${job.fetched_at}::timestamptz, ${job.fetched_at}::timestamptz
       )
@@ -95,6 +104,7 @@ async function writeJob(tx: Db, job: NormalizedJobV1): Promise<JobOutcome> {
         skills = ${jsonColumn(job.skills)}::jsonb,
         skill_evidence = ${jsonColumn(job.skill_evidence)}::jsonb,
         raw_payload = ${jsonColumn(job.raw_payload)}::jsonb,
+        data_origin = ${dataOrigin},
         fetched_at = ${job.fetched_at}::timestamptz,
         last_seen_at = GREATEST(last_seen_at, ${job.fetched_at}::timestamptz),
         updated_at = now()
@@ -104,17 +114,21 @@ async function writeJob(tx: Db, job: NormalizedJobV1): Promise<JobOutcome> {
   }
 
   await tx`
-    INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt)
+    INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
     VALUES (
       ${jobId}, ${job.fetched_at}::timestamptz, ${job.content_hash}, ${job.collector_version},
-      ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}
+      ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
     )
     ON CONFLICT (job_id, observed_at, content_hash) DO NOTHING`;
 
   return outcome;
 }
 
-export async function ingestBatch(db: Db, batch: CareerObservationBatchV1): Promise<IngestResultV1> {
+export async function ingestBatch(
+  db: Db,
+  batch: CareerObservationBatchV1,
+  context: IngestContext = {},
+): Promise<IngestResultV1> {
   if (batch.jobs.length > MAX_BATCH_SIZE) {
     throw new InvalidParameterError(`A batch may contain at most ${MAX_BATCH_SIZE} jobs.`, { parameter: "jobs" });
   }
@@ -140,7 +154,7 @@ export async function ingestBatch(db: Db, batch: CareerObservationBatchV1): Prom
   return inTransaction(db, async (tx) => {
     const counts = { accepted: 0, updated: 0, duplicates: 0 };
     for (const job of valid) {
-      const outcome = await writeJob(tx, job);
+      const outcome = await writeJob(tx, job, context);
       counts[outcome] += 1;
     }
     return { ...counts, rejected, errors };
