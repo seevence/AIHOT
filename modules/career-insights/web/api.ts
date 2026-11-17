@@ -19,5 +19,5 @@ export function careerApiPath(path: string): string {
 }
 
 export function loadCareerApi<T>(path: string, signal?: AbortSignal): Promise<T> {
-  return loadOr404<T>(path, { signal });
+  return loadOr404<T>(path, { signal, preserveServerErrorStatus: true });
 }

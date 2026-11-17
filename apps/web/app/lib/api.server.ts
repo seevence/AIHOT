@@ -45,9 +45,10 @@ export async function apiGet<T>(path: string, init?: { signal?: AbortSignal; hea
 
 /**
  * Maps API failures to route responses: real 404s, the permanent redirect of a merged page (`merged`
- * gives the page of the id it was merged into), the search-busy page, otherwise 503.
+ * gives the page of the id it was merged into), the search-busy page, otherwise 503. Callers that need
+ * the upstream 5xx status preserved set `preserveServerErrorStatus`.
  */
-export async function loadOr404<T>(path: string, opts: { busyRedirect?: string; merged?: (id: string) => string; responseHeaders?: Headers; signal?: AbortSignal } = {}): Promise<T> {
+export async function loadOr404<T>(path: string, opts: { busyRedirect?: string; merged?: (id: string) => string; responseHeaders?: Headers; signal?: AbortSignal; preserveServerErrorStatus?: boolean } = {}): Promise<T> {
   try {
     return await apiGet<T>(path, { responseHeaders: opts.responseHeaders, signal: opts.signal });
   } catch (error) {
@@ -57,6 +58,7 @@ export async function loadOr404<T>(path: string, opts: { busyRedirect?: string; 
       if (error.mergedInto && opts.merged) throw redirect(opts.merged(error.mergedInto), 308);
       if (error.status === 503 && opts.busyRedirect) throw redirect(opts.busyRedirect);
       if (error.status === 400) throw data({ message: "bad_request" }, { status: 400 });
+      if (opts.preserveServerErrorStatus && error.status >= 500) throw data({ message: "unavailable" }, { status: error.status });
     }
     throw data({ message: "unavailable" }, { status: 503 });
   }
