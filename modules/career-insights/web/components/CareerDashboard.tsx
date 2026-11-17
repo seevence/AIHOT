@@ -1,6 +1,7 @@
 import { Link } from "react-router";
-import type { EmploymentType, JobFiltersV1, JobListItemV1, JobListResponseV1, RoleFamily, StudentFriendly, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import { buildJobsHref } from "../api";
+import type { JobFiltersV1, JobListItemV1, JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import { buildJobsHref } from "../filters";
+import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
 import { CareerEmpty, FixtureNotice, SingleSnapshotNotice } from "./CareerStates";
 import { CareerFilters } from "./CareerFilters";
 import { FilterEmpty } from "./FilterEmpty";
@@ -19,27 +20,6 @@ function hasActiveFilters(filters: JobFiltersV1): boolean {
   );
 }
 
-const ROLE_FAMILY_LABELS: Record<RoleFamily, string> = {
-  ai_algorithm: "AI 算法",
-  ai_application_development: "AI 应用开发",
-  data: "数据",
-  ai_product_operations: "AI 产品与运营",
-  unknown: "未识别",
-};
-
-const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
-  campus: "校园招聘",
-  internship: "实习",
-  experienced: "社招",
-  other: "其他",
-  unknown: "未识别",
-};
-
-const STUDENT_FRIENDLY_LABELS: Record<StudentFriendly, string> = {
-  yes: "是",
-  no: "否",
-  unknown: "未识别",
-};
 
 function JobRow({ job }: { job: JobListItemV1 }) {
   return (

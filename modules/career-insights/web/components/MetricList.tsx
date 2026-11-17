@@ -15,11 +15,11 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
   const unknownRatioPercent = metric.unknown_ratio !== undefined && metric.unknown_ratio !== null
     ? `${(metric.unknown_ratio * 100).toFixed(1)}%`
     : undefined;
-  const unknownText = metric.unknown_count !== undefined
-    ? `未识别 ${metric.unknown_count} 个${unknownRatioPercent ? `（${unknownRatioPercent}）` : ""}`
-    : unknownRatioPercent
-      ? `未识别占比 ${unknownRatioPercent}`
-      : undefined;
+  const unknownParts = [
+    metric.unknown_count !== undefined ? `未识别 ${metric.unknown_count} 个` : undefined,
+    unknownRatioPercent ? `未识别占比 ${unknownRatioPercent}` : undefined,
+  ].filter((part): part is string => part !== undefined);
+  const unknownText = unknownParts.length > 0 ? unknownParts.join(" · ") : undefined;
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
@@ -35,12 +35,7 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
           <dt>统计时间</dt>
           <dd className="mono text-ink-2">{metric.as_of}</dd>
         </div>
-        {unknownText !== undefined && (
-          <div className="flex gap-2">
-            <dt>未识别</dt>
-            <dd className="text-ink-2">{unknownText}</dd>
-          </div>
-        )}
+
         {metric.dictionary_version !== undefined && (
           <div className="flex gap-2">
             <dt>词典</dt>
@@ -48,6 +43,8 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
           </div>
         )}
       </dl>
+
+      {unknownText !== undefined && <p className="mt-1 text-[12px] text-ink-4">{unknownText}</p>}
 
       <p className="mt-4 text-[12px] leading-relaxed text-ink-3">{metric.disclaimer}</p>
 

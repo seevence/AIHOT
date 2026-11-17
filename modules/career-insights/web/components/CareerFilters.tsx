@@ -1,28 +1,15 @@
 import { Form, Link } from "react-router";
 import type { EmploymentType, JobFiltersV1, RoleFamily, StudentFriendly } from "@aihot/career-insights/contracts";
-import { serializeJobFilters } from "../api";
+import { serializeJobFilters } from "../filters";
+import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
 
-const ROLE_FAMILY_OPTIONS: ReadonlyArray<{ value: RoleFamily; label: string }> = [
-  { value: "ai_algorithm", label: "AI 算法" },
-  { value: "ai_application_development", label: "AI 应用开发" },
-  { value: "data", label: "数据" },
-  { value: "ai_product_operations", label: "AI 产品与运营" },
-  { value: "unknown", label: "未识别" },
-];
+const ROLE_FAMILY_VALUES: readonly RoleFamily[] = ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown"];
+const EMPLOYMENT_TYPE_VALUES: readonly EmploymentType[] = ["campus", "internship", "experienced", "other", "unknown"];
+const STUDENT_FRIENDLY_VALUES: readonly StudentFriendly[] = ["yes", "no", "unknown"];
 
-const EMPLOYMENT_TYPE_OPTIONS: ReadonlyArray<{ value: EmploymentType; label: string }> = [
-  { value: "campus", label: "校园招聘" },
-  { value: "internship", label: "实习" },
-  { value: "experienced", label: "社招" },
-  { value: "other", label: "其他" },
-  { value: "unknown", label: "未识别" },
-];
-
-const STUDENT_FRIENDLY_OPTIONS: ReadonlyArray<{ value: StudentFriendly; label: string }> = [
-  { value: "yes", label: "是" },
-  { value: "no", label: "否" },
-  { value: "unknown", label: "未识别" },
-];
+const ROLE_FAMILY_OPTIONS = ROLE_FAMILY_VALUES.map((value) => ({ value, label: ROLE_FAMILY_LABELS[value] }));
+const EMPLOYMENT_TYPE_OPTIONS = EMPLOYMENT_TYPE_VALUES.map((value) => ({ value, label: EMPLOYMENT_TYPE_LABELS[value] }));
+const STUDENT_FRIENDLY_OPTIONS = STUDENT_FRIENDLY_VALUES.map((value) => ({ value, label: STUDENT_FRIENDLY_LABELS[value] }));
 
 const FIELD_CLASS = "mt-1 h-9 w-full rounded-lg border border-line bg-surface px-2 text-[13px] text-ink-2 focus:border-line-strong focus:outline-none";
 const LABEL_CLASS = "block text-[12px] text-ink-4";
