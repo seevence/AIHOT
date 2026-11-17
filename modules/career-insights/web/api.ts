@@ -32,8 +32,12 @@ function pickEnum<T extends string>(value: string | null, allowed: readonly T[])
   return (allowed as readonly string[]).includes(value) ? (value as T) : undefined;
 }
 
+const MAX_PAGE = 1_000_000;
+
 function parsePage(raw: string | null): number {
-  return raw !== null && /^[1-9]\d*$/.test(raw) ? Number(raw) : 1;
+  if (raw === null || !/^[1-9]\d*$/.test(raw)) return 1;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value <= MAX_PAGE ? value : 1;
 }
 
 function parsePageSize(raw: string | null): number {

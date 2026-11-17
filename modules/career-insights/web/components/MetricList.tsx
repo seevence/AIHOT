@@ -12,6 +12,14 @@ function formatValue(metric: MetricResultV1): string {
 
 function MetricCard({ metric }: { metric: MetricResultV1 }) {
   const expandable = metric.status === "ok" && metric.evidence.length > 0;
+  const unknownRatioPercent = metric.unknown_ratio !== undefined && metric.unknown_ratio !== null
+    ? `${(metric.unknown_ratio * 100).toFixed(1)}%`
+    : undefined;
+  const unknownText = metric.unknown_count !== undefined
+    ? `未识别 ${metric.unknown_count} 个${unknownRatioPercent ? `（${unknownRatioPercent}）` : ""}`
+    : unknownRatioPercent
+      ? `未识别占比 ${unknownRatioPercent}`
+      : undefined;
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
@@ -27,16 +35,10 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
           <dt>统计时间</dt>
           <dd className="mono text-ink-2">{metric.as_of}</dd>
         </div>
-        {metric.unknown_count !== undefined && (
+        {unknownText !== undefined && (
           <div className="flex gap-2">
             <dt>未识别</dt>
-            <dd className="text-ink-2">未识别 {metric.unknown_count} 个</dd>
-          </div>
-        )}
-        {metric.unknown_ratio !== undefined && metric.unknown_ratio !== null && (
-          <div className="flex gap-2">
-            <dt>未识别占比</dt>
-            <dd className="text-ink-2">未识别占比 {(metric.unknown_ratio * 100).toFixed(1)}%</dd>
+            <dd className="text-ink-2">{unknownText}</dd>
           </div>
         )}
         {metric.dictionary_version !== undefined && (

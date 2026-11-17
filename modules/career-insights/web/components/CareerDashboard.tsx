@@ -1,5 +1,6 @@
 import { Link } from "react-router";
-import type { JobFiltersV1, JobListItemV1, JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import type { EmploymentType, JobFiltersV1, JobListItemV1, JobListResponseV1, RoleFamily, StudentFriendly, SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import { buildJobsHref } from "../api";
 import { CareerEmpty, FixtureNotice, SingleSnapshotNotice } from "./CareerStates";
 import { CareerFilters } from "./CareerFilters";
 import { FilterEmpty } from "./FilterEmpty";
@@ -18,6 +19,28 @@ function hasActiveFilters(filters: JobFiltersV1): boolean {
   );
 }
 
+const ROLE_FAMILY_LABELS: Record<RoleFamily, string> = {
+  ai_algorithm: "AI 算法",
+  ai_application_development: "AI 应用开发",
+  data: "数据",
+  ai_product_operations: "AI 产品与运营",
+  unknown: "未识别",
+};
+
+const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
+  campus: "校园招聘",
+  internship: "实习",
+  experienced: "社招",
+  other: "其他",
+  unknown: "未识别",
+};
+
+const STUDENT_FRIENDLY_LABELS: Record<StudentFriendly, string> = {
+  yes: "是",
+  no: "否",
+  unknown: "未识别",
+};
+
 function JobRow({ job }: { job: JobListItemV1 }) {
   return (
     <li>
@@ -25,9 +48,9 @@ function JobRow({ job }: { job: JobListItemV1 }) {
         <div className="text-[15px] font-semibold text-ink">{job.title}</div>
         <div className="mt-1 text-[13px] text-ink-3">{job.company_name} · {job.locations.length > 0 ? job.locations.join("、") : "地点未知"}</div>
         <div className="mt-2 flex flex-wrap gap-2 text-[11px] text-ink-4">
-          <span>{job.role_family}</span>
-          <span>{job.employment_type}</span>
-          <span>学生友好：{job.student_friendly}</span>
+          <span>{ROLE_FAMILY_LABELS[job.role_family]}</span>
+          <span>{EMPLOYMENT_TYPE_LABELS[job.employment_type]}</span>
+          <span>学生友好：{STUDENT_FRIENDLY_LABELS[job.student_friendly]}</span>
         </div>
       </Link>
     </li>
@@ -37,6 +60,7 @@ function JobRow({ job }: { job: JobListItemV1 }) {
 export function CareerDashboard({ summary, jobs, filters }: { summary: SummaryResponseV1; jobs: JobListResponseV1; filters: JobFiltersV1 }) {
   const fixture = summary.data_origin === "synthetic_fixture" || jobs.data_origin === "synthetic_fixture";
   const noJobs = summary.sample_size === 0 || jobs.items.length === 0;
+  const outOfRange = jobs.items.length === 0 && jobs.total > 0;
 
   return (
     <div className="space-y-6 pb-10 pt-3">
@@ -79,7 +103,14 @@ export function CareerDashboard({ summary, jobs, filters }: { summary: SummaryRe
         </div>
 
         {noJobs ? (
-          jobs.total === 0 && hasActiveFilters(filters) ? <div className="mt-3"><FilterEmpty /></div> : <div className="mt-3"><CareerEmpty /></div>
+          outOfRange ? (
+            <div className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
+              <p className="text-[14px] text-ink-2">当前页没有职位，可能已超出结果页数。</p>
+              <Link to={buildJobsHref({ ...filters, page: 1 })} className="mt-3 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2">
+                回到第 1 页
+              </Link>
+            </div>
+          ) : jobs.total === 0 && hasActiveFilters(filters) ? <div className="mt-3"><FilterEmpty /></div> : <div className="mt-3"><CareerEmpty /></div>
         ) : (
           <>
             <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">

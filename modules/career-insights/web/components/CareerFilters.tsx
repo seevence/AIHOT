@@ -1,5 +1,6 @@
 import { Form, Link } from "react-router";
 import type { EmploymentType, JobFiltersV1, RoleFamily, StudentFriendly } from "@aihot/career-insights/contracts";
+import { serializeJobFilters } from "../api";
 
 const ROLE_FAMILY_OPTIONS: ReadonlyArray<{ value: RoleFamily; label: string }> = [
   { value: "ai_algorithm", label: "AI 算法" },
@@ -30,7 +31,7 @@ export function CareerFilters({ filters }: { filters: JobFiltersV1 }) {
   return (
     <section aria-labelledby="career-filters" className="rounded-card border border-line bg-surface p-4">
       <h2 id="career-filters" className="text-[16px] font-semibold text-ink">筛选职位</h2>
-      <Form method="get" action="/career-insights" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      <Form key={serializeJobFilters(filters)} method="get" action="/career-insights" className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <input type="hidden" name="page" value="1" />
         <input type="hidden" name="page_size" value={filters.page_size} />
 

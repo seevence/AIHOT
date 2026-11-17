@@ -1,6 +1,6 @@
 import { Link, useSearchParams } from "react-router";
+import { buildJobsHref, parseDashboardFilters } from "../api";
 
-const BASE_PATH = "/career-insights";
 const ITEM_CLASS = "inline-flex h-8 min-w-8 items-center justify-center rounded-lg px-2 text-[13px]";
 
 function pageNumbers(current: number, totalPages: number): Array<number | "gap"> {
@@ -17,15 +17,11 @@ function pageNumbers(current: number, totalPages: number): Array<number | "gap">
 
 export function Pagination({ page, pageSize, total }: { page: number; pageSize: number; total: number }) {
   const [searchParams] = useSearchParams();
+  const filters = parseDashboardFilters(searchParams);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), totalPages);
 
-  const hrefFor = (target: number) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("page", String(target));
-    next.set("page_size", String(pageSize));
-    return `${BASE_PATH}?${next.toString()}`;
-  };
+  const hrefFor = (target: number) => buildJobsHref({ ...filters, page: target, page_size: pageSize });
 
   return (
     <nav aria-label="职位分页" className="mt-4 flex flex-wrap items-center justify-between gap-3">
