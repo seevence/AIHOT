@@ -72,7 +72,7 @@
 | ID | 未解决事项 | 负责 | 当前阻塞 | 完成标准 |
 |---|---|---|---|---|
 | A-01 | `scripts/check-career-integration.ts --require-data` 仍会在空样本上通过 | A | 无代码阻塞 | 要求 `sample_size>0`、职位列表非空、详情含观测证据，空库必须失败 |
-| A-02 | 本地演示库的 `0153` 是在 interim `bigserial` 版本下建表，云端迁移已是 identity | A / 运维 | 仅本地环境 | 真实数据接入前重建本地库，或核验列属性与 fresh migration 一致 |
+| A-02 | 任何已应用过 `0153` 早期版本（`bigserial` 或 `uuid DEFAULT gen_random_uuid()`）的数据库不会因本次改文件而重跑；`schema_migrations` 只记 name、无 checksum | A / 运维 | 仅环境层 | 真实数据接入前重建库，或核验 `information_schema.columns.is_identity` / `column_default` 与 fresh migration 一致 |
 | B-01 | 真实招聘与政策采集样本未完成 | B | 外部来源可用性 | 至少 3 家公司 + 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
 | B-02 | 自动来源不足时的替换/人工核验流程未执行 | B | 来源可达性 | D2 结束仍不足 3 家时，保留真实岗位快照并明确标为“导入” |
 | C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | B-01 | 用真实样本跑通词典、去重与五项指标，不把 fixture 当真实数据 |
