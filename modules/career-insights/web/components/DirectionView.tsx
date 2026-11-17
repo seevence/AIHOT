@@ -1,13 +1,23 @@
 import { Link } from "react-router";
-import type { JobFiltersV1, JobListResponseV1, RoleFamily, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import { buildJobHref, buildJobsHref } from "../filters";
-import { ROLE_FAMILY_LABELS } from "../labels";
+import type { JobFiltersV1, JobListResponseV1, MetricResultV1, RoleFamily, SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import { buildDirectionHref, buildJobHref, buildJobsHref } from "../filters";
+import { ROLE_FAMILY_LABELS, skillLabel } from "../labels";
 import { MetricList } from "./MetricList";
 import { SharedThemeList } from "./SharedThemeList";
 
+export const DIRECTION_VALUES: readonly RoleFamily[] = ["ai_algorithm", "ai_application_development", "data", "ai_product_operations"];
+
 const TOP_JOB_LIMIT = 5;
 
+const SCOPE_NOTE = "职位计数与职位列表按所选方向过滤；指标与共享主题为全站口径，暂不按方向过滤。";
+
 const DISCLAIMER = "以上组合基于本次公开样本与 0.1 版词典，不代表完整就业市场或录用概率。";
+
+function formatShare(metric: MetricResultV1): string {
+  if (metric.status !== "ok" || metric.value === null) return "数据不足";
+  if (metric.unit === "ratio") return `${(metric.value * 100).toFixed(1)}%`;
+  return String(metric.value);
+}
 
 export function DirectionView({
   roleFamily,
@@ -22,36 +32,77 @@ export function DirectionView({
   studentFriendlyTotal: number;
   filters: JobFiltersV1;
 }) {
-  const metrics = summary.metrics.filter(
-    (metric) => metric.metric_id === "skill_demand_share" || metric.metric_id === "student_friendly_share",
-  );
-  const back = buildJobsHref(filters);
+  const skillMetrics = summary.metrics.filter((metric) => metric.metric_id === "skill_demand_share");
+  const otherMetrics = summary.metrics.filter((metric) => metric.metric_id !== "skill_demand_share");
+  const directionHref = buildDirectionHref(roleFamily);
+  const allJobsHref = buildJobsHref({ ...filters, role_family: roleFamily, page: 1 });
 
   return (
     <section aria-labelledby="direction-title" className="space-y-6">
       <div>
         <h2 id="direction-title" className="text-[18px] font-semibold text-ink">目标岗位方向：{ROLE_FAMILY_LABELS[roleFamily]}</h2>
-        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-3">
-          <span className="num">该方向职位 {jobs.total}</span>
-          <span className="num">其中学生友好 {studentFriendlyTotal}</span>
-        </div>
+        <nav aria-label="切换目标方向" className="mt-3 flex flex-wrap gap-2">
+          {DIRECTION_VALUES.map((value) => (
+            <Link
+              key={value}
+              to={buildDirectionHref(value)}
+              aria-current={value === roleFamily ? "page" : undefined}
+              className="inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12px] font-medium text-ink-2 aria-[current=page]:border-accent aria-[current=page]:bg-accent aria-[current=page]:text-accent-contrast"
+            >
+              {ROLE_FAMILY_LABELS[value]}
+            </Link>
+          ))}
+        </nav>
       </div>
 
-      <MetricList metrics={metrics} />
+      <p data-scope-note="" className="rounded-card border border-line bg-bg-sunk p-3 text-[12px] leading-relaxed text-ink-3">
+        {SCOPE_NOTE}
+      </p>
+
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-3">
+        <span className="num">该方向职位 {jobs.total}</span>
+        <span className="num">其中学生友好 {studentFriendlyTotal}</span>
+      </div>
+
+      <section aria-labelledby="direction-skills">
+        <h3 id="direction-skills" className="text-[16px] font-semibold text-ink">技能需求（全站口径）</h3>
+        {skillMetrics.length === 0 ? (
+          <p className="mt-3 rounded-card border border-line bg-surface p-4 text-[13px] text-ink-3">暂无技能需求数据。</p>
+        ) : (
+          <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
+            {skillMetrics.map((metric) => (
+              <li key={`${metric.metric_id}:${metric.dimension.skill_id ?? "global"}`} className="flex flex-wrap items-baseline gap-x-3 px-4 py-3">
+                <span className="text-[14px] font-medium text-ink">{skillLabel(metric.dimension.skill_id ?? "")}</span>
+                <span className="num text-[14px] text-ink-2">{formatShare(metric)}</span>
+                <span className="num text-[12px] text-ink-4">样本量 {metric.sample_size}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
+
+      <MetricList metrics={otherMetrics} />
 
       <SharedThemeList themes={summary.shared_themes} />
 
       <div>
         <h3 className="text-[16px] font-semibold text-ink">该方向职位</h3>
         {jobs.items.length === 0 ? (
-          <p className="mt-3 rounded-card border border-line bg-surface p-6 text-center text-[14px] text-ink-3">
-            该方向暂无符合条件的职位。
-          </p>
+          jobs.total > 0 ? (
+            <div className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
+              <p className="text-[14px] text-ink-2">当前页没有职位，可能已超出结果页数。</p>
+              <Link to={allJobsHref} className="mt-3 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2">
+                回到第 1 页
+              </Link>
+            </div>
+          ) : (
+            <p className="mt-3 rounded-card border border-line bg-surface p-6 text-center text-[14px] text-ink-3">该方向暂无职位</p>
+          )
         ) : (
           <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
             {jobs.items.slice(0, TOP_JOB_LIMIT).map((job) => (
               <li key={job.id}>
-                <Link to={buildJobHref(job.id, back)} className="block px-4 py-3 transition-colors hover:bg-bg-sunk">
+                <Link to={buildJobHref(job.id, directionHref)} className="block px-4 py-3 transition-colors hover:bg-bg-sunk">
                   <div className="text-[15px] font-semibold text-ink">{job.title}</div>
                   <div className="mt-1 text-[13px] text-ink-3">
                     {job.company_name} · {job.locations.length > 0 ? job.locations.join("、") : "地点未知"}
@@ -62,10 +113,10 @@ export function DirectionView({
           </ul>
         )}
         <Link
-          to="/career-insights"
+          to={allJobsHref}
           className="mt-3 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2"
         >
-          查看全部职位
+          查看该方向全部职位
         </Link>
         <p className="mt-3 text-[12px] leading-relaxed text-ink-4">{DISCLAIMER}</p>
       </div>

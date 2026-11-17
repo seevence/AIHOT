@@ -60,6 +60,7 @@ export function parseDashboardFilters(search: URLSearchParams): JobFiltersV1 {
 export function buildJobsHref(filters: JobFiltersV1): string {
   return `/career-insights?${serializeJobFilters(filters)}`;
 }
+
 export function parseDirectionView(search: URLSearchParams): { view: DashboardView; roleFamily?: RoleFamily } {
   if (search.get("view") !== "direction") return { view: "overview" };
   const roleFamily = pickEnum(search.get("role_family"), ROLE_FAMILIES);
@@ -76,6 +77,7 @@ export function buildJobHref(jobId: string, back: string): string {
 
 export function safeBackHref(raw: string | null): string {
   if (raw === null) return "/career-insights";
-  if (!raw.startsWith("/career-insights") || raw.includes("//") || raw.includes(":")) return "/career-insights";
+  const isCareerPath = raw === "/career-insights" || raw.startsWith("/career-insights?");
+  if (!isCareerPath || raw.includes("//") || raw.includes(":")) return "/career-insights";
   return raw;
 }

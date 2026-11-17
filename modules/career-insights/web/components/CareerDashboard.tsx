@@ -4,13 +4,11 @@ import { buildDirectionHref, buildJobHref, buildJobsHref } from "../filters";
 import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
 import { CareerEmpty, FixtureNotice, SingleSnapshotNotice } from "./CareerStates";
 import { CareerFilters } from "./CareerFilters";
-import { DirectionView } from "./DirectionView";
+import { DIRECTION_VALUES, DirectionView } from "./DirectionView";
 import { FilterEmpty } from "./FilterEmpty";
 import { MetricList } from "./MetricList";
 import { Pagination } from "./Pagination";
 import { SharedThemeList } from "./SharedThemeList";
-
-const DIRECTION_VALUES: readonly RoleFamily[] = ["ai_algorithm", "ai_application_development", "data", "ai_product_operations"];
 
 export type DirectionTarget = { roleFamily: RoleFamily; studentFriendlyTotal: number };
 
@@ -76,7 +74,9 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
       {fixture && <FixtureNotice />}
       {summary.sample_size > 0 && !summary.has_multiple_snapshots && <SingleSnapshotNotice />}
 
-      <CareerFilters filters={filters} />
+      <CareerFilters filters={filters} view={direction ? "direction" : undefined} />
+
+      {!direction && <DirectionLinks />}
 
       <section aria-labelledby="career-sample" className="rounded-card border border-line bg-surface p-5">
         <h2 id="career-sample" className="text-[16px] font-semibold text-ink">样本概况</h2>
@@ -106,8 +106,6 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
         />
       ) : (
         <>
-          <DirectionLinks />
-
           <MetricList metrics={summary.metrics} />
 
           <SharedThemeList themes={summary.shared_themes} />

@@ -1,7 +1,7 @@
 import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import type { JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import { JOB_PAGE_SIZES, careerApiPath, loadCareerApi, parseDashboardFilters, parseDirectionView, serializeJobFilters } from "../api";
+import { careerApiPath, loadCareerApi, parseDashboardFilters, parseDirectionView, serializeJobFilters } from "../api";
 import { CareerDashboard } from "../components/CareerDashboard";
 import { CareerError, CareerLoading } from "../components/CareerStates";
 
@@ -17,10 +17,10 @@ export async function loader({ request }: LoaderArgs) {
     directionRoleFamily
       ? loadCareerApi<JobListResponseV1>(
           `${careerApiPath("/jobs")}?${serializeJobFilters({
+            ...filters,
             role_family: directionRoleFamily,
             student_friendly: "yes",
             page: 1,
-            page_size: JOB_PAGE_SIZES[0],
           })}`,
           request.signal,
         )
