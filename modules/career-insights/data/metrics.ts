@@ -1,4 +1,4 @@
-import type { MetricSpecV1 } from "../contracts";
+import type { MetricSpecV1 } from "../contracts/index.ts";
 
 export const METRIC_SPECS_V1: readonly MetricSpecV1[] = [
   {
