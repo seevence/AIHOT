@@ -246,6 +246,71 @@
     ```
   - 库核对：`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE COALESCE(skills, '[]'::jsonb) = '[]'::jsonb)::int AS empty_skills FROM career_jobs` → `{"total":70,"empty_skills":8}`。接口 `unknown_count=8` 与 `empty_skills=8` 完全一致；`unknown_ratio=8/70=0.11428571428571428`。
 - 未完成项：
-  - **T-S2-07 仍受阻**（BLK-03）：真实政策源口径未定（政务 `.gov.cn` 本机不可达），库内无真实政策样本（`career_policies=0`）；本次只验证了空政策路径，未写入任何政策记录。
+  - **T-S2-07 已按 `official_media` 口径写入 2 条真实样本**（见下节“S2 政策真实样本”；政务 `.gov.cn` 仍不可达，`official_media` 是否为 BLK-03 的最终口径待队长确认）。
   - **T-S2-13 仍受阻**（BLK-09）：契约 `PolicyEvidenceRefV1.published_at` 仍为 `string`（`contracts/job.ts:87`、`openapi.json` 的 `required` 与 `type: "string"` 均不可空），因此 `listPolicyEvidence` 只读取 `published_at IS NOT NULL` 的记录；发布日期缺失的政策暂不入库。待 A 在 `contracts/**` 放开可空后再补读取路径。
 - 评审结论：待独立 review。
+### S2 政策真实样本（T-S2-07）
+
+- 范围与写集：仅本路线图。入库使用一次性本地脚本 `scripts/ingest-policy-samples.local.ts`（验证后删除，未 `git add`）；`collector/**`、`scripts/collect-career*`、`.env` 全程未暂存，未提交任何数据文件。
+- 数据库与基线：`postgres://postgres@127.0.0.1:5432/aihot`，入库前 `career_policies` 为 0 行。
+- 入库实现：`writePolicyBatch` 分两个批次（每来源 1 条），`data_origin="live"`、`collector_version="official-media-manual/0.1.0"`、`fetched_at=2026-11-17T16:12:03.725Z`；`policy_item_id` 取规范化 URL 的 SHA-256 前 32 位，`content_hash` 取正文 SHA-256，`evidence_excerpt` 截取原文 ≤500 字。
+- 入库输出（`accepted/updated/duplicates/rejected/errors`）：
+  ```json
+  {"source_key":"xinhuanet-policy","fetched_at":"2026-11-17T16:12:03.725Z","policy_item_ids":["db50aeae67907eb201b1335202c0f846"],"evidence_lengths":[288],"accepted":1,"updated":0,"duplicates":0,"rejected":0,"errors":[]}
+  {"source_key":"people-policy","fetched_at":"2026-11-17T16:12:03.725Z","policy_item_ids":["c3816147b71599d84830ba513c8431ef"],"evidence_lengths":[359],"accepted":1,"updated":0,"duplicates":0,"rejected":0,"errors":[]}
+  ```
+
+**样本 1**
+
+- 来源：新华网（`news.cn`），页面来源署名“人民日报”，内容主体机构为全国总工会；`source_key=xinhuanet-policy`，`source_tier=official_media`。
+- 标题：全总重点支持建设二百家工匠学院
+- 机构（`issuer`）：人民日报
+- 日期（`published_at`）：2026-11-13（页面另标 07:41:13）
+- URL：https://www.news.cn/politics/20261113/3689813fa884471687d053c55dc9c3ae/c.html
+- `theme_ids`：`["talent_development"]`
+- 摘录长度：288 字；摘录含“全国总工会近日确定2026年重点支持建设的200家工匠学院”“培育特色工种492个”“线下课程超6.8万门、发布线上技能课程1万多节，今年以来培训职工超150万人次”。
+- `policy_item_id`：`db50aeae67907eb201b1335202c0f846`。
+- 复核结果：重新 fetch 页面，标题、日期、正文关键事实与任务书一致，无差异。
+
+**样本 2**
+
+- 来源：人民网教育频道（`people.com.cn`），页面来源署名“光明日报”；`source_key=people-policy`，`source_tier=official_media`。
+- 标题：AI浪潮下，毕业生如何锻造就业竞争力
+- 机构（`issuer`）：光明日报
+- 日期（`published_at`）：2026-11-17（页面另标 08:29）
+- URL：https://edu.people.com.cn/n1/2026/1117/c1006-40835222.html
+- `theme_ids`：`["employment_promotion","artificial_intelligence"]`（正文围绕高校毕业生就业竞争力与 AI 新岗位，另含“人才培养”相关表述，未单列 `talent_development`）
+- 摘录长度：359 字；摘录含“不少高校毕业生主动‘拥抱’AI”“打造适应新岗位新场景的就业竞争力”“2026年前5月新发校招AI岗位量同比增长47.30%”。
+- `policy_item_id`：`c3816147b71599d84830ba513c8431ef`。
+- 选取路径与差异：该标题在 `https://www.people.com.cn/` 首页“社会·教育”板块的列表里位于 `c1006-40835222.html`（相邻条目的 href 与标题存在错位）；`edu.people.com.cn` 子域 https 证书报 `ERR_TLS_CERT_ALTNAME_INVALID`，抓取改用 `http://` 同路径，入库 `official_url` 保留 `https`（实测 https 返回同一正文，仅证书名不匹配）。日期、署名与正文均以文章页 `publishdate`、`source` 元数据及正文为准。
+
+**实测 summary（`GET http://127.0.0.1:3010/api/site/career-insights/summary`，HTTP 200）**
+
+```json
+{
+  "contract_version": "0.1",
+  "data_origin": "verified_import",
+  "sample_size": 70,
+  "company_count": 3,
+  "source_count": 3,
+  "shared_themes": [],
+  "policy_job_shared_themes": {
+    "status": "insufficient_data",
+    "value": null,
+    "numerator_count": 0,
+    "denominator_count": null,
+    "sample_size": 70,
+    "dictionary_version": "0.1"
+  },
+  "warnings": [
+    { "code": "unknown_fields", "message": "存在未识别职族的职位，已单列 unknown。" },
+    { "code": "unknown_fields", "message": "存在未标记应届友好度的职位，unknown 不表示不友好。" },
+    { "code": "insufficient_data", "message": "政策与职位暂未出现同一主题，不代表无共同方向。" },
+    { "code": "unknown_fields", "message": "样本混合自动采集与人工核验导入（verified_import），整体按较保守口径标注。" }
+  ]
+}
+```
+
+- 库内分组核对：`people-policy=1`、`xinhuanet-policy=1`；两条均为 `source_tier=official_media`、`data_origin=live`、`published_at` 非空。
+- 端口：API 3002、web 3010，实测后已停止（PID 17444、35352）；全程未使用 3000/3001。
+- **BLK-03 口径仍待队长确认**：本阶段以 `official_media`（新华网、人民网）作为 T-S2-07 的真实政策源，未使用政务 `.gov.cn`；该口径是否满足“政策入库”定义、是否需要补政务源，仍待拍板。两条政策主题与当前 70 条职位无交集（`shared_themes=[]`、`insufficient_data`），属合法结果，不代表无共同方向。
