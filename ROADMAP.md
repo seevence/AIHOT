@@ -40,6 +40,14 @@
 - 容器内 CI 同款命令已实测五项通过；`docs/team-startup.md` 补充 CI 行为说明，工程质量清单改为可直接执行的脚本命令。
 - 本阶段仅改 CI、启动文档和路线图，保持独立分支，独立 review 通过后才并入 `feat/integration`。
 
+**A 角色 D1/E1/C 集成记录（2026-11-17，`feat/a-d3-integration`）：**
+
+- 已合入 D1 `6aed150`（SQL repository、幂等 ingest、队列）与 E1 `e7d4c21`（筛选、分页、证据面板），E1 合并提交 `53e234d`；已合入 C 的远程分支 `b8d6de8`（归一化、去重、指标、质量与样例），C 合并提交 `e7f6c9f`。
+- C 与 D 在 `data/metrics.ts` 的导入处冲突已按 C 的完整指标实现解决，保留 `.ts` 扩展名；`data/validate.ts` 的 `.ts` 基线修复随合并同步。
+- `docs/development-contract.md` §8.5 已明确逐项错误 `{ index, code, message }` 与 `path: message` 格式，和 D 的 ingest 实现对齐。
+- 验证：`npm run typecheck`、`npx tsc -p modules/tsconfig.json`、Web 构建通过；standalone `311/311` 通过；D SQL+ingest `12/12` 通过（临时 PostgreSQL 5433）。
+- 当前仍在独立集成分支，等待 Docker 重建运行验收和独立 review；尚未合回 `feat/integration`，未推送，真实采集闭环未完成。
+
 **尚未完成的 MVP 核心工作：**至少 3 家公司和 2 个政策源的真实采集、归一化与去重、真实 SQL/API、两个观测时点、真实指标和证据化页面。这些是现在五个人并行开发的任务。
 
 ## 1. 一周能做成什么

@@ -502,6 +502,7 @@ API 返回指标时还必须带：
 - 请求包含 `schema_version`、`source_key`、`fetched_at`、`collector_version`、`jobs`
 - 单批职位数量限制 100
 - 响应返回 `accepted`、`updated`、`duplicates`、`rejected` 和逐项错误
+- 逐项错误结构为 `{ index, code, message }`；校验失败时 `code="validation_failed"`，`message` 为 `path: message` 拼接（`path` 为空时只写 `message`）
 - 写入必须符合本契约的唯一键、哈希和观测语义
 - 认证失败返回 `401`，权限不足返回 `403`，校验失败返回 `400`
 
