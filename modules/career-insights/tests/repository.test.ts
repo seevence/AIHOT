@@ -94,7 +94,7 @@ test("an empty table answers summary with insufficient_data instead of a made-up
   assert.equal(summary.has_multiple_snapshots, false);
 
   assert.deepEqual(
-    summary.metrics.map((entry) => entry.metric_id),
+    [...new Set(summary.metrics.map((entry) => entry.metric_id))],
     METRIC_SPECS_V1.map((spec) => spec.metric_id),
   );
   for (const entry of summary.metrics) {
@@ -103,11 +103,23 @@ test("an empty table answers summary with insufficient_data instead of a made-up
     assert.equal(entry.sample_size, 0);
     assert.equal(entry.as_of, EPOCH);
   }
-  assert.deepEqual(metric(summary, "job_family_share").evidence, []);
-  assert.equal(metric(summary, "job_family_share").denominator_count, 0);
+  const families = summary.metrics.filter((entry) => entry.metric_id === "job_family_share");
+  assert.deepEqual(
+    families.map((entry) => entry.dimension.role_family),
+    ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown"],
+  );
+  for (const entry of families) {
+    assert.equal(entry.numerator_count, 0);
+    assert.equal(entry.denominator_count, 0);
+    assert.deepEqual(Object.keys(entry.dimension), ["role_family"]);
+    assert.deepEqual(entry.evidence, []);
+  }
   assert.equal(metric(summary, "skill_demand_share").denominator_count, 0);
+  assert.equal(metric(summary, "skill_demand_share").numerator_count, 0);
+  assert.deepEqual(metric(summary, "skill_demand_share").dimension, {});
   assert.equal(metric(summary, "student_friendly_share").unknown_ratio, null);
   assert.equal(metric(summary, "observed_new_jobs").value, null, "one snapshot never claims new jobs");
+  assert.equal(metric(summary, "observed_new_jobs").denominator_count, null);
 
   assert.deepEqual(summary.warnings.map((warning) => warning.code), ["insufficient_data", "insufficient_data"]);
   assert.ok(summary.warnings.some((warning) => warning.message === "尚未采集到任何职位。"));
@@ -222,6 +234,26 @@ test("summary counts the ingested jobs and reports the role family, skill and st
   }
 });
 
+test("summary flags skill demand as insufficient_data when jobs carry no skills", async () => {
+  await seed(job({ skills: [], skill_evidence: [] }));
+
+  const summary = await repository.summary();
+  assert.equal(summary.sample_size, 1);
+
+  const skills = summary.metrics.filter((entry) => entry.metric_id === "skill_demand_share");
+  assert.equal(skills.length, 1);
+  const placeholder = skills[0]!;
+  assert.equal(placeholder.status, "insufficient_data");
+  assert.equal(placeholder.value, null);
+  assert.equal(placeholder.numerator_count, 0);
+  assert.equal(placeholder.denominator_count, 1);
+  assert.equal(placeholder.sample_size, 1);
+  assert.equal(placeholder.as_of, summary.as_of);
+  assert.deepEqual(placeholder.dimension, {});
+  assert.equal(placeholder.dictionary_version, SKILL_DICTIONARY_VERSION);
+  assert.deepEqual(placeholder.evidence, []);
+});
+
 test("two observation snapshots count the jobs first seen in the newer one", async () => {
   await seed(job({ fetched_at: "2026-01-01T00:00:00.000Z" }));
   await seed(
@@ -237,7 +269,7 @@ test("two observation snapshots count the jobs first seen in the newer one", asy
   assert.equal(observed.status, "ok");
   assert.equal(observed.value, 1);
   assert.equal(observed.numerator_count, 1);
-  assert.equal(observed.denominator_count, 2);
+  assert.equal(observed.denominator_count, null);
   assert.equal(observed.evidence[0]!.kind, "job");
 });
 

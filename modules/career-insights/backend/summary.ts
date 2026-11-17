@@ -156,7 +156,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
 
   const jobFamilyMetrics: MetricResultV1[] =
     sampleSize === 0
-      ? [
+      ? ROLE_FAMILY_ORDER.map((roleFamily) =>
           metric("job_family_share", {
             status: "insufficient_data",
             value: null,
@@ -164,10 +164,10 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
             denominator_count: 0,
             sample_size: 0,
             as_of: asOf,
-            dimension: {},
+            dimension: { role_family: roleFamily },
             evidence: [],
           }),
-        ]
+        )
       : (
           await Promise.all(
             ROLE_FAMILY_ORDER.flatMap((roleFamily) => {
@@ -192,14 +192,14 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
         ).flat();
 
   const skillMetrics: MetricResultV1[] =
-    sampleSize === 0
+    skillRows.length === 0
       ? [
           metric("skill_demand_share", {
             status: "insufficient_data",
             value: null,
             numerator_count: 0,
-            denominator_count: 0,
-            sample_size: 0,
+            denominator_count: sampleSize,
+            sample_size: sampleSize,
             as_of: asOf,
             dimension: {},
             dictionary_version: SKILL_DICTIONARY_VERSION,
@@ -313,7 +313,7 @@ async function newJobsMetric(
     status: "ok",
     value: newJobs,
     numerator_count: newJobs,
-    denominator_count: sampleSize,
+    denominator_count: null,
     sample_size: sampleSize,
     as_of: asOf,
     dimension: {},
