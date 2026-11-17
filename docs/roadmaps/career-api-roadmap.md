@@ -131,3 +131,67 @@
   - ENV-01（本机 Node 版本低于 `>=24.22.1`）继承自 S0，未处理。
   - 3000/3001 旧服务仍在运行，后续门禁须继续显式使用 3002/3010，避免命中旧代码。
   - 写集隔离实测：提交前 `git status --short` 为 `M docs/roadmaps/career-api-roadmap.md`、`M modules/career-insights/backend/run-repository.ts`、`?? modules/career-insights/backend/run-ingest.ts`，另有 B 的本地未提交改动（`M collector/{index,sources}.ts`、`?? collector/{netease,tencent,xiaomi}.ts`、`?? scripts/collect-career.ts`、`?? scripts/collect-career-run.local.ts`）；本次只 `git add` 上述 3 个 D 写集文件，B 文件、脚本与 `.env` 均未暂存。
+### S2 迁移（完成，待 review）
+
+- 范围：T-S2-01～03 三个政策迁移。文件（均为新增，未改动任何已部署迁移）：
+  - `modules/career-insights/migrations/0160_career_policies.sql`（单条 `CREATE TABLE`）
+  - `modules/career-insights/migrations/0161_career_policies_theme_idx.sql`（`CREATE INDEX CONCURRENTLY IF NOT EXISTS ... USING gin (theme_ids)`）
+  - `modules/career-insights/migrations/0162_career_policies_published_idx.sql`（`CREATE INDEX CONCURRENTLY IF NOT EXISTS ... (published_at DESC NULLS LAST)`）
+- 迁移安全检查（`--base origin/feat/integration` = `21d07eb894ad9e0703a3ba037d5a67177f401d64`）：
+  ```
+  $ node scripts/check-migrations.ts --base origin/feat/integration
+  migration history and online safety checked
+  exit 0
+  ```
+- 应用（`postgres://postgres@127.0.0.1:5432/aihot`，`npm run db:migrate`，exit 0）：
+  ```
+  applied 0160_career_policies.sql (13ms, transaction)
+  applied 0161_career_policies_theme_idx.sql (7ms, index)
+  applied 0162_career_policies_published_idx.sql (4ms, index)
+  3 migration(s) applied
+  ```
+- 列核验（`pg_attribute` + `pg_attrdef`，实测 **18 列**）：
+
+  | # | 列 | 类型 | NOT NULL | 默认 |
+  |---|---|---|---|---|
+  | 1 | `id` | uuid | ✓ | `gen_random_uuid()` |
+  | 2 | `policy_item_id` | text | ✓ | - |
+  | 3 | `source_key` | text | ✓ | - |
+  | 4 | `source_tier` | text | ✓ | - |
+  | 5 | `title` | text | ✓ | - |
+  | 6 | `issuer` | text | ✓ | - |
+  | 7 | `published_at` | date | ✗（可空） | 无 |
+  | 8 | `official_url` | text | ✓ | - |
+  | 9 | `theme_ids` | jsonb | ✓ | `'[]'::jsonb` |
+  | 10 | `evidence_excerpt` | text | ✓ | - |
+  | 11 | `content_hash` | text | ✓ | - |
+  | 12 | `collector_version` | text | ✓ | - |
+  | 13 | `data_origin` | text | ✓ | - |
+  | 14 | `fetched_at` | timestamptz | ✓ | - |
+  | 15 | `first_seen_at` | timestamptz | ✓ | - |
+  | 16 | `last_seen_at` | timestamptz | ✓ | - |
+  | 17 | `created_at` | timestamptz | ✓ | `now()` |
+  | 18 | `updated_at` | timestamptz | ✓ | `now()` |
+
+  - 与 `docs/specs/2026-11-18-career-hot-design.md` 表 2、`docs/specs/tasks.md` T-S2-01 字段清单一致（18 列）。任务书写的“19 列”与设计不一致，按实测 18 列记录。
+  - 关键断言全部成立：`published_at` 可空且无默认；`theme_ids` 默认 `'[]'::jsonb`。
+- 约束核验（`pg_constraint`，实测 4 条；`contype='c'` 2 条）：
+  - `career_policies_pkey`（`p`）`PRIMARY KEY (id)`
+  - `career_policies_source_key_policy_item_id_key`（`u`）`UNIQUE (source_key, policy_item_id)`
+  - `career_policies_source_tier_check`（`c`）`CHECK (source_tier = ANY (ARRAY['government_official','official_media','other_public']))`
+  - `career_policies_data_origin_check`（`c`）`CHECK (data_origin = ANY (ARRAY['live','verified_import','synthetic_fixture']))`
+- 索引核验（`pg_index` + `pg_get_indexdef`，实测 4 个，均 `indisvalid=true`）：
+  - `career_policies_theme_idx` → `USING gin (theme_ids)`
+  - `career_policies_published_idx` → `USING btree (published_at DESC NULLS LAST)`
+  - `career_policies_pkey`、`career_policies_source_key_policy_item_id_key`（主键/唯一键自动索引）
+- 回滚路径验证（只在 `aihot_test` 执行，未触碰 `aihot` 主库）：
+  - `aihot_test` 已存在（与 `aihot` 同实例），先 `npm run db:migrate` 追平 → 与主库相同的三条 `applied` 输出，exit 0。
+  - `DROP TABLE IF EXISTS career_policies` → 执行前 `to_regclass` 非空、执行后为空；同时删除 `schema_migrations` 中 `0160/0161/0162` 三条记录（否则迁移器会判定已应用而跳过）。
+  - 再跑 `npm run db:migrate` → `applied 0160 (41ms, transaction)`、`applied 0161 (7ms, index)`、`applied 0162 (3ms, index)`，`3 migration(s) applied`，exit 0。
+  - 重建后复核：`columns=18`、`check_constraints=2`、`career_policies_published_idx(valid=true)` 与 `career_policies_theme_idx(valid=true)` 均恢复。结论：回滚后可按同一组迁移完整重建。
+- 偏差与说明：
+  - 任务书中的“19 列”按实测为 18 列，未为凑数新增字段；字段集合以设计表 2 为准。
+  - 回滚重建需同时清理 `schema_migrations` 记录，这是迁移器的既有语义（已应用清单），迁移文件本身无需修改。
+  - 本阶段未启动任何 web/api 服务，未使用 3000/3001 端口。
+  - B 的本地未提交改动（`collector/**`、`scripts/collect-career*.ts`）与 `.env` 全程未 `git add`。
+- 评审结论：待独立 review。
