@@ -1,78 +1,95 @@
 import { Link } from "react-router";
-import type { JobDetailResponseV1 } from "@aihot/career-insights/contracts";
-import { FixtureNotice, SingleSnapshotNotice } from "./CareerStates";
+import type { JobDetailV1 } from "@aihot/career-insights/contracts";
+import {
+  EMPLOYMENT_TYPE_LABELS,
+  ROLE_FAMILY_LABELS,
+  STUDENT_FRIENDLY_LABELS,
+  skillLabel,
+} from "../labels";
 
-export function JobDetail({ data }: { data: JobDetailResponseV1 }) {
-  const { job, observations } = data;
-  const experience = job.experience_raw ?? (
-    job.experience_min_years !== null || job.experience_max_years !== null
+type Fact = { label: string; value: string; dateTime?: boolean };
+
+const isValidDateTime = (value: string) => !Number.isNaN(new Date(value).getTime());
+
+export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string }) {
+  const experience =
+    job.experience_raw ??
+    (job.experience_min_years !== null || job.experience_max_years !== null
       ? `${job.experience_min_years ?? "未知"}–${job.experience_max_years ?? "未知"} 年`
-      : "未知"
-  );
+      : null);
+
+  const facts: Fact[] = [];
+  const addFact = (label: string, value: string | null | undefined, dateTime = false) => {
+    if (value) facts.push({ label, value, dateTime });
+  };
+  addFact("职位类别", ROLE_FAMILY_LABELS[job.role_family] ?? job.role_family);
+  addFact("用工类型", EMPLOYMENT_TYPE_LABELS[job.employment_type] ?? job.employment_type);
+  addFact("学生友好", STUDENT_FRIENDLY_LABELS[job.student_friendly] ?? job.student_friendly);
+  addFact("学历", job.degree_raw ?? job.degree);
+  addFact("经验", experience);
+  addFact("公司", job.company_name);
+  addFact("城市", job.locations.join("、"));
+  addFact("来源", job.source_key);
+  addFact("发布时间", job.published_at, true);
+  addFact("首次观测", job.first_seen_at, true);
+  addFact("最近观测", job.last_seen_at, true);
 
   return (
-    <article className="space-y-6 pb-10 pt-3">
-      <Link to="/career-insights" className="inline-flex text-[13px] text-ink-3 hover:text-ink">← 返回职业洞察</Link>
-      {data.data_origin === "synthetic_fixture" && <FixtureNotice />}
+    <>
+      <Link to={backHref} className="inline-flex text-[13px] text-ink-3 hover:text-ink">← 返回职位列表</Link>
 
       <header>
-        <h1 data-page-title="" className="text-[26px] font-bold leading-snug text-ink">{job.title}</h1>
-        <p className="mt-2 text-[15px] text-ink-3">{job.company_name} · {job.locations.length > 0 ? job.locations.join("、") : "地点未知"}</p>
-        <a href={job.official_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex h-10 items-center rounded-full bg-accent px-5 text-[13px] font-medium text-accent-contrast">
+        <h1 data-page-title="" className="text-[26px] font-bold leading-snug text-ink break-words">{job.title}</h1>
+        <p className="mt-2 text-[15px] text-ink-3 break-words">
+          {[job.company_name, job.locations.join("、")].filter(Boolean).join(" · ")}
+        </p>
+        <a href={job.official_url} target="_blank" rel="noopener noreferrer" className="mt-4 inline-flex h-10 max-w-full items-center rounded-full bg-accent px-5 text-[13px] font-medium text-accent-contrast">
           查看官方职位
         </a>
       </header>
 
-      <p className="rounded-card border border-line bg-bg-sunk px-4 py-3 text-[13px] leading-relaxed text-ink-3">{data.notice}</p>
-
       <section aria-labelledby="job-facts" className="rounded-card border border-line bg-surface p-5">
         <h2 id="job-facts" className="text-[17px] font-semibold text-ink">职位信息</h2>
-        <dl className="mt-4 grid gap-x-5 gap-y-3 text-[13px] sm:grid-cols-2">
-          <div><dt className="text-ink-4">职位类别</dt><dd className="mt-1 text-ink-2">{job.role_family}</dd></div>
-          <div><dt className="text-ink-4">用工类型</dt><dd className="mt-1 text-ink-2">{job.employment_type}</dd></div>
-          <div><dt className="text-ink-4">学历</dt><dd className="mt-1 text-ink-2">{job.degree_raw ?? job.degree}</dd></div>
-          <div><dt className="text-ink-4">经验</dt><dd className="mt-1 text-ink-2">{experience}</dd></div>
-          <div><dt className="text-ink-4">学生友好</dt><dd className="mt-1 text-ink-2">{job.student_friendly}</dd></div>
-          <div><dt className="text-ink-4">发布时间</dt><dd className="mt-1 text-ink-2">{job.published_at ?? "未知"}</dd></div>
-          <div><dt className="text-ink-4">首次观测</dt><dd className="mt-1 text-ink-2">{job.first_seen_at}</dd></div>
-          <div><dt className="text-ink-4">最近观测</dt><dd className="mt-1 text-ink-2">{job.last_seen_at}</dd></div>
+        <dl className="mt-4 grid grid-cols-1 gap-x-5 gap-y-3 text-[13px] sm:grid-cols-2">
+          {facts.map((fact) => (
+            <div key={fact.label} className="min-w-0">
+              <dt className="text-ink-4">{fact.label}</dt>
+              <dd className="mt-1 text-ink-2 break-words">
+                {fact.dateTime && isValidDateTime(fact.value) ? <time dateTime={fact.value}>{fact.value}</time> : fact.value}
+              </dd>
+            </div>
+          ))}
         </dl>
       </section>
 
-      <section aria-labelledby="job-skills">
-        <h2 id="job-skills" className="text-[17px] font-semibold text-ink">技能与证据</h2>
+      {job.skills.length > 0 && (
+        <section aria-labelledby="job-skills">
+          <h2 id="job-skills" className="text-[17px] font-semibold text-ink">技能要求</h2>
+          <ul className="mt-3 flex flex-wrap gap-2">
+            {job.skills.map((skillId) => (
+              <li key={skillId} className="max-w-full rounded-full border border-line bg-bg-sunk px-3 py-1 text-[12px] text-ink-2 break-words">
+                {skillLabel(skillId)}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      <section aria-labelledby="job-skill-evidence">
+        <h2 id="job-skill-evidence" className="text-[17px] font-semibold text-ink">技能与证据</h2>
         {job.skill_evidence.length === 0 ? (
           <p className="mt-3 text-[13px] text-ink-3">暂无可确认的技能证据。</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {job.skill_evidence.map((evidence) => (
               <li key={evidence.skill_id} className="rounded-card border border-line bg-surface p-4">
-                <div className="text-[13px] font-semibold text-ink">{evidence.skill_id}</div>
-                <p className="mt-1 text-[13px] leading-relaxed text-ink-3">{evidence.evidence_text}</p>
+                <div className="text-[13px] font-semibold text-ink break-words">{skillLabel(evidence.skill_id)}</div>
+                <p className="mt-1 text-[13px] leading-relaxed text-ink-3 break-words">{evidence.evidence_text}</p>
               </li>
             ))}
           </ul>
         )}
       </section>
-
-      <section aria-labelledby="job-observations">
-        <h2 id="job-observations" className="text-[17px] font-semibold text-ink">观测记录</h2>
-        {observations.length === 1 && <div className="mt-3"><SingleSnapshotNotice /></div>}
-        {observations.length === 0 ? (
-          <p className="mt-3 text-[13px] text-ink-3">暂无观测记录。</p>
-        ) : (
-          <ol className="mt-3 space-y-3">
-            {observations.map((observation) => (
-              <li key={observation.id} className="rounded-card border border-line bg-surface p-4">
-                <time dateTime={observation.observed_at} className="text-[12px] text-ink-4">{observation.observed_at}</time>
-                <p className="mt-2 text-[13px] leading-relaxed text-ink-2">{observation.evidence_excerpt}</p>
-                <a href={observation.source_url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex text-[12px] text-accent">查看观测来源</a>
-                <div className="mono mt-2 break-all text-[11px] text-ink-4">{observation.content_hash} · {observation.collector_version}</div>
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-    </article>
+    </>
   );
 }
