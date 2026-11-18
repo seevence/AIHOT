@@ -2,10 +2,13 @@ export interface FetchTransport {
   fetchPage(request: PageRequest): Promise<TransportResponse>;
 }
 
+export type PageMethod = "GET" | "POST";
+
 export interface PageRequest {
   readonly url: string;
-  readonly method: "GET";
+  readonly method: PageMethod;
   readonly headers: Readonly<Record<string, string>>;
+  readonly body?: string;
   readonly pageTimeoutMs: number;
   readonly sourceKey: string;
   readonly signal?: AbortSignal;
@@ -35,13 +38,16 @@ export function createPageRequest(input: {
   url: string;
   sourceKey: string;
   pageTimeoutMs: number;
+  method?: PageMethod;
   headers?: Readonly<Record<string, string>>;
+  body?: string;
   signal?: AbortSignal;
 }): PageRequest {
   return {
     url: input.url,
-    method: "GET",
+    method: input.method ?? "GET",
     headers: { ...(input.headers ?? {}) },
+    ...(input.body === undefined ? {} : { body: input.body }),
     pageTimeoutMs: Math.min(input.pageTimeoutMs, 30_000),
     sourceKey: input.sourceKey,
     ...(input.signal === undefined ? {} : { signal: input.signal }),
