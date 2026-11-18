@@ -343,3 +343,20 @@ test("POST 遇到重定向时拒绝，不静默降级为 GET", async () => {
     },
   );
 });
+
+test("跟随重定向后 TransportResponse.finalUrl 返回最终 URL 而不是初始 URL", async () => {
+  const fetchImpl = (async (url: string | URL | Request) => {
+    if (String(url) === "https://a.example/start") {
+      return redirect("https://a.example/final");
+    }
+    return bodyPage();
+  }) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  const response = await transport.fetchPage(
+    createPageRequest({ url: "https://a.example/start", sourceKey: "demo", pageTimeoutMs: 5_000 }),
+  );
+
+  assert.equal(response.requestUrl, "https://a.example/start");
+  assert.equal(response.finalUrl, "https://a.example/final");
+});

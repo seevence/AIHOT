@@ -147,7 +147,7 @@ export class HttpTransport implements FetchTransport {
       return {
         status: response.status,
         requestUrl: request.url,
-        finalUrl: response.url,
+        finalUrl,
         contentType,
         headers,
         body,
