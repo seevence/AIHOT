@@ -37,9 +37,9 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
     kind: "company_careers",
     entry_url: "https://talent.baidu.com/jobs/social-list",
     access: "http",
-    enabled: false,
+    enabled: true,
     notes:
-      "2026-11-18 实测：POST /httservice/getPostListNew（form），需常规 origin/referer，否则返回 illegal-visit；列表含 workContent/serviceCondition，可省详情请求。待 B2 单独 gate 后启用。",
+      "2026-11-18 实测：POST /httservice/getPostListNew（form），需常规 origin/referer，否则返回 illegal-visit；列表含 workContent/serviceCondition，可省详情请求。2026-11-18 B2 单源 gate 后启用，5 页真实样本与 live 证据见 evidence/。",
   },
   {
     source_key: "bytedance-official-careers",

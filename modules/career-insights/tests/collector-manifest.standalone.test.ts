@@ -34,6 +34,7 @@ test("真实 manifest 通过结构校验并满足样本配额", async () => {
       "state-council-policy:policy:4",
       "tencent-official-careers:job:6",
       "meituan-official-careers:job:5",
+      "baidu-official-careers:job:5",
     ],
   );
 });
