@@ -341,3 +341,24 @@
 - 端口与服务：API 监听 3002、web 3010，获取 summary 后已停止（PID 36924、39108），复查 3002/3010 均无监听。
 - 本阶段 commit：两份清单文档 `5254d3b docs: add brand and contract-1.0 proposals`；本路线图记录随 `docs(roadmap): record S3 two-snapshot evidence` 提交并推送 `origin feat/career-api-d2`。
 - 未完成/局限：未验证跨自然日的新增窗口；单快照未用完整真实样本验证；`policy_job_shared_themes` 仍受政策样本量与主题交集限制。
+### S5 门禁复跑（完成，待 review）
+
+- 位置与写集：worktree `D:\Codex下载\GitHub项目\seevence\AIHOT-d2`，分支 `feat/career-api-d2`。本阶段仅修改本路线图；未改业务代码与测试，未提交 `collector/**`、`scripts/collect-career*`、`.env`。服务端口只用 3002（API）与 3010（web），未使用 3000/3001。
+- 前置环境：`pg_isready -h 127.0.0.1 -p 5432` → `127.0.0.1:5432 - 接受连接`；`aihot` 库实查 `career_jobs=70`、`career_policies=2`、`career_ingest_runs=6`，与前提一致。`aihot_test` 可用。本机 Node `v24.19.0`，低于 `package.json` 的 `>=24.22.1`。
+- PostgreSQL 中断与恢复：`D:\pg17\pg.log:231` 记录 `2026-11-18 00:39:07.145 CST [12444] LOG: server process (PID 35252) was terminated by exception 0x40010004`，随后 `database system is shut down`；`pg.log:242` 记录 `2026-11-18 12:56:30.495 CST [34108] LOG: database system was interrupted; last known up at 2026-11-18 00:39:00 CST`。已用 `pg_ctl -D "D:\pg17\data" -l "D:\pg17\pg.log" -w -t 60 start` 恢复，`pg_isready` 通过。
+- 静态门禁：
+  - `npm run typecheck` → exit 0。
+  - `npx tsc -p modules/tsconfig.json` → exit 0。
+  - `npm run build -w @aihot/web` → exit 0。
+- 测试门禁：
+  - `npm run test:web` → exit 1，1 pass / 1 fail；失败项为 `outline keyboard scrolling stays inside its boundary in WebKit`，约 10 分钟超时终止。定性为环境缺陷，非基线代码缺陷。
+  - `npm run test:standalone` → exit 1，共 321 tests / 319 pass / 2 fail；两条 outbound-headers 用例以 libuv `Assertion failed: (!(handle->flags & UV_HANDLE_CLOSING))` 崩溃，退出码 `3221226505`（`0xC0000409`）。定性为 Node 24.19.0 环境缺陷（`package.json` 要求 `>=24.22.1`），记 ENV-01。
+  - career DB 测试：13 tests / 12 pass / 1 fail。唯一失败为 `repository.test.ts:126` 仍断言旧文案“政策证据尚未接入，共享主题暂为空。”，后端新文案为“尚未接入政策证据，共享主题暂不计算。”；定性为待 `tests/**` 写集批准后更新，后端逻辑无其他红灯。
+- 迁移检查：`node scripts/check-migrations.ts --base origin/feat/integration` → `migration history and online safety checked`，exit 0（本轮复跑确认）。
+- 服务级检查（本轮实测；API 3002 → `200`，web 3010 → `200`）：
+  - `node scripts/check-career-integration.ts --base http://127.0.0.1:3010` → 5/5 通过（`/api/health`、`/career-insights`、summary、jobs、`jobs/not-a-uuid`），`all checks passed`，exit 0。
+  - 同命令加 `--require-data` → 6/6 通过（额外校验真实职位详情 `034b6d31-fc5c-460b-8da3-b0051300dced`），`all checks passed`，exit 0。
+  - `node scripts/smoke.ts --base http://127.0.0.1:3010` → 30/30 通过（14 个页面 + 13 个 API/静态资源 + MCP initialize），`all checks passed`，exit 0。
+  - `curl -s -w '\n%{time_total}\n' -o NUL http://127.0.0.1:3010/api/site/career-insights/summary` 连跑 5 次：HTTP 200；耗时 `0.008105`、`0.009109`、`0.009177`、`0.012703`、`0.011916` 秒，均值约 `0.0102` 秒。
+- 收尾：按端口定位进程后 `Stop-Process`（不带 `-Force`）停止 3002（PID 25976）与 3010（PID 5296）；复查两端口均无监听（连接返回 `000`）。
+- 遗留阻塞：BLK-01、BLK-03、BLK-04、BLK-05、BLK-06、BLK-07、BLK-09、BLK-10；ENV-01（Node 版本低于 `>=24.22.1`，需升级后复跑 `test:standalone` 与 `test:web`）；`tests/**` 写集未批准（`repository.test.ts:126` 旧文案断言无法更新）；site 品牌与命名未执行（BLK-01/BLK-04）。
