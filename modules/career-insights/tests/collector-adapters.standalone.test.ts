@@ -62,7 +62,7 @@ test("注册表只构造已启用来源，job 与 policy 分离且不发起网�
   const set = createCareerAdapters(fakeTransport(calls));
   assert.deepEqual(
     set.jobs.map((adapter) => adapter.definition.source_key),
-    ["tencent-official-careers"],
+    ["tencent-official-careers", "meituan-official-careers"],
   );
   assert.deepEqual(
     set.policies.map((adapter) => adapter.definition.source_key),

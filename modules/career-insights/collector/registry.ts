@@ -7,6 +7,7 @@ import {
   createNdrcPolicySourceAdapter,
 } from "./adapters/policy-sources.ts";
 import type { PolicySourceAdapter } from "./adapters/policy-sources.ts";
+import { createMeituanOfficialCareersAdapter } from "./adapters/meituan-official-careers.ts";
 import { createTencentOfficialCareersAdapter } from "./adapters/tencent-official-careers.ts";
 import { CAREER_SOURCE_DEFINITIONS } from "./sources.ts";
 
@@ -30,6 +31,9 @@ export function createCareerAdapters(transport: FetchTransport): CareerAdapterSe
     switch (definition.source_key) {
       case "tencent-official-careers":
         jobs.push(createTencentOfficialCareersAdapter(transport));
+        break;
+      case "meituan-official-careers":
+        jobs.push(createMeituanOfficialCareersAdapter(transport));
         break;
       case "ndrc-policy":
         policies.push(createNdrcPolicySourceAdapter(transport));

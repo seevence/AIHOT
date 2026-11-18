@@ -22,6 +22,26 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
       "2026-11-18 试抓：公开 JSON 可用——列表 /tencentcareer/api/post/Query、详情 /tencentcareer/api/post/ByPostId；已存 1 份列表 + 5 份详情样本，适配器与 7 个用例通过。2026-11-18 门禁修复后已启用，live 10 条真实职位见 evidence/live-runs/。",
   },
   {
+    source_key: "meituan-official-careers",
+    label: "美团官方招聘",
+    kind: "company_careers",
+    entry_url: "https://zhaopin.meituan.com/web/position",
+    access: "http",
+    enabled: true,
+    notes:
+      "2026-11-18 实测：公开 JSON——POST /api/official/job/getJobList，无 Cookie/无签名，no-auth 之外无需额外头；列表即含 jobDuty/jobRequirement，可省详情请求。2026-11-18 B2 单源 gate 后启用，5 页真实样本与 live 证据见 evidence/。",
+  },
+  {
+    source_key: "baidu-official-careers",
+    label: "百度官方招聘",
+    kind: "company_careers",
+    entry_url: "https://talent.baidu.com/jobs/social-list",
+    access: "http",
+    enabled: false,
+    notes:
+      "2026-11-18 实测：POST /httservice/getPostListNew（form），需常规 origin/referer，否则返回 illegal-visit；列表含 workContent/serviceCondition，可省详情请求。待 B2 单独 gate 后启用。",
+  },
+  {
     source_key: "bytedance-official-careers",
     label: "字节跳动官方招聘",
     kind: "company_careers",

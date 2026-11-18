@@ -296,9 +296,9 @@ test("重定向到非 http(s) 协议时拒绝，不放行 file 等本地协议",
 });
 
 test("POST 请求体与 content-type 透传到底层 fetch", async () => {
-  let seen: RequestInit | null = null;
+  const captured: { init: RequestInit | null } = { init: null };
   const fetchImpl = (async (_url: string | URL | Request, init: RequestInit) => {
-    seen = init;
+    captured.init = init;
     return bodyPage();
   }) as unknown as typeof fetch;
   const transport = new HttpTransport({ fetchImpl });
@@ -314,10 +314,10 @@ test("POST 请求体与 content-type 透传到底层 fetch", async () => {
     }),
   );
 
-  assert.equal(seen?.method, "POST");
-  assert.equal(seen?.body, '{"page":{"pageNo":1,"pageSize":3}}');
-  assert.equal((seen?.headers as Record<string, string>)["content-type"], "application/json");
-  assert.equal(seen?.redirect, "manual");
+  assert.equal(captured.init?.method, "POST");
+  assert.equal(captured.init?.body, '{"page":{"pageNo":1,"pageSize":3}}');
+  assert.equal((captured.init?.headers as Record<string, string>)["content-type"], "application/json");
+  assert.equal(captured.init?.redirect, "manual");
 });
 
 test("POST 遇到重定向时拒绝，不静默降级为 GET", async () => {

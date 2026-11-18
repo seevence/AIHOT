@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { ReplaySampleMissingError } from "./errors.ts";
 import type { FetchTransport, PageRequest, TransportResponse } from "./transport.ts";
 
@@ -12,8 +13,16 @@ export interface ReplaySample {
   readonly body: Buffer;
 }
 
-export function computeRequestKey(url: string, method = "GET"): string {
-  return `${method.toUpperCase()} ${url}`;
+/**
+ * POST 的可回放键必须区分请求体：同一 URL 不同页码 body 不同，不能撞成同一份样本。
+ * GET 保持原格式，避免已有样本失效。
+ */
+export function computeRequestKey(url: string, method = "GET", body?: string): string {
+  const base = `${method.toUpperCase()} ${url}`;
+  if (body === undefined) {
+    return base;
+  }
+  return `${base}#${createHash("sha256").update(body).digest("hex").slice(0, 16)}`;
 }
 
 export class ReplayTransport implements FetchTransport {
@@ -26,7 +35,7 @@ export class ReplayTransport implements FetchTransport {
   }
 
   async fetchPage(request: PageRequest): Promise<TransportResponse> {
-    const key = computeRequestKey(request.url, request.method);
+    const key = computeRequestKey(request.url, request.method, request.body);
     const anchorMs = this.anchorIso === null ? null : Date.parse(this.anchorIso);
     const sample = this.samples
       .filter((candidate) => candidate.request_key === key)
