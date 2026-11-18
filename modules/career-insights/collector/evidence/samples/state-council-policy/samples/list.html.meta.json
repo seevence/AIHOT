@@ -1,0 +1,14 @@
+{
+  "sample_id": "f8c24ce7b60d29eb",
+  "request_key": "GET https://www.gov.cn/zhengce/index.htm",
+  "request_url": "https://www.gov.cn/zhengce/index.htm",
+  "final_url": "https://www.gov.cn/zhengce/index.htm",
+  "http_status": 200,
+  "content_type": "text/html",
+  "body_sha256": "f8c24ce7b60d29ebe42fa5c98bad7fd196f153e53ee41f19ececc17063dcaf2e",
+  "captured_at": "2026-11-18T04:51:33.412Z",
+  "collector_version": "collector/0.1.0",
+  "extraction_ref": "list",
+  "sanitized": true,
+  "body_file": "list.html"
+}
