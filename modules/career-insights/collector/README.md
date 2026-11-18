@@ -1,6 +1,6 @@
 # Career Insights 采集线
 
-本目录只定义官方候选来源和原始职位适配器边界。准备阶段所有来源均为 `enabled=false`，`CAREER_SOURCE_ADAPTERS` 为空；导入本模块不会发起网络请求、数据库写入或模型调用，也不代表已经实现自动采集。
+本目录登记官方候选来源与适配器边界。当前只有 `tencent-official-careers` 为 `enabled=true`，其余五源保持禁用；适配器由 `registry.ts` 的 `createCareerAdapters(transport)` 按启用状态构造，job 与 policy 分属两张注册表。未构造的适配器不会发起网络请求、数据库写入或模型调用。
 
 ## 来源与访问限制
 
@@ -55,7 +55,7 @@ const rawSample: RawCollectedJobV1 = {
 
 1. 为真实来源新增独立适配器，实现 `CareerSourceAdapter`，令其 `definition` 使用已登记的来源定义。
 2. 在 `collect(signal?)` 中尊重取消信号，只返回原始 `RawCollectedJobV1[]`，不写数据库、不计算指标、不调用前端。
-3. 在 `sources.ts` 显式导入适配器实例，并加入 `CAREER_SOURCE_ADAPTERS`；不得用伪适配器或固定样本填充注册表。
+3. 在 `registry.ts` 的 `createCareerAdapters` 中为新启用来源返回适配器实例；不得用伪适配器或固定样本填充注册表。
 4. 完成真实试抓、原始样本验收和访问限制记录后，再按共享契约变更流程评审来源启用状态。
 ## 已实现的采集纪律（无真实适配器时也可验证）
 
@@ -66,7 +66,7 @@ const rawSample: RawCollectedJobV1 = {
 - `evidence/`：样本 12 项元信息、路径不得越界、敏感响应头剔除与个人数据正文拒收、招聘 5 份/政策 3 份样本下限。
 - `orchestration/`：单来源失败隔离（异常带 `source_key` 抛出并记录）、安全阀关闭时零调用、空结果记为失败、非法记录隔离为 `invalid`、来源/批次状态与退出码、成功率排除 rejected/skipped。
 
-边界保持不变：`CAREER_SOURCE_ADAPTERS` 仍为空，五个来源 `enabled=false`，不得用伪适配器或固定样本填充注册表；真实站点选择器、真实样本与 golden 回放仍需在试抓后补齐。
+边界保持不变：只有 `enabled=true` 的来源会被构造，未启用来源零请求；不得用伪适配器或固定样本填充注册表；真实站点选择器、真实样本与 golden 回放仍需在试抓后补齐。
 ## 适配器骨架与传输注入（2026-11-18）
 
 - `adapters/alibaba-official-careers.ts` 提供 `createAlibabaOfficialCareersAdapter(transport)`：只经注入的 `FetchTransport` 取页，`AbortSignal` 原样透传；真实页面结构未试抓前 `collect()` 抛 `SchemaChangedError` 并在消息中带 `source_key`，不返回占位记录，也不把空页面当成功。
@@ -114,7 +114,7 @@ const rawSample: RawCollectedJobV1 = {
 | `hints.role_family` / `employment_type` | 固定 `unknown` | 不从职位名推断 |
 
 真实样本：`evidence/samples/tencent-official-careers/samples/`（1 份列表 + 5 份详情，12 项 meta 齐全）。
-仍未启用：`sources.ts` 中 `enabled: false`，`CAREER_SOURCE_ADAPTERS` 仍为空。
+启用状态：`sources.ts` 中 `enabled: true`，由 `createCareerAdapters` 构造为唯一 job 适配器。
 ## HTML 解析端口（2026-11-18）
 
 `html/parse.ts` 提供受限 `HtmlDocument` 端口（`text` / `normalizedText` / `texts` / `attr` / `hrefs` / `html` / `entries`），适配器只依赖该端口，不直接接触 cheerio 类型；`hrefs` 与 `entries` 按 base 绝对化且只保留 http(s)，选择器无命中返回 `null` 或 `[]`，由适配器自行抛 `SchemaChangedError`。`entries` 逐项返回首个链接文本、绝对地址与整项文本（用于同项日期）。
@@ -152,7 +152,7 @@ const rawSample: RawCollectedJobV1 = {
 | `theme_ids` | 复用 `data/dictionaries.ts#THEME_KEYWORDS` 对标题+正文匹配，最多 3 个 |
 | `evidence_excerpt` | 正文前 200 字的原文摘录（非摘要） |
 
-**仍未启用**：`CAREER_SOURCE_ADAPTERS` 与政策注册表仍为空；`sources.ts` 已新增 `moe-policy`，并把阿里/字节标注为暂不可采集；启用需 A 的书面结论。
+**仍未启用**：三个政策源 `enabled=false`，`createCareerAdapters` 返回的 policy 注册表为空；`sources.ts` 已新增 `moe-policy`，阿里/字节标注为暂不可采集；政策源需按 A 的门禁顺序逐源启用。
 
 ## 备选招聘源探测（2026-11-18，待定）
 

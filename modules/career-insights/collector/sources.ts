@@ -1,7 +1,4 @@
-import type {
-  CareerSourceAdapter,
-  CareerSourceDefinition,
-} from "./index.ts";
+import type { CareerSourceDefinition } from "./index.ts";
 
 export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
   {
@@ -22,7 +19,7 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
     access: "http",
     enabled: true,
     notes:
-      "2026-11-18 试抓：公开 JSON 可用——列表 /tencentcareer/api/post/Query、详情 /tencentcareer/api/post/ByPostId；已存 1 份列表 + 5 份详情样本，适配器与 7 个用例通过。待启用评审。",
+      "2026-11-18 试抓：公开 JSON 可用——列表 /tencentcareer/api/post/Query、详情 /tencentcareer/api/post/ByPostId；已存 1 份列表 + 5 份详情样本，适配器与 7 个用例通过。2026-11-18 门禁修复后已启用，live 10 条真实职位见 evidence/live-runs/。",
   },
   {
     source_key: "bytedance-official-careers",
@@ -65,5 +62,3 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
       "2026-11-18 试抓：列表 https://www.moe.gov.cn/jyb_xxgk/s5743/s5744/、详情正文 .TRS_Editor / .moe-detail-box、发布时间 meta publishdate；已存 1 列表 + 3 详情样本。作为阿里/字节的替代政策源，待启用评审。",
   },
 ];
-
-export const CAREER_SOURCE_ADAPTERS: readonly CareerSourceAdapter[] = [];

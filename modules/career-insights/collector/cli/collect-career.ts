@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import {
   HttpTransport,
@@ -18,6 +19,7 @@ interface LiveRecord {
   readonly collected: number;
   readonly elapsed_ms: number;
   readonly first_item: string | null;
+  readonly items: readonly Record<string, string | null>[];
 }
 
 const transport = new HttpTransport();
@@ -44,6 +46,12 @@ for (const adapter of adapters.jobs) {
     collected: result.counts.collected,
     elapsed_ms: Date.now() - started,
     first_item: result.jobs[0]?.title ?? null,
+    items: result.jobs.map((job) => ({
+      source_job_id: job.source_job_id,
+      official_url: job.official_url,
+      title: job.title,
+      raw_text_sha256: createHash("sha256").update(job.raw_text).digest("hex"),
+    })),
   });
   for (const invalid of result.invalid) {
     process.stderr.write(`invalid job ${invalid.index}: ${invalid.messages.join(", ")}\n`);
@@ -68,6 +76,12 @@ for (const adapter of adapters.policies) {
     collected: result.counts.collected,
     elapsed_ms: Date.now() - started,
     first_item: result.policies[0]?.title ?? null,
+    items: result.policies.map((policy) => ({
+      policy_item_id: policy.policy_item_id,
+      official_url: policy.official_url,
+      title: policy.title,
+      published_at: policy.published_at,
+    })),
   });
 }
 

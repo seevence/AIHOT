@@ -17,6 +17,7 @@ import {
   parseNdrcPolicyList,
 } from "../collector/adapters/policy-parse.ts";
 import type { FetchTransport, TransportResponse } from "../collector/fetch/transport.ts";
+import { ParseFailedError } from "../collector/fetch/errors.ts";
 
 const SAMPLES = join(dirname(fileURLToPath(import.meta.url)), "../collector/evidence/samples");
 
@@ -127,4 +128,43 @@ test("教育部政策适配器复用 PolicyEvidenceRefV1，产出 3 条", async 
     assert.match(policy.official_url, /^https:\/\/www\.moe\.gov\.cn\//);
     assert.ok(policy.evidence_excerpt.length > 0);
   }
+});
+function govStub(listHtml: string, detailHtml: string): FetchTransport {
+  return {
+    async fetchPage(request) {
+      return response(request.url === GOV_POLICY_LIST_URL ? listHtml : detailHtml, request.url);
+    },
+  };
+}
+
+test("国务院政策 issuer 无法判定时整批 ParseFailedError，不返回部分成功", async () => {
+  const listHtml =
+    '<ul><li><a href="https://www.gov.cn/zhengce/202611/content_9001.htm">某部门关于推动就业工作的通知</a><span>2026-11-18</span></li></ul>';
+  const detailHtml =
+    '<html><head><title>某部门关于推动就业工作的通知_部门_中国政府网</title></head><body><h1>某部门关于推动就业工作的通知</h1><div id="UCAP-CONTENT">为贯彻落实有关要求，现就推动就业工作通知如下，请各单位结合实际认真组织实施，确保各项措施落地见效。</div><div class="article">2026-11-18</div></body></html>';
+  const adapter = createGovPolicySourceAdapter(govStub(listHtml, detailHtml), {
+    sleep: async () => {},
+  });
+
+  await assert.rejects(adapter.collect(), (error: unknown) => {
+    assert.ok(error instanceof ParseFailedError);
+    assert.match(error.message, /issuer 无法判定/);
+    return true;
+  });
+});
+
+test("国务院政策缺少发布时间时整批 ParseFailedError，不静默丢弃", async () => {
+  const listHtml =
+    '<ul><li><a href="https://www.gov.cn/zhengce/202611/content_9002.htm">国务院关于促进就业的若干意见</a></li></ul>';
+  const detailHtml =
+    '<html><head><title>国务院关于促进就业的若干意见_国务院_中国政府网</title></head><body><h1>国务院关于促进就业的若干意见</h1><div id="UCAP-CONTENT">国务院关于促进就业的若干意见，全文内容足够长，用于验证缺少发布时间时必须整批失败而不是静默跳过。</div></body></html>';
+  const adapter = createGovPolicySourceAdapter(govStub(listHtml, detailHtml), {
+    sleep: async () => {},
+  });
+
+  await assert.rejects(adapter.collect(), (error: unknown) => {
+    assert.ok(error instanceof ParseFailedError);
+    assert.match(error.message, /发布时间/);
+    return true;
+  });
 });
