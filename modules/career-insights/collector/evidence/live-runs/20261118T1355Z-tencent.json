@@ -1,7 +1,7 @@
 {
   "schema_version": "1.0",
-  "started_at": "2026-11-18T13:47:15.279Z",
-  "finished_at": "2026-11-18T13:47:33.957Z",
+  "started_at": "2026-11-18T13:55:24.533Z",
+  "finished_at": "2026-11-18T13:55:39.860Z",
   "network_calls_note": "仅公开页面；同域间隔 >=1s；未绕登录/验证码/403",
   "records": [
     {
@@ -14,7 +14,7 @@
       "original_error_name": null,
       "original_error_message": null,
       "collected": 10,
-      "elapsed_ms": 18677,
+      "elapsed_ms": 15326,
       "first_item": "《三角洲行动》3D动作设计师-演绎方向",
       "items": [
         {

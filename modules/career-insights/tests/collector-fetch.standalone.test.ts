@@ -12,6 +12,7 @@ import {
   BudgetExhaustedError,
   ConfigError,
   RequestTimeoutError,
+  SchemeDowngradeError,
 } from "../collector/fetch/errors.ts";
 
 function fakeSleep(clock: FakeClock) {
@@ -214,13 +215,24 @@ test("单调时钟回拨视为配置错误", () => {
     Date.now = original;
   }
 });
-test("HTTPS 请求被重定向到 HTTP 时抛 AccessBlockedError，不静默接受降级", async () => {
-  const fetchImpl = (async () => ({
+function redirect(location: string): Response {
+  return {
+    status: 302,
+    headers: new Headers({ location }),
+    arrayBuffer: async () => new ArrayBuffer(0),
+  } as unknown as Response;
+}
+
+function bodyPage(): Response {
+  return {
     status: 200,
-    url: "http://www.moe.gov.cn/jyb_xxgk/detail.html",
     headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
     arrayBuffer: async () => new TextEncoder().encode("<html></html>").buffer,
-  })) as unknown as typeof fetch;
+  } as unknown as Response;
+}
+
+test("HTTPS 被重定向到 HTTP 时抛 SchemeDowngradeError，不静默接受降级", async () => {
+  const fetchImpl = (async () => redirect("http://www.moe.gov.cn/jyb_xxgk/detail.html")) as unknown as typeof fetch;
   const transport = new HttpTransport({ fetchImpl });
 
   await assert.rejects(
@@ -232,9 +244,52 @@ test("HTTPS 请求被重定向到 HTTP 时抛 AccessBlockedError，不静默接�
       }),
     ),
     (error: unknown) => {
-      assert.ok(error instanceof AccessBlockedError);
+      assert.ok(error instanceof SchemeDowngradeError);
+      assert.equal(error.failureType, "transport_security");
       assert.equal(error.limitationType, "scheme_downgrade");
-      assert.match(error.message, /moe-policy|HTTP/);
+      return true;
+    },
+  );
+});
+
+test("链式 https→http→https 在中间跳即被拦截，不会因为最终落点仍是 https 而放行", async () => {
+  const calls: string[] = [];
+  const fetchImpl = (async (url: string | URL | Request) => {
+    const target = String(url);
+    calls.push(target);
+    if (target === "https://a.example/start") {
+      return redirect("http://a.example/mid");
+    }
+    if (target === "http://a.example/mid") {
+      return redirect("https://a.example/final");
+    }
+    return bodyPage();
+  }) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  await assert.rejects(
+    transport.fetchPage(
+      createPageRequest({ url: "https://a.example/start", sourceKey: "demo", pageTimeoutMs: 5_000 }),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof SchemeDowngradeError);
+      return true;
+    },
+  );
+  assert.deepEqual(calls, ["https://a.example/start"]);
+});
+
+test("重定向到非 http(s) 协议时拒绝，不放行 file 等本地协议", async () => {
+  const fetchImpl = (async () => redirect("file:///C:/secret.txt")) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  await assert.rejects(
+    transport.fetchPage(
+      createPageRequest({ url: "https://a.example/x", sourceKey: "demo", pageTimeoutMs: 5_000 }),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof SchemeDowngradeError);
+      assert.match(error.message, /协议不受支持|重定向目标/);
       return true;
     },
   );

@@ -22,6 +22,11 @@ interface LiveRecord {
   readonly items: readonly Record<string, string | null>[];
 }
 
+if (!process.argv.includes("--live")) {
+  console.error("默认不采集。确认要访问公开招聘/政策页面时，显式加 --live 授权一次采集。");
+  process.exit(2);
+}
+
 const transport = new HttpTransport();
 const adapters = createCareerAdapters(transport);
 const records: LiveRecord[] = [];

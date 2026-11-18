@@ -1,4 +1,5 @@
 export type CollectorFailureType =
+  | "transport_security"
   | "access_blocked"
   | "config_error"
   | "timeout"
@@ -41,6 +42,14 @@ export class AccessBlockedError extends CollectorError {
   constructor(limitationType: string, message: string, sourceKey?: string) {
     super("access_blocked", message, sourceKey);
     this.limitationType = limitationType;
+  }
+}
+
+export class SchemeDowngradeError extends CollectorError {
+  readonly limitationType = "scheme_downgrade";
+
+  constructor(message: string, sourceKey?: string) {
+    super("transport_security", message, sourceKey);
   }
 }
 
@@ -90,6 +99,7 @@ export class SampleRejectedError extends Error {
 
 export const FAILURE_PRIORITY: readonly CollectorFailureType[] = [
   "config_error",
+  "transport_security",
   "access_blocked",
   "timeout",
   "schema_changed",

@@ -175,5 +175,5 @@ const rawSample: RawCollectedJobV1 = {
 - 政策适配器缺 issuer 或发布时间时不再 `continue` 静默丢弃，整批抛 `ParseFailedError`。
 - `runPolicySource` / `runEnabledPolicySources` 独立运行政策批次，不与 job 适配器混跑。
 - 本轮只启用 `tencent-official-careers`，其余五个来源保持 `enabled=false`。
-- Live 证据：`evidence/live-runs/20261118T1339Z-tencent.json`（10 条真实职位，耗时 21.4s，HTTP 200，未绕登录/验证码/403）。
+- Live 证据：`evidence/live-runs/20261118T1355Z-tencent.json`（10 条真实职位，耗时 15.3s，HTTP 200，未绕登录/验证码/403）。
 - 运行方式：`npx tsx modules/career-insights/collector/cli/collect-career.ts [--out <path>]`，采集层仍不写数据库、不归一化、不计算指标。
