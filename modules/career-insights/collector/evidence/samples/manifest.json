@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-11-18T08:30:17.677Z",
+  "generated_at": "2026-11-18T14:36:59.899Z",
   "sources": [
     {
       "source_key": "moe-policy",
@@ -189,6 +189,110 @@
           "extraction_ref": "list",
           "body_file": "tencent-official-careers/samples/list.json",
           "body_sha256": "b2b5af1aaaa09a2727d921c1235814457e7806a1f1995fb094d88da03ac6dada"
+        }
+      ]
+    },
+    {
+      "source_key": "meituan-official-careers",
+      "kind": "job",
+      "sample_count": 5,
+      "samples": [
+        {
+          "sample_id": "481f3cf2b5eebbf3",
+          "request_key": "POST https://zhaopin.meituan.com/api/official/job/getJobList#23a493483be06109",
+          "request_url": "https://zhaopin.meituan.com/api/official/job/getJobList",
+          "captured_at": "2026-11-18T14:34:30.071Z",
+          "extraction_ref": "list-1",
+          "body_file": "meituan-official-careers/samples/list-1.json",
+          "body_sha256": "481f3cf2b5eebbf363359cfa55f332bc10e67a4dd8da46c222d157168b9bb51d"
+        },
+        {
+          "sample_id": "7642fc063654dc29",
+          "request_key": "POST https://zhaopin.meituan.com/api/official/job/getJobList#02f7690414446246",
+          "request_url": "https://zhaopin.meituan.com/api/official/job/getJobList",
+          "captured_at": "2026-11-18T14:34:32.310Z",
+          "extraction_ref": "list-2",
+          "body_file": "meituan-official-careers/samples/list-2.json",
+          "body_sha256": "7642fc063654dc29840acd0ad94fab9a49a044078ab78bcc6d57158ed401f05a"
+        },
+        {
+          "sample_id": "5124d01edd457869",
+          "request_key": "POST https://zhaopin.meituan.com/api/official/job/getJobList#b281577d1109ef05",
+          "request_url": "https://zhaopin.meituan.com/api/official/job/getJobList",
+          "captured_at": "2026-11-18T14:34:34.373Z",
+          "extraction_ref": "list-3",
+          "body_file": "meituan-official-careers/samples/list-3.json",
+          "body_sha256": "5124d01edd45786904d5d61526fde5c4b7e73b5913b80b48e3009ed9f3e258c3"
+        },
+        {
+          "sample_id": "bb0ff36b764b5c3b",
+          "request_key": "POST https://zhaopin.meituan.com/api/official/job/getJobList#8eb1712c484630d5",
+          "request_url": "https://zhaopin.meituan.com/api/official/job/getJobList",
+          "captured_at": "2026-11-18T14:34:35.886Z",
+          "extraction_ref": "list-4",
+          "body_file": "meituan-official-careers/samples/list-4.json",
+          "body_sha256": "bb0ff36b764b5c3b1ef6e96d695459b6faf3c2e3c043f83a6be8e95890876550"
+        },
+        {
+          "sample_id": "4e4d1923366d840e",
+          "request_key": "POST https://zhaopin.meituan.com/api/official/job/getJobList#7b8517df82c22ad7",
+          "request_url": "https://zhaopin.meituan.com/api/official/job/getJobList",
+          "captured_at": "2026-11-18T14:34:38.438Z",
+          "extraction_ref": "list-5",
+          "body_file": "meituan-official-careers/samples/list-5.json",
+          "body_sha256": "4e4d1923366d840e9709deda2c81d6b942d8698c20febeaa4e3ace91ce2c234f"
+        }
+      ]
+    },
+    {
+      "source_key": "baidu-official-careers",
+      "kind": "job",
+      "sample_count": 5,
+      "samples": [
+        {
+          "sample_id": "eeec0d556849cc6e",
+          "request_key": "POST https://talent.baidu.com/httservice/getPostListNew#72c504cb27b5c9fe",
+          "request_url": "https://talent.baidu.com/httservice/getPostListNew",
+          "captured_at": "2026-11-18T14:36:50.707Z",
+          "extraction_ref": "list-1",
+          "body_file": "baidu-official-careers/samples/list-1.json",
+          "body_sha256": "eeec0d556849cc6e0a6cefc186ad583b2768f3fe329dfe3a356e7a15a4556ecf"
+        },
+        {
+          "sample_id": "861a046ce7a31117",
+          "request_key": "POST https://talent.baidu.com/httservice/getPostListNew#2e380e6960b5d6b7",
+          "request_url": "https://talent.baidu.com/httservice/getPostListNew",
+          "captured_at": "2026-11-18T14:36:52.917Z",
+          "extraction_ref": "list-2",
+          "body_file": "baidu-official-careers/samples/list-2.json",
+          "body_sha256": "861a046ce7a311173370a5a35c8c3e2da80003563572c10358e5a4007fcd0b83"
+        },
+        {
+          "sample_id": "9d90287df740fafc",
+          "request_key": "POST https://talent.baidu.com/httservice/getPostListNew#663d3fddf9c551eb",
+          "request_url": "https://talent.baidu.com/httservice/getPostListNew",
+          "captured_at": "2026-11-18T14:36:55.363Z",
+          "extraction_ref": "list-3",
+          "body_file": "baidu-official-careers/samples/list-3.json",
+          "body_sha256": "9d90287df740fafc1a3e49439c54bd34225a781ada619a2ffb88b05964a67684"
+        },
+        {
+          "sample_id": "cb493c0a4a76d883",
+          "request_key": "POST https://talent.baidu.com/httservice/getPostListNew#3c26b620c03e80b1",
+          "request_url": "https://talent.baidu.com/httservice/getPostListNew",
+          "captured_at": "2026-11-18T14:36:57.009Z",
+          "extraction_ref": "list-4",
+          "body_file": "baidu-official-careers/samples/list-4.json",
+          "body_sha256": "cb493c0a4a76d88346259bf177360a8bd30459ef9346597dc60b865c76236ba5"
+        },
+        {
+          "sample_id": "03b83798f02a2af1",
+          "request_key": "POST https://talent.baidu.com/httservice/getPostListNew#0a362b0070b7466c",
+          "request_url": "https://talent.baidu.com/httservice/getPostListNew",
+          "captured_at": "2026-11-18T14:36:58.696Z",
+          "extraction_ref": "list-5",
+          "body_file": "baidu-official-careers/samples/list-5.json",
+          "body_sha256": "03b83798f02a2af1b8ea3072f154ccf7d8fe728737c8ee788054ef7aaa0ea990"
         }
       ]
     }

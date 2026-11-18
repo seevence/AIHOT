@@ -33,6 +33,8 @@ test("真实 manifest 通过结构校验并满足样本配额", async () => {
       "ndrc-policy:policy:4",
       "state-council-policy:policy:4",
       "tencent-official-careers:job:6",
+      "meituan-official-careers:job:5",
+      "baidu-official-careers:job:5",
     ],
   );
 });
@@ -48,7 +50,9 @@ test("manifest 中每份样本的正文存在且 sha256 一致", async () => {
       checked += 1;
     }
   }
-  assert.equal(checked, 18);
+  const expected = manifest.sources.reduce((sum, source) => sum + source.samples.length, 0);
+  assert.equal(checked, expected);
+  assert.ok(checked >= 18, `样本总数不得少于既有基线 18，实际 ${checked}`);
 });
 
 test("manifest 拒绝计数不一致、路径越界与非法哈希", async () => {

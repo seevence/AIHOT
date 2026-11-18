@@ -9,7 +9,8 @@
 |---|---|---|---|
 | B0 准备 | 候选来源登记、纪律层（超时/限速/阻断/预算）、样本 manifest 与 quota | 无 | 已完成（`ea5fc43`） |
 | B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | **PASS，已合入集成（PR #3 + follow-up #4，`d406c16`）** |
-| B2 政策逐源 | 发改委 → 教育部 → 国务院 顺序启用，每源单独 gate | B1 PASS | 未开始 |
+| B2a 三家 job 源 | 腾讯 + 美团 + 百度，三家均为国内互联网/AI 公司，公开 JSON、无登录、无签名 | B1 PASS | 代码与 live 完成，待 A 复核 |
+| B2b 政策逐源 | 发改委 → 教育部 → 国务院 顺序启用，每源单独 gate | B1 PASS | 未开始 |
 | B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 合入 `feat/integration` | 未开始 |
 
 ## B1 已完成内容（2026-11-18）
@@ -54,3 +55,28 @@
 | 2 | BOSS 直聘登录态采集不可用（Playwright 无 Chrome/Chromium，Edge 复用失败），已终止该路线 | 已记录，不再尝试 |
 | 3 | 腾讯 `official_url` 由来源返回 `http://` 详情页，属来源字段本身而非传输降级 | 记录项，展示时按原文 |
 | 4 | collector standalone 测试未进入云端 CI | A |
+
+## B2a 三家 job 源（2026-11-18）
+
+口径：ROADMAP 要求 3 家公司，且必须是国内互联网/AI 公司。原阿里 403、字节 405 全部按纪律停止，改为补两家新源。
+
+| 源 | 端点 | 条数 | 结论 |
+|---|---|---|---|
+| 腾讯（B1） | `GET /tencentcareer/api/post/Query` + `ByPostId` | 2118 | 已启用 |
+| 美团 | `POST /api/official/job/getJobList` | 3399 | 列表即含职责/要求，不请求详情 |
+| 百度 | `POST /httservice/getPostListNew` | 1651 | 需常规 origin/referer；列表即含正文 |
+
+已否决的候选（不绕过）：字节 405、阿里 403、快手前端 sign、拼多多 `anti_content`、京东登录墙；AI 公司组（商汤/MiniMax 需飞书 SaaS header 差 1 次复测、旷视验证码、智谱无公开数据源、讯飞登录墙）本轮 0 可用。
+
+实现要点：
+- `PageRequest` 扩为 `GET | POST` + `body`；POST 不接受重定向，避免静默降级为 GET。
+- 回放键对 POST 追加 body 摘要，同一 URL 不同页码不会撞成同一份样本。
+- 每源 5 页真实样本，job 源样本下限 5 满足。
+- live：三源各 10 条全 success，证据 `evidence/live-runs/20261118T1437Z-three-jobs.json`。
+
+### 数据源性质（必须记录，避免误读）
+
+- 三家接口给出的都是**社会招聘岗位库**，不是校招岗位库：百度 `recruitType=CAMPUS` 实测返回 `status=fail`；美团 `jobShareType=2` 语义不明；关键词"应届"在三家只能筛出 1–2 条不相关结果。
+- 因此本项目采集的是"公开招聘需求结构"，用于观察技能与经验门槛的变化趋势，**不能表述为"校招岗位统计"**。
+- 应届友好度的判定不放在采集层：B 只保留 `hints.experience_raw` / `hints.degree_raw` 原文，由 C 在指标层输出经验门槛分布与"应届友好岗位占比"（经验为空或 0–1 年）。
+- 腾讯 / 美团 / 百度三条数据的 `employment_type` 统一为 `unknown`，不做推断。

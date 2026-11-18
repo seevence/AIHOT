@@ -294,3 +294,69 @@ test("重定向到非 http(s) 协议时拒绝，不放行 file 等本地协议",
     },
   );
 });
+
+test("POST 请求体与 content-type 透传到底层 fetch", async () => {
+  const captured: { init: RequestInit | null } = { init: null };
+  const fetchImpl = (async (_url: string | URL | Request, init: RequestInit) => {
+    captured.init = init;
+    return bodyPage();
+  }) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  await transport.fetchPage(
+    createPageRequest({
+      url: "https://zhaopin.meituan.com/api/official/job/getJobList",
+      sourceKey: "meituan-official-careers",
+      pageTimeoutMs: 5_000,
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: '{"page":{"pageNo":1,"pageSize":3}}',
+    }),
+  );
+
+  assert.equal(captured.init?.method, "POST");
+  assert.equal(captured.init?.body, '{"page":{"pageNo":1,"pageSize":3}}');
+  assert.equal((captured.init?.headers as Record<string, string>)["content-type"], "application/json");
+  assert.equal(captured.init?.redirect, "manual");
+});
+
+test("POST 遇到重定向时拒绝，不静默降级为 GET", async () => {
+  const fetchImpl = (async () =>
+    redirect("https://zhaopin.meituan.com/api/official/job/getJobList2")) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  await assert.rejects(
+    transport.fetchPage(
+      createPageRequest({
+        url: "https://zhaopin.meituan.com/api/official/job/getJobList",
+        sourceKey: "meituan-official-careers",
+        pageTimeoutMs: 5_000,
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: "{}",
+      }),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigError);
+      assert.equal(error.failureType, "config_error");
+      return true;
+    },
+  );
+});
+
+test("跟随重定向后 TransportResponse.finalUrl 返回最终 URL 而不是初始 URL", async () => {
+  const fetchImpl = (async (url: string | URL | Request) => {
+    if (String(url) === "https://a.example/start") {
+      return redirect("https://a.example/final");
+    }
+    return bodyPage();
+  }) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  const response = await transport.fetchPage(
+    createPageRequest({ url: "https://a.example/start", sourceKey: "demo", pageTimeoutMs: 5_000 }),
+  );
+
+  assert.equal(response.requestUrl, "https://a.example/start");
+  assert.equal(response.finalUrl, "https://a.example/final");
+});

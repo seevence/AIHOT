@@ -1,5 +1,5 @@
 import { detectBlock } from "./block-detector.ts";
-import { AccessBlockedError, RequestTimeoutError, SchemeDowngradeError } from "./errors.ts";
+import { AccessBlockedError, ConfigError, RequestTimeoutError, SchemeDowngradeError } from "./errors.ts";
 import { networkCallCounter } from "./transport.ts";
 import type { FetchTransport, PageRequest, TransportResponse } from "./transport.ts";
 
@@ -79,8 +79,15 @@ async function followRedirects(
       headers: request.headers,
       redirect: "manual",
       signal,
+      ...(request.body === undefined ? {} : { body: request.body }),
     });
     if (response.status >= 300 && response.status < 400) {
+      if (request.method === "POST") {
+        throw new ConfigError(
+          `POST 请求不接受重定向（${response.status}）：${currentUrl}`,
+          request.sourceKey,
+        );
+      }
       const location = response.headers.get("location");
       if (location === null) {
         return { response, finalUrl: currentUrl };
@@ -140,7 +147,7 @@ export class HttpTransport implements FetchTransport {
       return {
         status: response.status,
         requestUrl: request.url,
-        finalUrl: response.url,
+        finalUrl,
         contentType,
         headers,
         body,
