@@ -73,3 +73,10 @@
 - 回放键对 POST 追加 body 摘要，同一 URL 不同页码不会撞成同一份样本。
 - 每源 5 页真实样本，job 源样本下限 5 满足。
 - live：三源各 10 条全 success，证据 `evidence/live-runs/20261118T1437Z-three-jobs.json`。
+
+### 数据源性质（必须记录，避免误读）
+
+- 三家接口给出的都是**社会招聘岗位库**，不是校招岗位库：百度 `recruitType=CAMPUS` 实测返回 `status=fail`；美团 `jobShareType=2` 语义不明；关键词"应届"在三家只能筛出 1–2 条不相关结果。
+- 因此本项目采集的是"公开招聘需求结构"，用于观察技能与经验门槛的变化趋势，**不能表述为"校招岗位统计"**。
+- 应届友好度的判定不放在采集层：B 只保留 `hints.experience_raw` / `hints.degree_raw` 原文，由 C 在指标层输出经验门槛分布与"应届友好岗位占比"（经验为空或 0–1 年）。
+- 腾讯 / 美团 / 百度三条数据的 `employment_type` 统一为 `unknown`，不做推断。
