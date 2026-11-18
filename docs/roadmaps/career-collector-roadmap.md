@@ -9,7 +9,7 @@
 |---|---|---|---|
 | B0 准备 | 候选来源登记、纪律层（超时/限速/阻断/预算）、样本 manifest 与 quota | 无 | 已完成（`ea5fc43`） |
 | B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | **PASS，已合入集成（PR #3 + follow-up #4，`d406c16`）** |
-| B2a 三家 job 源 | 腾讯 + 美团 + 百度，三家均为国内互联网/AI 公司，公开 JSON、无登录、无签名 | B1 PASS | 代码与 live 完成，待 A 复核 |
+| B2a 三家 job 源 | 腾讯 + 美团 + 百度，三家均为国内互联网/AI 公司，公开 JSON、无登录、无签名 | B1 PASS | **PASS，已合入集成 `a738569`** |
 | B2b 政策逐源 | 发改委 → 教育部 → 国务院 顺序启用，每源单独 gate | B1 PASS | 未开始 |
 | B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 合入 `feat/integration` | 未开始 |
 
@@ -32,7 +32,7 @@
 | live 证据文件 | `modules/career-insights/collector/evidence/live-runs/20261118T1355Z-tencent.json`（含每条 PostId / official_url / raw_text sha256） |
 | 启用面 | 仅 `tencent-official-careers` = `enabled=true`，其余五源 `enabled=false` |
 
-## B2 待办（B1 PASS 后逐个提交）
+## B2b 待办（B2a PASS 后逐个提交）
 
 顺序：`ndrc-policy` → `moe-policy` → `state-council-policy`。每源必须满足：
 

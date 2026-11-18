@@ -1,6 +1,6 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1、B1、C、E1–E5；A 独立验收项已闭环；B1 腾讯源已启用；等待真实数据与 D2 合并后的 MVP 闭环  
+> 状态：集成分支已包含 A、D1、B1/B2a、C、E1–E5；A 独立验收项已闭环；腾讯/美团/百度三家 job 源已启用；等待政策源与 D2 合并后的 MVP 闭环  
 > 启动日期：2026-11-16  
 > 最近更新：2026-11-18  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
@@ -80,16 +80,23 @@
 
 - B1 **PASS**：enabled boolean、job/policy 注册表分离、逐跳 HTTPS 降级守卫（`transport_security`/`scheme_downgrade`）、政策 fail-closed/空列表 `EmptyResultError`、CLI 强制 `--live` 全部落地。
 - 独立复跑 collector `73/73`、modules tsc；Tencent live 10 条真实职位、15.3s、HTTP 200，证据含每条 PostId/official_url/raw_text sha256。
-- 启用面仅 `tencent-official-careers`；三个政策源仍 `enabled=false`，B2 顺序为发改委 → 教育部 → 国务院，每源单独 gate。
+- 启用面仅 `tencent-official-careers`；三个政策源仍 `enabled=false`，B2b 顺序为发改委 → 教育部 → 国务院，每源单独 gate。
 - D2 **未合入集成**：remote `46578ac`，本地 `6cc45d3` 领先 1 个提交且未推送、无 PR；B3 必须等 D 推送并由 A 审核合并后再开始，不得把 D2 提交塞进 B PR。
-- 验收口径仍缺 3 家国内互联网/AI job 源（当前只有腾讯）；B 正在侦察第 2/3 家，B1 不以此冒充完成 B-01。
+
+**B2a 三家 job 源记录（2026-11-18，PR #5，集成 `a738569`）：**
+
+- **PASS**：腾讯、美团、百度均为国内互联网/AI 公司，公开 JSON、无登录、无签名；阿里 403、字节 405、快手 sign、拼多多 anti_content、京东登录墙及 AI 公司组均按纪律未绕过。
+- PageRequest 支持 POST + body；content-type 通过 headers 传递；replay key 含 method + URL + body hash；逐跳重定向、POST 拒绝重定向、`finalUrl` 回归均通过。
+- 独立复跑 collector `88/88`、modules tsc；三源 live 各 10 条 success，证据 `20261118T1437Z-three-jobs.json` 含 PostId/official_url/raw_text sha256。CI 首次因已知的 `API error logs` 测试超时失败，重跑后 `check`/`docker` 均通过。
+- 非阻断遗留：PageRequest 无独立 contentType 字段（headers 等价）；美团/百度各 5 份列表页样本，无独立详情页样本，B3 前需按真实入库字段完整性再核验；Tencent official_url 为来源返回 http。
+- 当前只差政策源（B2b）与 D2 合入；B2a 不依赖 D2，B3 仍等待 D2。
 
 **跨角色未解决任务（云端标记，2026-11-17）：**
 
 | ID | 未解决事项 | 负责 | 当前阻塞 | 完成标准 |
 |---|---|---|---|---|
 
-| B-01 | 真实招聘与政策采集样本未完成 | B | B1 仅腾讯 1 家已启用；B2 政策未启用；仍缺 2 家国内互联网/AI job 源 | 至少 3 家公司 + 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
+| B-01 | 真实招聘与政策采集样本未完成 | B | B2a 腾讯/美团/百度三家 job 源已启用；B2b 政策三源未启用 | 3 家公司 + 至少 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
 | B-02 | 自动来源不足时的替换/人工核验流程未执行 | B | 来源可达性 | D2 结束仍不足 3 家时，保留真实岗位快照并明确标为“导入” |
 | C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | B-01 | 用真实样本跑通词典、去重与五项指标，不把 fixture 当真实数据 |
 | D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | D2 未合入（remote `46578ac`，本地 `6cc45d3` 未推送、无 PR）；B-01/C-01 | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
