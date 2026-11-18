@@ -11,7 +11,7 @@ import {
   parseTencentPublishedAt,
   toTencentRawJob,
 } from "../collector/adapters/tencent-official-careers.ts";
-import { CAREER_SOURCE_ADAPTERS } from "../collector/index.ts";
+import { createCareerAdapters } from "../collector/index.ts";
 import { CollectorError } from "../collector/fetch/errors.ts";
 import type { FetchTransport, PageRequest, TransportResponse } from "../collector/fetch/transport.ts";
 import { validateRawCollectedJob } from "../collector/validate.ts";
@@ -57,8 +57,18 @@ test("AbortSignal 透传到页面请求", async () => {
   assert.equal(calls[0]?.signal, controller.signal);
 });
 
-test("未注册来源键时构造即失败，注册表保持为空", () => {
-  assert.equal(CAREER_SOURCE_ADAPTERS.length, 0);
+test("注册表只构造已启用来源，job 与 policy 分离且不发起网络", () => {
+  const calls: PageRequest[] = [];
+  const set = createCareerAdapters(fakeTransport(calls));
+  assert.deepEqual(
+    set.jobs.map((adapter) => adapter.definition.source_key),
+    [],
+  );
+  assert.deepEqual(
+    set.policies.map((adapter) => adapter.definition.source_key),
+    [],
+  );
+  assert.equal(calls.length, 0);
 });
 const SAMPLES_DIR = join(
   dirname(fileURLToPath(import.meta.url)),

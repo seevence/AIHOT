@@ -6,7 +6,7 @@ export interface CareerSourceDefinition {
   kind: "company_careers" | "government_policy";
   entry_url: string;
   access: "http" | "playwright" | "aihot_source";
-  enabled: false;
+  enabled: boolean;
   notes: string;
 }
 
@@ -15,10 +15,9 @@ export interface CareerSourceAdapter {
   collect(signal?: AbortSignal): Promise<RawCollectedJobV1[]>;
 }
 
-export {
-  CAREER_SOURCE_ADAPTERS,
-  CAREER_SOURCE_DEFINITIONS,
-} from "./sources.ts";
+export { CAREER_SOURCE_DEFINITIONS } from "./sources.ts";
+export { createCareerAdapters } from "./registry.ts";
+export type { CareerAdapterSet } from "./registry.ts";
 
 export { validateRawCollectedJob } from "./validate.ts";
 export type { ValidationIssueV1, ValidationResultV1 } from "./validate.ts";
@@ -73,8 +72,19 @@ export {
   exitCodeFor,
 } from "./orchestration/status.ts";
 export type { BatchStatus, SourceStatus } from "./orchestration/status.ts";
-export { runEnabledSources, runSource, validateCollectedJobs } from "./orchestration/runner.ts";
-export type { FailureStage, RunContext, SourceRunResult } from "./orchestration/runner.ts";
+export {
+  runEnabledPolicySources,
+  runEnabledSources,
+  runPolicySource,
+  runSource,
+  validateCollectedJobs,
+} from "./orchestration/runner.ts";
+export type {
+  FailureStage,
+  PolicySourceRunResult,
+  RunContext,
+  SourceRunResult,
+} from "./orchestration/runner.ts";
 export { buildRunSummary } from "./orchestration/summary.ts";
 export type { RunSummary } from "./orchestration/summary.ts";
 

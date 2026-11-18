@@ -1,5 +1,5 @@
 import { detectBlock } from "./block-detector.ts";
-import { RequestTimeoutError } from "./errors.ts";
+import { AccessBlockedError, RequestTimeoutError } from "./errors.ts";
 import { networkCallCounter } from "./transport.ts";
 import type { FetchTransport, PageRequest, TransportResponse } from "./transport.ts";
 
@@ -30,6 +30,25 @@ function decodeBody(
   }
 }
 
+
+function assertNoSchemeDowngrade(requestUrl: string, finalUrl: string, sourceKey: string): void {
+  let from: string;
+  let to: string;
+  try {
+    from = new URL(requestUrl).protocol;
+    to = new URL(finalUrl).protocol;
+  } catch {
+    return;
+  }
+  if (from === "https:" && to === "http:") {
+    throw new AccessBlockedError(
+      "scheme_downgrade",
+      `HTTPS 请求被重定向降级到 HTTP：${requestUrl} → ${finalUrl}`,
+      sourceKey,
+    );
+  }
+}
+
 export interface HttpTransportOptions {
   readonly fetchImpl?: typeof fetch;
 }
@@ -57,6 +76,7 @@ export class HttpTransport implements FetchTransport {
         redirect: "follow",
         signal,
       });
+      assertNoSchemeDowngrade(request.url, response.url, request.sourceKey);
       const body = Buffer.from(await response.arrayBuffer());
       const headers: Record<string, string> = {};
       response.headers.forEach((value, key) => {

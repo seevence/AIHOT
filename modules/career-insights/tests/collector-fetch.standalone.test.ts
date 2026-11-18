@@ -5,6 +5,8 @@ import { HostRateLimiter } from "../collector/fetch/rate-limiter.ts";
 import { SourceBudget } from "../collector/fetch/budget.ts";
 import { runWithRetry } from "../collector/fetch/retry.ts";
 import { detectBlock } from "../collector/fetch/block-detector.ts";
+import { HttpTransport } from "../collector/fetch/http-transport.ts";
+import { createPageRequest } from "../collector/fetch/transport.ts";
 import {
   AccessBlockedError,
   BudgetExhaustedError,
@@ -211,4 +213,29 @@ test("单调时钟回拨视为配置错误", () => {
   } finally {
     Date.now = original;
   }
+});
+test("HTTPS 请求被重定向到 HTTP 时抛 AccessBlockedError，不静默接受降级", async () => {
+  const fetchImpl = (async () => ({
+    status: 200,
+    url: "http://www.moe.gov.cn/jyb_xxgk/detail.html",
+    headers: new Headers({ "content-type": "text/html; charset=utf-8" }),
+    arrayBuffer: async () => new TextEncoder().encode("<html></html>").buffer,
+  })) as unknown as typeof fetch;
+  const transport = new HttpTransport({ fetchImpl });
+
+  await assert.rejects(
+    transport.fetchPage(
+      createPageRequest({
+        url: "https://www.moe.gov.cn/jyb_xxgk/detail.html",
+        sourceKey: "moe-policy",
+        pageTimeoutMs: 5_000,
+      }),
+    ),
+    (error: unknown) => {
+      assert.ok(error instanceof AccessBlockedError);
+      assert.equal(error.limitationType, "scheme_downgrade");
+      assert.match(error.message, /moe-policy|HTTP/);
+      return true;
+    },
+  );
 });

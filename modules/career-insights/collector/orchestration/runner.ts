@@ -1,5 +1,6 @@
-import type { RawCollectedJobV1 } from "../../contracts/index.ts";
+import type { PolicyEvidenceRefV1, RawCollectedJobV1 } from "../../contracts/index.ts";
 import type { CareerSourceAdapter } from "../index.ts";
+import type { PolicySourceAdapter } from "../adapters/policy-sources.ts";
 import {
   AccessBlockedError,
   CollectorError,
@@ -166,6 +167,95 @@ export async function runEnabledSources(
   const results: SourceRunResult[] = [];
   for (const adapter of adapters) {
     results.push(await runSource(adapter, context));
+  }
+  return results;
+}
+export interface PolicySourceRunResult {
+  readonly source_key: string;
+  readonly entry_url: string;
+  readonly attempted_at: string;
+  readonly status: SourceStatus;
+  readonly failure_type: CollectorFailureType | null;
+  readonly failure_stage: FailureStage | null;
+  readonly original_error_name: string | null;
+  readonly original_error_message: string | null;
+  readonly policies: readonly PolicyEvidenceRefV1[];
+  readonly counts: {
+    readonly collected: number;
+  };
+  readonly error: Error | null;
+}
+
+export async function runPolicySource(
+  adapter: PolicySourceAdapter,
+  context: RunContext,
+): Promise<PolicySourceRunResult> {
+  const sourceKey = adapter.definition.source_key;
+  const entryUrl = adapter.definition.entry_url;
+  const attemptedAt = (context.now ?? (() => new Date().toISOString()))();
+
+  if (!context.collectEnabled) {
+    return {
+      source_key: sourceKey,
+      entry_url: entryUrl,
+      attempted_at: attemptedAt,
+      status: "rejected",
+      failure_type: null,
+      failure_stage: null,
+      original_error_name: null,
+      original_error_message: null,
+      policies: [],
+      counts: { collected: 0 },
+      error: null,
+    };
+  }
+
+  try {
+    const policies = await adapter.collect(context.signal);
+    const decision = decideSourceStatus({
+      enabled: true,
+      safetyValveClosed: false,
+      collected: policies.length,
+      invalid: 0,
+      failure: policies.length === 0 ? "empty_result" : null,
+    });
+    return {
+      source_key: sourceKey,
+      entry_url: entryUrl,
+      attempted_at: attemptedAt,
+      status: decision.status,
+      failure_type: decision.failure_type,
+      failure_stage: null,
+      original_error_name: null,
+      original_error_message: null,
+      policies,
+      counts: { collected: policies.length },
+      error: null,
+    };
+  } catch (error) {
+    return {
+      source_key: sourceKey,
+      entry_url: entryUrl,
+      attempted_at: attemptedAt,
+      status: "failed",
+      failure_type: toFailureType(error),
+      failure_stage: toFailureStage(error),
+      original_error_name: failureName(error),
+      original_error_message: failureMessage(error),
+      policies: [],
+      counts: { collected: 0 },
+      error: new Error(`[${sourceKey}] ${failureMessage(error)}`, { cause: error }),
+    };
+  }
+}
+
+export async function runEnabledPolicySources(
+  adapters: readonly PolicySourceAdapter[],
+  context: RunContext,
+): Promise<readonly PolicySourceRunResult[]> {
+  const results: PolicySourceRunResult[] = [];
+  for (const adapter of adapters) {
+    results.push(await runPolicySource(adapter, context));
   }
   return results;
 }

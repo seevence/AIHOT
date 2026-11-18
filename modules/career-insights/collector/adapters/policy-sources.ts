@@ -61,6 +61,17 @@ function itemIdFromUrl(url: string): string {
   return last.replace(/\.html?$/i, "");
 }
 
+
+function throwIfSkipped(sourceKey: string, total: number, skipped: readonly string[]): void {
+  if (skipped.length === 0) {
+    return;
+  }
+  throw new ParseFailedError(
+    `政策解析失败 ${skipped.length}/${total} 条，拒绝静默丢弃：${skipped.join("; ")}`,
+    sourceKey,
+  );
+}
+
 function resolveThemes(draft: PolicyDetailDraft): string[] {
   const haystack = `${draft.title}\n${draft.bodyRaw}`.toLowerCase();
   const themes: string[] = [];
@@ -124,6 +135,7 @@ export function createGovPolicySourceAdapter(
       );
 
       const out: PolicyEvidenceRefV1[] = [];
+      const skipped: string[] = [];
       for (const item of items) {
         if (signal?.aborted === true) {
           throw new DOMException("采集被取消", "AbortError");
@@ -138,13 +150,17 @@ export function createGovPolicySourceAdapter(
           item.publishedAt,
         );
         const issuer = resolveGovIssuer(draft);
-        if (issuer === null) continue;
-        try {
-          out.push(toPolicyRef(draft, issuer, "national"));
-        } catch {
+        if (issuer === null) {
+          skipped.push(`${item.url} issuer 无法判定`);
           continue;
         }
+        try {
+          out.push(toPolicyRef(draft, issuer, "national"));
+        } catch (error) {
+          skipped.push(`${item.url} ${error instanceof Error ? error.message : String(error)}`);
+        }
       }
+      throwIfSkipped(GOV_SOURCE_KEY, items.length, skipped);
       return out;
     },
   };
@@ -170,6 +186,7 @@ export function createNdrcPolicySourceAdapter(
       );
 
       const out: PolicyEvidenceRefV1[] = [];
+      const skipped: string[] = [];
       for (const item of items) {
         if (signal?.aborted === true) {
           throw new DOMException("采集被取消", "AbortError");
@@ -185,10 +202,11 @@ export function createNdrcPolicySourceAdapter(
         );
         try {
           out.push(toPolicyRef(draft, "国家发展改革委", "national"));
-        } catch {
-          continue;
+        } catch (error) {
+          skipped.push(`${item.url} ${error instanceof Error ? error.message : String(error)}`);
         }
       }
+      throwIfSkipped(NDRC_SOURCE_KEY, items.length, skipped);
       return out;
     },
   };
@@ -213,6 +231,7 @@ export function createMoePolicySourceAdapter(
       ).slice(0, itemLimit);
 
       const out: PolicyEvidenceRefV1[] = [];
+      const skipped: string[] = [];
       for (const item of items) {
         if (signal?.aborted === true) {
           throw new DOMException("采集被取消", "AbortError");
@@ -228,10 +247,11 @@ export function createMoePolicySourceAdapter(
         );
         try {
           out.push(toPolicyRef(draft, "教育部", "national"));
-        } catch {
-          continue;
+        } catch (error) {
+          skipped.push(`${item.url} ${error instanceof Error ? error.message : String(error)}`);
         }
       }
+      throwIfSkipped(MOE_SOURCE_KEY, items.length, skipped);
       return out;
     },
   };
