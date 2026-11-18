@@ -20,7 +20,7 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
     kind: "company_careers",
     entry_url: "https://careers.tencent.com/",
     access: "http",
-    enabled: false,
+    enabled: true,
     notes:
       "2026-11-18 试抓：公开 JSON 可用——列表 /tencentcareer/api/post/Query、详情 /tencentcareer/api/post/ByPostId；已存 1 份列表 + 5 份详情样本，适配器与 7 个用例通过。待启用评审。",
   },

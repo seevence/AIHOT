@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "started_at": "2026-11-18T13:39:00.675Z",
+  "finished_at": "2026-11-18T13:39:22.121Z",
+  "network_calls_note": "仅公开页面；同域间隔 >=1s；未绕登录/验证码/403",
+  "records": [
+    {
+      "phase": "jobs",
+      "source_key": "tencent-official-careers",
+      "entry_url": "https://careers.tencent.com/",
+      "status": "success",
+      "failure_type": null,
+      "failure_stage": null,
+      "original_error_name": null,
+      "original_error_message": null,
+      "collected": 10,
+      "elapsed_ms": 21445,
+      "first_item": "《三角洲行动》3D动作设计师-演绎方向"
+    }
+  ]
+}

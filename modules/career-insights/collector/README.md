@@ -167,3 +167,13 @@ const rawSample: RawCollectedJobV1 = {
 | 京东 / 网易 / 华为 | 首页可达，未发现内联职位数据或公开 API |
 
 结论与决策（2026-11-18）：**未找到可零依赖接入的第三家招聘源**；按用户决策改用**第三家政策源——教育部公告公示（`moe-policy`）**替代阿里/字节的采集位。已抓 1 列表 + 3 详情真实样本，`parseMoePolicyList/Detail` 与 `createMoePolicySourceAdapter` 已落地（issuer 固定 `教育部`，发布时间取 `meta[name="publishdate"]`，正文 `.TRS_Editor` → `.moe-detail-box`）。招聘源实际保留腾讯 1 家。人社部首页/栏目页返回 JS 混淆挑战，按 `access_blocked` 记录，不绕过。
+
+## 门禁修复与腾讯启用（2026-11-18，接管者）
+
+- `CareerSourceDefinition.enabled` 由字面量 `false` 改为 `boolean`；`registry.ts` 的 `createCareerAdapters(transport)` 只构造已启用来源，job 与 policy 返回两张独立注册表。
+- `HttpTransport` 拒绝 HTTPS→HTTP 重定向降级，记 `access_blocked` / `scheme_downgrade`，不再静默接受降级响应。
+- 政策适配器缺 issuer 或发布时间时不再 `continue` 静默丢弃，整批抛 `ParseFailedError`。
+- `runPolicySource` / `runEnabledPolicySources` 独立运行政策批次，不与 job 适配器混跑。
+- 本轮只启用 `tencent-official-careers`，其余五个来源保持 `enabled=false`。
+- Live 证据：`evidence/live-runs/20261118T1339Z-tencent.json`（10 条真实职位，耗时 21.4s，HTTP 200，未绕登录/验证码/403）。
+- 运行方式：`npx tsx modules/career-insights/collector/cli/collect-career.ts [--out <path>]`，采集层仍不写数据库、不归一化、不计算指标。
