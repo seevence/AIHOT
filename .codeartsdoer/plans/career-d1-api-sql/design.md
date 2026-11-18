@@ -82,8 +82,8 @@ export class SqlCareerRepository implements CareerRepository {
 
 指标数组顺序与内容（`label`、`unit`、`disclaimer` 取自 `METRIC_SPECS_V1`；`version="1.0"`）：
 
-1. `job_family_share`：按枚举顺序 `ai_algorithm`、`ai_application_development`、`data`、`ai_product_operations`、`unknown`，仅对 `COUNT(*)>0` 的职族各输出一条。`numerator_count` = 该职族数；`denominator_count` = `sample_size`；`value = numerator/denominator`（分母 0 时 `status="insufficient_data"`、`value=null`）；`dimension={role_family}`。
-2. `skill_demand_share`：展开 `jsonb_array_elements_text(skills)` 分组，按 `COUNT(*) DESC, skill_id ASC` 取前 10 个技能，各输出一条。`numerator_count` = 含该技能的职位数；`denominator_count` = `sample_size`；`dictionary_version` = `SKILL_DICTIONARY_VERSION`；`dimension={skill_id}`。未识别技能比例无法从当前态表度量，D1 不填 `unknown_count` / `unknown_ratio`（可选字段）。
+1. `job_family_share`：按枚举顺序 `ai_algorithm`、`ai_application_development`、`data`、`ai_product_operations`、`unknown`，仅对 `COUNT(*)>0` 的职族各输出一条。`numerator_count` = 该职族数；`denominator_count` = `sample_size`；`value = numerator/denominator`（分母 0 时 `status="insufficient_data"`、`value=null`）；`dimension={role_family}`。`sample_size=0` 时输出一条 `dimension={}` 的占位指标（`status="insufficient_data"`、`value=null`、`numerator_count=0`、`denominator_count=0`、`evidence=[]`），保证五项指标按 spec 顺序齐全。
+2. `skill_demand_share`：展开 `jsonb_array_elements_text(skills)` 分组，按 `COUNT(*) DESC, skill_id ASC` 取前 10 个技能，各输出一条。`numerator_count` = 含该技能的职位数；`denominator_count` = `sample_size`；`dictionary_version` = `SKILL_DICTIONARY_VERSION`；`dimension={skill_id}`。未识别技能比例无法从当前态表度量，D1 不填 `unknown_count` / `unknown_ratio`（可选字段）。`sample_size=0` 时同样输出一条 `dimension={}` 的占位指标（同上字段）。
 3. `student_friendly_share`：一条。`numerator_count` = `student_friendly='yes'` 数；`denominator_count` = `sample_size`；`unknown_count` = `student_friendly='unknown'` 数；`unknown_ratio` = `unknown_count / sample_size`（分母 0 时 `null`）；`dimension={}`。
 4. `observed_new_jobs`：若 `has_multiple_snapshots=false` → `status="insufficient_data"`、`value=null`、`numerator_count=0`、`denominator_count=null`。否则取最新两个不同 `observed_at`：`t1=max`、`t0=第二大的 distinct observed_at`；`numerator_count` = `COUNT(*) WHERE first_seen_at > t0 AND first_seen_at <= t1`；`denominator_count` = `sample_size`；`value = numerator_count`（单位 count）；`status="ok"`；证据为窗口内职位。
 5. `policy_job_shared_themes`：D1 固定 `status="insufficient_data"`、`value=null`、`numerator_count=0`、`denominator_count=null`、`evidence=[]`、`dimension={}`；政策证据接入留 D3。
@@ -95,7 +95,7 @@ export class SqlCareerRepository implements CareerRepository {
 - `sample_size=0` → `[{code:"insufficient_data", message:"尚未采集到任何职位。"}]`，其余指标均 `insufficient_data`/`null`；
 - `sample_size>0` 且 `unknown` 职族 >0 → 追加 `{code:"unknown_fields", message:"存在未识别职族的职位，已单列 unknown。"}`；
 - `sample_size>0` 且 `student_friendly='unknown'` >0 → 追加 `{code:"unknown_fields", message:"存在未标记应届友好度的职位，unknown 不表示不友好。"}`；
-- 政策侧固定追加 `{code:"insufficient_data", message:"政策证据尚未接入，共享主题暂为空。"}`。
+- 政策侧固定追加 `{code:"insufficient_data", message:"尚未接入政策证据，共享主题暂不计算。"}`（D2 实现文案；D1 测试断言已同步）。
 
 ### C-INGEST@1
 
@@ -115,6 +115,7 @@ export async function ingestBatch(db: Db, batch: CareerObservationBatchV1): Prom
   4. 有行且 `content_hash` 不同 → 更新除 `id/source_key/job_key/first_seen_at/created_at` 外全部当前态列，`last_seen_at = GREATEST(last_seen_at, $fetched_at)`，`updated_at = now()`；`updated++`。
   5. 观测：`INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt) VALUES (...) ON CONFLICT (job_id, observed_at, content_hash) DO NOTHING`；`observed_at = job.fetched_at`（逐条真实采集时间，不用 `batch.fetched_at` 替代）；`source_url = job.official_url`；`raw_excerpt = job.raw_text.slice(0, 500)`。
 - `last_seen_at` 只前进不后退（`GREATEST`）；`first_seen_at` 永不改写。
+- jsonb 列（`locations`、`skills`、`skill_evidence`、`raw_payload`、政策的 `theme_ids`）必须经 `sql.json(value)` 传参；不得先 `JSON.stringify`，否则 postgres.js 会把字符串再编码为 JSON 字符串标量（实测 `jsonb_typeof` 为 `string`，导致 `@>` 过滤失效、`jsonb_array_elements_text` 报 22023、共享主题查不到）。
 - 返回 `{accepted, updated, duplicates, rejected, errors}`，`errors` 按 `index` 升序；四个计数之和等于 `batch.jobs.length`。
 - 幂等：同一批次连续执行两次，第二次 `accepted=0`、`duplicates=n`、观测行数不变、`last_seen_at` 不倒退。
 

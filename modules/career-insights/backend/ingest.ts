@@ -1,9 +1,10 @@
-import { sql as postgresSql, type Sql, type Tx, type Db } from "@aihot/backend/db";
+import { sql as postgresSql, type Db } from "@aihot/backend/db";
 import type { JSONValue, Parameter } from "postgres";
 import type { CareerObservationBatchV1, IngestResultV1 } from "../contracts/api.ts";
 import type { DataOrigin, NormalizedJobV1 } from "../contracts/index.ts";
 import { validateNormalizedJobV1, type ValidationIssueV1 } from "../data/validate.ts";
 import { InvalidParameterError } from "./errors.ts";
+import { inTransaction } from "./transaction.ts";
 
 const MAX_BATCH_SIZE = 100;
 const MAX_REPORTED_ISSUES = 3;
@@ -18,15 +19,6 @@ export interface IngestContext {
 
 const DEFAULT_ORIGIN: DataOrigin = "live";
 
-function isTransaction(db: Db): db is Tx {
-  return typeof (db as { savepoint?: unknown }).savepoint === "function";
-}
-
-async function inTransaction<T>(db: Db, run: (tx: Db) => Promise<T>): Promise<T> {
-  if (isTransaction(db)) return run(db);
-  const sqlDb = db as Sql;
-  return sqlDb.begin(async (tx) => run(tx)) as unknown as Promise<T>;
-}
 
 function jsonColumn(value: unknown): Parameter | null {
   // sql.json marks the value as JSON: a pre-stringified value would make postgres.js encode the

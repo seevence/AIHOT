@@ -71,7 +71,7 @@ async function titlesFor(filters: Partial<JobFiltersV1>): Promise<string[]> {
 }
 
 beforeEach(async () => {
-  await sql`TRUNCATE career_job_observations, career_jobs RESTART IDENTITY`;
+  await sql`TRUNCATE career_job_observations, career_jobs, career_policies, career_ingest_runs RESTART IDENTITY`;
 });
 
 after(async () => {
@@ -123,7 +123,7 @@ test("an empty table answers summary with insufficient_data instead of a made-up
 
   assert.deepEqual(summary.warnings.map((warning) => warning.code), ["insufficient_data", "insufficient_data"]);
   assert.ok(summary.warnings.some((warning) => warning.message === "尚未采集到任何职位。"));
-  assert.ok(summary.warnings.some((warning) => warning.message === "政策证据尚未接入，共享主题暂为空。"));
+  assert.ok(summary.warnings.some((warning) => warning.message === "尚未接入政策证据，共享主题暂不计算。"));
 
 });
 

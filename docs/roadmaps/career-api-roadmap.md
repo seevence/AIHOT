@@ -40,7 +40,7 @@
 | 阶段 | 对应 ROADMAP | 范围 | 状态 | Review |
 |---|---|---|---|---|
 | D1 | D2 后端部分 | SQL repository（summary/listJobs/jobDetail）、幂等观测写入、`career-insights.ingest` 队列、后端数据库测试 | 已完成 | PASS（2026-11-17） |
-| D2 | D2 收尾 | 真实采集数据接入联调、`--require-data` 运行验收、数据库语义与 API v1 冻结前的真实样本验证 | 未开始 | - |
+| D2 | S0–S5（tasks.md） | 云端基线、迁移、批次事实、两时点、政策真实样本、门禁复跑 | 完成，待独立 review | 本机补强事务/日期/测试后待审 |
 | D3 | D3 | SQL 指标冻结：五项指标真实样本验证、政策 `shared_themes` 接入真实政策证据、证据回溯 | 未开始 | - |
 | D4 | D4–D5 | 后端只修缺陷：第二次采集观测验证、性能与错误处理、联调期问题 | 未开始 | - |
 | S0 | tasks.md S0 | 云端基线 worktree、路线图登记、基线门禁、写集隔离模板 | 完成，待独立 review | 门禁部分通过（环境缺陷 2 例） |
@@ -526,3 +526,21 @@
 - 验证使用 `API_PORT=3002`、`WEB_PORT=3010`、`API_BASE_URL=http://127.0.0.1:3002`，全程未使用 3000/3001，验证结束后即停止两个进程。
 
 **提交范围。** 仅 `modules/career-insights/backend/policy-repository.ts`（两处 SQL 替换 + 新增 `jsonThemes` 辅助函数与 import）与本路线图小节。`collector/**`、`scripts/collect-career*`、`.env`、样本 HTML、临时验证脚本均未纳入提交。
+### 本机对齐云端 D2（2026-11-18）
+
+- 本地 `AIHOT-d` worktree 原在 `feat/career-api-d1`（`6aed150`），现切换到 `feat/career-api-d2`（track `origin/feat/career-api-d2`），HEAD 与云端一致 `46578ac`；D1 提交是 D2 祖先，未丢失。
+- 计划文档 `.codeartsdoer/plans/career-d1-api-sql/design.md` 补齐与实现一致的三处：空表占位指标、jsonb 必须 `sql.json()`、政策 warning 新文案。
+- 本机环境：Docker Desktop 需手动启动；测试用独立容器 `aihot-career-test-pg`（`127.0.0.1:5433`），迁移 0156–0162 已应用。政府站抓取与 GitHub 是两条网络，`.gov.cn` 不需要梯子。
+
+### D2 补强（2026-11-18，本机）
+
+复核云端 D2 后按第一性原理补三处，均在 D 写集内：
+
+1. **政策批次原子性**：新增 `backend/transaction.ts` 的 `inTransaction(db, fn)`，`ingestBatch` 与 `writePolicyBatch` 共用。政策批次改为单事务写入；中途 SQL 失败整批回滚，`career_ingest_runs` 保留 failed 记录（`startRun` 占位 + catch 中 `finishRun`）。
+2. **日期校验**：`validatePolicy` 增加真实日历校验。实测 `2026-02-30` 会被 PostgreSQL 静默改成 `2026-03-02` 并以错误日期入库；现在直接 `rejected`，不再静默漂移。
+3. **回归测试**：新增 `tests/policy.test.ts`（6 项：jsonb 数组与幂等、按条拒绝、批次回滚、日期排序、共享主题命中、无交集语义）；`tests/repository.test.ts` 的清理范围加入政策/批次表，并更新 warning 文案断言。
+
+验证：`npx tsc -p modules/tsconfig.json` 通过；`modules/career-insights/tests/*.test.ts` **55/55 通过**（本地 PostgreSQL 5433）。
+独立 review：**PASS**（无 blocker / major）；确认移除事务包装或日历校验都会让测试失败（非 tautological），现有行为未变，写集仅 D 范围。
+非阻断项已处理：政策批次 >100 改用 `InvalidParameterError`；补闰日正向（2028-02-29）与 >100 拒绝用例。剩余观察：复用外部事务时失败记录会随外部事务回滚（当前唯一调用方传顶层 `sql`，无触发路径），留待出现外部事务调用方时再收紧。
+提交在 `feat/career-api-d2` 本地，待队长确认后推送，不并入集成分支。

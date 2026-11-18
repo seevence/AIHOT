@@ -4,7 +4,9 @@ import type { IngestResultV1 } from "../contracts/api.ts";
 import type { DataOrigin, PolicyEvidenceRefV1 } from "../contracts/index.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import type { MetricJobInputV1 } from "../data/metrics.ts";
+import { InvalidParameterError } from "./errors.ts";
 import { finishRun, startRun } from "./run-repository.ts";
+import { inTransaction } from "./transaction.ts";
 
 export type PolicySourceTier = "government_official" | "official_media" | "other_public";
 
@@ -104,8 +106,15 @@ function validatePolicy(item: PolicyItemInputV1, index: number): string | null {
   if (!POLICY_SOURCE_TIERS.includes(item.source_tier)) {
     return `${index}.source_tier: unsupported source tier ${String(item.source_tier)}`;
   }
-  if (item.published_at !== null && !/^\d{4}-\d{2}-\d{2}$/.test(item.published_at)) {
-    return `${index}.published_at: expected YYYY-MM-DD or null`;
+  if (item.published_at !== null) {
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(item.published_at)) {
+      return `${index}.published_at: expected YYYY-MM-DD or null`;
+    }
+    // PostgreSQL silently moves 2026-02-30 to 2026-03-02; a policy date must not drift.
+    const day = new Date(`${item.published_at}T00:00:00.000Z`);
+    if (Number.isNaN(day.getTime()) || day.toISOString().slice(0, 10) !== item.published_at) {
+      return `${index}.published_at: not a real calendar date`;
+    }
   }
   if (!isOfficialUrl(item.official_url)) {
     return `${index}.official_url: not an official https source`;
@@ -125,7 +134,9 @@ function toDateOnly(value: Date | string): string {
 
 export async function writePolicyBatch(db: Db, batch: PolicyBatchInputV1): Promise<IngestResultV1> {
   if (batch.policies.length > MAX_BATCH_SIZE) {
-    throw new Error(`A policy batch may contain at most ${MAX_BATCH_SIZE} items.`);
+    throw new InvalidParameterError(`A policy batch may contain at most ${MAX_BATCH_SIZE} items.`, {
+      parameter: "policies",
+    });
   }
 
   const key = {
@@ -135,77 +146,81 @@ export async function writePolicyBatch(db: Db, batch: PolicyBatchInputV1): Promi
     collector_version: batch.collector_version,
     data_origin: batch.data_origin,
   };
-  const started = await startRun(db, key);
+  await startRun(db, key);
 
   try {
-    const counts = { accepted: 0, updated: 0, duplicates: 0 };
-    const errors: IngestResultV1["errors"] = [];
-    let rejected = 0;
+    const result = await inTransaction(db, async (tx) => {
+      const counts = { accepted: 0, updated: 0, duplicates: 0 };
+      const errors: IngestResultV1["errors"] = [];
+      let rejected = 0;
 
-    for (const [index, item] of batch.policies.entries()) {
-      const problem = validatePolicy(item, index);
-      if (problem !== null) {
-        rejected += 1;
-        if (errors.length < MAX_REPORTED_ISSUES) errors.push({ index, code: "validation_failed", message: problem });
-        continue;
+      for (const [index, item] of batch.policies.entries()) {
+        const problem = validatePolicy(item, index);
+        if (problem !== null) {
+          rejected += 1;
+          if (errors.length < MAX_REPORTED_ISSUES) errors.push({ index, code: "validation_failed", message: problem });
+          continue;
+        }
+
+        const existing = await tx<{ id: string; content_hash: string }[]>`
+          SELECT id, content_hash FROM career_policies
+          WHERE source_key = ${item.source_key} AND policy_item_id = ${item.policy_item_id}
+          FOR UPDATE`;
+        const row = existing[0];
+
+        if (row === undefined) {
+          await tx`
+            INSERT INTO career_policies (
+              policy_item_id, source_key, source_tier, title, issuer, published_at, official_url,
+              theme_ids, evidence_excerpt, content_hash, collector_version, data_origin,
+              fetched_at, first_seen_at, last_seen_at
+            ) VALUES (
+              ${item.policy_item_id}, ${item.source_key}, ${item.source_tier}, ${item.title}, ${item.issuer},
+              ${item.published_at}, ${item.official_url}, ${jsonThemes(item.theme_ids)}::jsonb,
+              ${item.evidence_excerpt.slice(0, EXCERPT_LIMIT)}, ${item.content_hash},
+              ${item.collector_version}, ${batch.data_origin},
+              ${item.fetched_at}::timestamptz, ${item.fetched_at}::timestamptz, ${item.fetched_at}::timestamptz
+            )`;
+          counts.accepted += 1;
+        } else if (row.content_hash === item.content_hash) {
+          await tx`
+            UPDATE career_policies
+            SET last_seen_at = GREATEST(last_seen_at, ${item.fetched_at}::timestamptz), updated_at = now()
+            WHERE id = ${row.id}`;
+          counts.duplicates += 1;
+        } else {
+          await tx`
+            UPDATE career_policies SET
+              source_tier = ${item.source_tier},
+              title = ${item.title},
+              issuer = ${item.issuer},
+              published_at = ${item.published_at},
+              official_url = ${item.official_url},
+              theme_ids = ${jsonThemes(item.theme_ids)}::jsonb,
+              evidence_excerpt = ${item.evidence_excerpt.slice(0, EXCERPT_LIMIT)},
+              content_hash = ${item.content_hash},
+              collector_version = ${item.collector_version},
+              data_origin = ${batch.data_origin},
+              fetched_at = ${item.fetched_at}::timestamptz,
+              last_seen_at = GREATEST(last_seen_at, ${item.fetched_at}::timestamptz),
+              updated_at = now()
+            WHERE id = ${row.id}`;
+          counts.updated += 1;
+        }
       }
 
-      const existing = await db<{ id: string; content_hash: string }[]>`
-        SELECT id, content_hash FROM career_policies
-        WHERE source_key = ${item.source_key} AND policy_item_id = ${item.policy_item_id}
-        FOR UPDATE`;
-      const row = existing[0];
+      return { ...counts, rejected, errors };
+    });
 
-      if (row === undefined) {
-        await db`
-          INSERT INTO career_policies (
-            policy_item_id, source_key, source_tier, title, issuer, published_at, official_url,
-            theme_ids, evidence_excerpt, content_hash, collector_version, data_origin,
-            fetched_at, first_seen_at, last_seen_at
-          ) VALUES (
-            ${item.policy_item_id}, ${item.source_key}, ${item.source_tier}, ${item.title}, ${item.issuer},
-            ${item.published_at}, ${item.official_url}, ${jsonThemes(item.theme_ids)}::jsonb,
-            ${item.evidence_excerpt.slice(0, EXCERPT_LIMIT)}, ${item.content_hash},
-            ${item.collector_version}, ${batch.data_origin},
-            ${item.fetched_at}::timestamptz, ${item.fetched_at}::timestamptz, ${item.fetched_at}::timestamptz
-          )`;
-        counts.accepted += 1;
-      } else if (row.content_hash === item.content_hash) {
-        await db`
-          UPDATE career_policies
-          SET last_seen_at = GREATEST(last_seen_at, ${item.fetched_at}::timestamptz), updated_at = now()
-          WHERE id = ${row.id}`;
-        counts.duplicates += 1;
-      } else {
-        await db`
-          UPDATE career_policies SET
-            source_tier = ${item.source_tier},
-            title = ${item.title},
-            issuer = ${item.issuer},
-            published_at = ${item.published_at},
-            official_url = ${item.official_url},
-            theme_ids = ${jsonThemes(item.theme_ids)}::jsonb,
-            evidence_excerpt = ${item.evidence_excerpt.slice(0, EXCERPT_LIMIT)},
-            content_hash = ${item.content_hash},
-            collector_version = ${item.collector_version},
-            data_origin = ${batch.data_origin},
-            fetched_at = ${item.fetched_at}::timestamptz,
-            last_seen_at = GREATEST(last_seen_at, ${item.fetched_at}::timestamptz),
-            updated_at = now()
-          WHERE id = ${row.id}`;
-        counts.updated += 1;
-      }
-    }
-
-    const status = rejected > 0 ? "partial" : "ok";
+    const status = result.rejected > 0 ? "partial" : "ok";
     await finishRun(
       db,
       key,
       status,
-      { job_count: batch.policies.length, ...counts, rejected },
-      rejected > 0 ? `${rejected} policy item(s) rejected` : null,
+      { job_count: batch.policies.length, ...result },
+      result.rejected > 0 ? `${result.rejected} policy item(s) rejected` : null,
     );
-    return { ...counts, rejected, errors };
+    return result;
   } catch (error) {
     await finishRun(
       db,
