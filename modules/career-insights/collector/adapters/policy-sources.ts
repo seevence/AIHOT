@@ -1,7 +1,7 @@
 import type { PolicyEvidenceRefV1 } from "../../contracts/index.ts";
 import type { CareerSourceDefinition } from "../index.ts";
 import { CAREER_SOURCE_DEFINITIONS } from "../sources.ts";
-import { ConfigError, ParseFailedError } from "../fetch/errors.ts";
+import { ConfigError, EmptyResultError, ParseFailedError } from "../fetch/errors.ts";
 import type { FetchTransport, PageRequest } from "../fetch/transport.ts";
 import {
   MOE_POLICY_LIST_URL,
@@ -133,6 +133,9 @@ export function createGovPolicySourceAdapter(
         0,
         itemLimit,
       );
+      if (items.length === 0) {
+        throw new EmptyResultError(`政策列表 ${GOV_POLICY_LIST_URL} 未解析出任何条目`, GOV_SOURCE_KEY);
+      }
 
       const out: PolicyEvidenceRefV1[] = [];
       const skipped: string[] = [];
@@ -184,6 +187,9 @@ export function createNdrcPolicySourceAdapter(
         0,
         itemLimit,
       );
+      if (items.length === 0) {
+        throw new EmptyResultError(`政策列表 ${NDRC_POLICY_LIST_URL} 未解析出任何条目`, NDRC_SOURCE_KEY);
+      }
 
       const out: PolicyEvidenceRefV1[] = [];
       const skipped: string[] = [];
@@ -229,6 +235,9 @@ export function createMoePolicySourceAdapter(
         listResponse.body.toString("utf8"),
         MOE_POLICY_LIST_URL,
       ).slice(0, itemLimit);
+      if (items.length === 0) {
+        throw new EmptyResultError(`政策列表 ${MOE_POLICY_LIST_URL} 未解析出任何条目`, MOE_SOURCE_KEY);
+      }
 
       const out: PolicyEvidenceRefV1[] = [];
       const skipped: string[] = [];

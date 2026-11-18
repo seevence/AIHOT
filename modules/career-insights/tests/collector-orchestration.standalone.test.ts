@@ -18,7 +18,7 @@ function definition(sourceKey: string): CareerSourceDefinition {
     kind: "company_careers",
     entry_url: "https://example.test/",
     access: "http",
-    enabled: false,
+    enabled: true,
     notes: "测试用来源定义",
   };
 }

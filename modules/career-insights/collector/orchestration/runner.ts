@@ -120,7 +120,7 @@ export async function runSource(
     const checked = validateCollectedJobs(raw);
     const failure = checked.valid.length === 0 && checked.invalid.length === 0 ? "empty_result" : null;
     const decision = decideSourceStatus({
-      enabled: true,
+      enabled: adapter.definition.enabled,
       safetyValveClosed: false,
       collected: checked.valid.length,
       invalid: checked.invalid.length,
@@ -213,7 +213,7 @@ export async function runPolicySource(
   try {
     const policies = await adapter.collect(context.signal);
     const decision = decideSourceStatus({
-      enabled: true,
+      enabled: adapter.definition.enabled,
       safetyValveClosed: false,
       collected: policies.length,
       invalid: 0,

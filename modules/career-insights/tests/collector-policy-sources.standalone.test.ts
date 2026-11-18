@@ -17,7 +17,7 @@ import {
   parseNdrcPolicyList,
 } from "../collector/adapters/policy-parse.ts";
 import type { FetchTransport, TransportResponse } from "../collector/fetch/transport.ts";
-import { ParseFailedError } from "../collector/fetch/errors.ts";
+import { EmptyResultError, ParseFailedError } from "../collector/fetch/errors.ts";
 
 const SAMPLES = join(dirname(fileURLToPath(import.meta.url)), "../collector/evidence/samples");
 
@@ -148,7 +148,10 @@ test("国务院政策 issuer 无法判定时整批 ParseFailedError，不返回�
 
   await assert.rejects(adapter.collect(), (error: unknown) => {
     assert.ok(error instanceof ParseFailedError);
+    assert.equal(error.failureType, "parse_failed");
+    assert.equal(error.sourceKey, "state-council-policy");
     assert.match(error.message, /issuer 无法判定/);
+    assert.match(error.message, /content_9001\.htm/);
     return true;
   });
 });
@@ -164,7 +167,23 @@ test("国务院政策缺少发布时间时整批 ParseFailedError，不静默丢
 
   await assert.rejects(adapter.collect(), (error: unknown) => {
     assert.ok(error instanceof ParseFailedError);
+    assert.equal(error.failureType, "parse_failed");
+    assert.equal(error.sourceKey, "state-council-policy");
     assert.match(error.message, /发布时间/);
+    return true;
+  });
+});
+
+test("政策列表解析 0 条时抛 EmptyResultError，不把空列表当成功", async () => {
+  const adapter = createGovPolicySourceAdapter(
+    govStub("<ul></ul>", "<html></html>"),
+    { sleep: async () => {} },
+  );
+
+  await assert.rejects(adapter.collect(), (error: unknown) => {
+    assert.ok(error instanceof EmptyResultError);
+    assert.equal(error.failureType, "empty_result");
+    assert.equal(error.sourceKey, "state-council-policy");
     return true;
   });
 });

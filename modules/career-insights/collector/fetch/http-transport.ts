@@ -1,5 +1,5 @@
 import { detectBlock } from "./block-detector.ts";
-import { AccessBlockedError, RequestTimeoutError } from "./errors.ts";
+import { AccessBlockedError, RequestTimeoutError, SchemeDowngradeError } from "./errors.ts";
 import { networkCallCounter } from "./transport.ts";
 import type { FetchTransport, PageRequest, TransportResponse } from "./transport.ts";
 
@@ -31,22 +31,72 @@ function decodeBody(
 }
 
 
-function assertNoSchemeDowngrade(requestUrl: string, finalUrl: string, sourceKey: string): void {
-  let from: string;
-  let to: string;
+const MAX_REDIRECTS = 5;
+
+function assertSupportedScheme(url: string, sourceKey: string, label: string): string {
+  let protocol: string;
   try {
-    from = new URL(requestUrl).protocol;
-    to = new URL(finalUrl).protocol;
+    protocol = new URL(url).protocol;
   } catch {
-    return;
+    throw new SchemeDowngradeError(`${label}不是合法 URL：${url}`, sourceKey);
   }
+  if (protocol !== "http:" && protocol !== "https:") {
+    throw new SchemeDowngradeError(`${label}协议不受支持：${protocol}`, sourceKey);
+  }
+  return protocol;
+}
+
+function assertNoSchemeDowngrade(fromUrl: string, toUrl: string, sourceKey: string): void {
+  const from = assertSupportedScheme(fromUrl, sourceKey, "当前请求");
+  const to = assertSupportedScheme(toUrl, sourceKey, "重定向目标");
   if (from === "https:" && to === "http:") {
-    throw new AccessBlockedError(
-      "scheme_downgrade",
-      `HTTPS 请求被重定向降级到 HTTP：${requestUrl} → ${finalUrl}`,
+    throw new SchemeDowngradeError(
+      `HTTPS 请求被重定向降级到 HTTP：${fromUrl} → ${toUrl}`,
       sourceKey,
     );
   }
+}
+
+interface FollowResult {
+  readonly response: Response;
+  readonly finalUrl: string;
+}
+
+/**
+ * 手动跟随重定向，逐跳校验协议。
+ * 使用 redirect:"manual" 是因为 fetch 只暴露最终 URL，链式 https→http→https 在 follow 模式下不可见。
+ */
+async function followRedirects(
+  fetchImpl: typeof fetch,
+  request: PageRequest,
+  signal: AbortSignal,
+): Promise<FollowResult> {
+  let currentUrl = request.url;
+  assertSupportedScheme(currentUrl, request.sourceKey, "请求");
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const response = await fetchImpl(currentUrl, {
+      method: request.method,
+      headers: request.headers,
+      redirect: "manual",
+      signal,
+    });
+    if (response.status >= 300 && response.status < 400) {
+      const location = response.headers.get("location");
+      if (location === null) {
+        return { response, finalUrl: currentUrl };
+      }
+      const nextUrl = new URL(location, currentUrl).toString();
+      assertNoSchemeDowngrade(currentUrl, nextUrl, request.sourceKey);
+      currentUrl = nextUrl;
+      continue;
+    }
+    return { response, finalUrl: currentUrl };
+  }
+  throw new AccessBlockedError(
+    "redirect_loop",
+    `重定向超过 ${MAX_REDIRECTS} 跳：${request.url}`,
+    request.sourceKey,
+  );
 }
 
 export interface HttpTransportOptions {
@@ -70,13 +120,7 @@ export class HttpTransport implements FetchTransport {
         request.signal === undefined
           ? controller.signal
           : AbortSignal.any([controller.signal, request.signal]);
-      const response = await this.fetchImpl(request.url, {
-        method: request.method,
-        headers: request.headers,
-        redirect: "follow",
-        signal,
-      });
-      assertNoSchemeDowngrade(request.url, response.url, request.sourceKey);
+      const { response, finalUrl } = await followRedirects(this.fetchImpl, request, signal);
       const body = Buffer.from(await response.arrayBuffer());
       const headers: Record<string, string> = {};
       response.headers.forEach((value, key) => {
@@ -86,7 +130,7 @@ export class HttpTransport implements FetchTransport {
       const blocked = detectBlock({
         status: response.status,
         requestUrl: request.url,
-        finalUrl: response.url,
+        finalUrl,
         bodyText: decodeBody(body, contentType, headers),
         sourceKey: request.sourceKey,
       });

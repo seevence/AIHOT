@@ -8,7 +8,7 @@
 | 阶段 | 目标 | 依赖 | 状态 |
 |---|---|---|---|
 | B0 准备 | 候选来源登记、纪律层（超时/限速/阻断/预算）、样本 manifest 与 quota | 无 | 已完成（`ea5fc43`） |
-| B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | 开发完成，待 A 复核 |
+| B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | 开发完成；独立审查 5 个 major 已修，待 A 复核 |
 | B2 政策逐源 | 发改委 → 教育部 → 国务院 顺序启用，每源单独 gate | B1 PASS | 未开始 |
 | B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 合入 `feat/integration` | 未开始 |
 
@@ -26,9 +26,9 @@
 | 项 | 结果 |
 |---|---|
 | `npx tsc -p modules/tsconfig.json` | 通过 |
-| collector standalone | 70/70 通过（含 replay 零网络、降级守卫、注册表分离、政策 fail-closed 两项回归） |
-| live collect | 腾讯 10 条真实职位，18.7s，HTTP 200，未绕登录/验证码/403 |
-| live 证据文件 | `modules/career-insights/collector/evidence/live-runs/20261118T1339Z-tencent.json`（含每条 PostId / official_url / raw_text sha256） |
+| collector standalone | 73/73 通过（含 replay 零网络、降级守卫、注册表分离、政策 fail-closed 两项回归） |
+| live collect | 腾讯 10 条真实职位，15.3s，HTTP 200，未绕登录/验证码/403 |
+| live 证据文件 | `modules/career-insights/collector/evidence/live-runs/20261118T1355Z-tencent.json`（含每条 PostId / official_url / raw_text sha256） |
 | 启用面 | 仅 `tencent-official-careers` = `enabled=true`，其余五源 `enabled=false` |
 
 ## B2 待办（B1 PASS 后逐个提交）
