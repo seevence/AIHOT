@@ -10,8 +10,8 @@
 | B0 准备 | 候选来源登记、纪律层（超时/限速/阻断/预算）、样本 manifest 与 quota | 无 | 已完成（`ea5fc43`） |
 | B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | **PASS，已合入集成（PR #3 + follow-up #4，`d406c16`）** |
 | B2a 三家 job 源 | 腾讯 + 美团 + 百度，三家均为国内互联网/AI 公司，公开 JSON、无登录、无签名 | B1 PASS | **PASS，已合入集成 `a738569`** |
-| B2b 政策逐源 | 发改委 → 国务院（教育部因 https 必跳 http 暂缓） | B1 PASS | 发改委完成，待 A 复核；国务院未开始 |
-| B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 合入 `feat/integration` | 未开始 |
+| B2b 政策逐源 | 发改委 → 国务院（教育部因 https 必跳 http 不启用） | B1 PASS | **发改委 PASS，已合入 `fa18e9b`**；国务院未开始 |
+| B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 已合入 `8004c8a` | 可开工 |
 
 ## B1 已完成内容（2026-11-18）
 
@@ -34,7 +34,7 @@
 
 ## B2b 待办（B2a PASS 后逐个提交）
 
-顺序：`ndrc-policy` → `moe-policy` → `state-council-policy`。每源必须满足：
+顺序：`ndrc-policy` → `state-council-policy`。`moe-policy` **不启用**：其所有 HTTPS 请求都被源站跳到 HTTP，不能为单源打开 HTTPS→HTTP 例外。`国家工信部/人社部` 栏目为 JS 空壳，零依赖不可抓取，不采用。每个启用源必须满足：
 
 - 3/3 详情解析成功，跳过数 0；缺 issuer/发布时间整批失败，不返回部分成功。
 - live 一次：HTTP 200、`final_url` 为 HTTPS、无登录/验证码/403。

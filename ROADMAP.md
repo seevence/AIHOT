@@ -1,6 +1,6 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1、B1/B2a、C、E1–E5；A 独立验收项已闭环；腾讯/美团/百度三家 job 源已启用；等待政策源与 D2 合并后的 MVP 闭环  
+> 状态：集成分支已包含 A、D1/D2、B1/B2a/B2b-1、C、E1–E5；A 独立验收项已闭环；三 job 源与发改委政策源已启用；B3 真实入库可开工  
 > 启动日期：2026-11-16  
 > 最近更新：2026-11-18  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
@@ -80,8 +80,8 @@
 
 - B1 **PASS**：enabled boolean、job/policy 注册表分离、逐跳 HTTPS 降级守卫（`transport_security`/`scheme_downgrade`）、政策 fail-closed/空列表 `EmptyResultError`、CLI 强制 `--live` 全部落地。
 - 独立复跑 collector `73/73`、modules tsc；Tencent live 10 条真实职位、15.3s、HTTP 200，证据含每条 PostId/official_url/raw_text sha256。
-- 启用面仅 `tencent-official-careers`；三个政策源仍 `enabled=false`，B2b 顺序为发改委 → 教育部 → 国务院，每源单独 gate。
-- D2 **未合入集成**：remote `46578ac`，本地 `6cc45d3` 领先 1 个提交且未推送、无 PR；B3 必须等 D 推送并由 A 审核合并后再开始，不得把 D2 提交塞进 B PR。
+- 启用面仅 `tencent-official-careers`；政策源在该阶段仍 `enabled=false`。
+- D2 后续已由 PR #6 合入集成，见下方 D2 记录。
 
 **B2a 三家 job 源记录（2026-11-18，PR #5，集成 `a738569`）：**
 
@@ -89,17 +89,24 @@
 - PageRequest 支持 POST + body；content-type 通过 headers 传递；replay key 含 method + URL + body hash；逐跳重定向、POST 拒绝重定向、`finalUrl` 回归均通过。
 - 独立复跑 collector `88/88`、modules tsc；三源 live 各 10 条 success，证据 `20261118T1437Z-three-jobs.json` 含 PostId/official_url/raw_text sha256。CI 首次因已知的 `API error logs` 测试超时失败，重跑后 `check`/`docker` 均通过。
 - 非阻断遗留：PageRequest 无独立 contentType 字段（headers 等价）；美团/百度各 5 份列表页样本，无独立详情页样本，B3 前需按真实入库字段完整性再核验；Tencent official_url 为来源返回 http。
-- 当前只差政策源（B2b）与 D2 合入；B2a 不依赖 D2，B3 仍等待 D2。
+- B2b 政策源仍待逐源启用；B3 的 D2 依赖已满足。
+
+**B2b-1 发改委与 D2 集成记录（2026-11-18）：**
+
+- B2b-1 **PASS**：`ndrc-policy` 启用，live 1 列表 + 3 详情 success、5.8s，3 条 `PolicyEvidenceRefV1`，全部 HTTPS；独立复跑 collector `88/88`、modules tsc；PR #7 合并 `fa18e9b`。
+- 政策顺序裁定：**发改委 → 国务院**。教育部所有 HTTPS 请求被源站跳到 HTTP，不为单源打开 HTTPS→HTTP 例外；工信部/人社部栏目为 JS 空壳，零依赖不可抓取。两源满足最低政策源要求。
+- D2 PR #6 **PASS 并合入** `8004c8a`：`ingestWithRun`、run/observation batch、政策写入与证据读取、migrations 0156–0162、真实数据来源字段已进入集成；CI check/docker 通过，迁移门禁和 modules tsc 通过。B3 真实入库可开工。
+- 本地 Docker 数据库尚未应用 0156–0162，B3 前需重建/运行 setup。
 
 **跨角色未解决任务（云端标记，2026-11-17）：**
 
 | ID | 未解决事项 | 负责 | 当前阻塞 | 完成标准 |
 |---|---|---|---|---|
 
-| B-01 | 真实招聘与政策采集样本未完成 | B | B2a 腾讯/美团/百度三家 job 源已启用；B2b 政策三源未启用 | 3 家公司 + 至少 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
+| B-01 | 真实招聘与政策采集样本未完成 | B | B2a 三 job 源已启用；发改委已启用 PASS；国务院政策源未启用；教育部不启用 | 3 家公司 + 至少 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
 | B-02 | 自动来源不足时的替换/人工核验流程未执行 | B | 来源可达性 | D2 结束仍不足 3 家时，保留真实岗位快照并明确标为“导入” |
 | C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | B-01 | 用真实样本跑通词典、去重与五项指标，不把 fixture 当真实数据 |
-| D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | D2 未合入（remote `46578ac`，本地 `6cc45d3` 未推送、无 PR）；B-01/C-01 | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
+| D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | D2 已合入 `8004c8a`；待 B3 真实批次与 C-01 复验 | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
 | D-02 | 政策 `shared_themes` 真实证据、来源覆盖变化、未识别技能比例 | D / C | 政策真实样本 | 政策可跳原文，空数据/未知值不误导，真实样本后冻结契约 `1.0` |
 | CD-01 | 后端时间统一 UTC `Z`；政策 `published_at` 日期格式确认 | C / D | 真实数据格式 | `as_of`/`observed_at`/`published_at` 格式一致，前端 `CareerTime` 可读化复验 |
 | E-01 | 真实数据下页面全链路复验 | E | D-01 | 总览/方向/详情/证据/分页在真实数据上复验，保留桌面与手机截图 |
