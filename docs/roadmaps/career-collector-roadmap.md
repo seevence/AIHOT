@@ -8,7 +8,7 @@
 | 阶段 | 目标 | 依赖 | 状态 |
 |---|---|---|---|
 | B0 准备 | 候选来源登记、纪律层（超时/限速/阻断/预算）、样本 manifest 与 quota | 无 | 已完成（`ea5fc43`） |
-| B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | 开发完成；独立审查 5 个 major 已修，待 A 复核 |
+| B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | **PASS，已合入集成（PR #3 + follow-up #4，`d406c16`）** |
 | B2 政策逐源 | 发改委 → 教育部 → 国务院 顺序启用，每源单独 gate | B1 PASS | 未开始 |
 | B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 合入 `feat/integration` | 未开始 |
 

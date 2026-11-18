@@ -1,8 +1,8 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1、C、E1–E5；A 独立验收项已闭环；等待 2026-11-18 真实数据接入后的 MVP 闭环  
+> 状态：集成分支已包含 A、D1、B1、C、E1–E5；A 独立验收项已闭环；B1 腾讯源已启用；等待真实数据与 D2 合并后的 MVP 闭环  
 > 启动日期：2026-11-16  
-> 最近更新：2026-11-17  
+> 最近更新：2026-11-18  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
 > 私有仓库：`https://github.com/seevence/AIHOT`  
 > 交付目标：下周评审  
@@ -76,15 +76,23 @@
 - 云端 CI `44100893219`：`check` 与 `docker` 均 **success**（typecheck、Web tests、Docker build/smoke、migration safety 全通过；一次后端超时重跑后通过）。
 - A-03 仍被真实数据阻塞，待 2026-11-18 数据到位后执行。
 
+**B1 采集门禁记录（2026-11-18，PR #3 + follow-up #4，集成 `d406c16`）：**
+
+- B1 **PASS**：enabled boolean、job/policy 注册表分离、逐跳 HTTPS 降级守卫（`transport_security`/`scheme_downgrade`）、政策 fail-closed/空列表 `EmptyResultError`、CLI 强制 `--live` 全部落地。
+- 独立复跑 collector `73/73`、modules tsc；Tencent live 10 条真实职位、15.3s、HTTP 200，证据含每条 PostId/official_url/raw_text sha256。
+- 启用面仅 `tencent-official-careers`；三个政策源仍 `enabled=false`，B2 顺序为发改委 → 教育部 → 国务院，每源单独 gate。
+- D2 **未合入集成**：remote `46578ac`，本地 `6cc45d3` 领先 1 个提交且未推送、无 PR；B3 必须等 D 推送并由 A 审核合并后再开始，不得把 D2 提交塞进 B PR。
+- 验收口径仍缺 3 家国内互联网/AI job 源（当前只有腾讯）；B 正在侦察第 2/3 家，B1 不以此冒充完成 B-01。
+
 **跨角色未解决任务（云端标记，2026-11-17）：**
 
 | ID | 未解决事项 | 负责 | 当前阻塞 | 完成标准 |
 |---|---|---|---|---|
 
-| B-01 | 真实招聘与政策采集样本未完成 | B | 外部来源可用性 | 至少 3 家公司 + 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
+| B-01 | 真实招聘与政策采集样本未完成 | B | B1 仅腾讯 1 家已启用；B2 政策未启用；仍缺 2 家国内互联网/AI job 源 | 至少 3 家公司 + 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
 | B-02 | 自动来源不足时的替换/人工核验流程未执行 | B | 来源可达性 | D2 结束仍不足 3 家时，保留真实岗位快照并明确标为“导入” |
 | C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | B-01 | 用真实样本跑通词典、去重与五项指标，不把 fixture 当真实数据 |
-| D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | B-01、C-01、真实数据（预计 2026-11-18） | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
+| D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | D2 未合入（remote `46578ac`，本地 `6cc45d3` 未推送、无 PR）；B-01/C-01 | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
 | D-02 | 政策 `shared_themes` 真实证据、来源覆盖变化、未识别技能比例 | D / C | 政策真实样本 | 政策可跳原文，空数据/未知值不误导，真实样本后冻结契约 `1.0` |
 | CD-01 | 后端时间统一 UTC `Z`；政策 `published_at` 日期格式确认 | C / D | 真实数据格式 | `as_of`/`observed_at`/`published_at` 格式一致，前端 `CareerTime` 可读化复验 |
 | E-01 | 真实数据下页面全链路复验 | E | D-01 | 总览/方向/详情/证据/分页在真实数据上复验，保留桌面与手机截图 |
