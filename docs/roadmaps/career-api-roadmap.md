@@ -362,3 +362,145 @@
   - `curl -s -w '\n%{time_total}\n' -o NUL http://127.0.0.1:3010/api/site/career-insights/summary` 连跑 5 次：HTTP 200；耗时 `0.008105`、`0.009109`、`0.009177`、`0.012703`、`0.011916` 秒，均值约 `0.0102` 秒。
 - 收尾：按端口定位进程后 `Stop-Process`（不带 `-Force`）停止 3002（PID 25976）与 3010（PID 5296）；复查两端口均无监听（连接返回 `000`）。
 - 遗留阻塞：BLK-01、BLK-03、BLK-04、BLK-05、BLK-06、BLK-07、BLK-09、BLK-10；ENV-01（Node 版本低于 `>=24.22.1`，需升级后复跑 `test:standalone` 与 `test:web`）；`tests/**` 写集未批准（`repository.test.ts:126` 旧文案断言无法更新）；site 品牌与命名未执行（BLK-01/BLK-04）。
+### 政策源升级：B 真实政府样本接入（2026-11-18）
+
+- 队长原话（微信群，2026-11-18）：①“跑之前读云端仓库”；②“一定要抓json吗 不能其他格式吗”“那添加解析库吧”“数据总要拿到手”。本次先 `git fetch` 读取云端，再使用 B 已提交的 Cheerio HTML 解析器与真实样本，不请求本机实时政府页面。
+- B 分支：`origin/feat/career-collector-20261118`，精确提交 `ea5fc43ea8e2a1e000c884cd2e8eab9c461a1d5e`（`feat: add sample manifest and quota gate`）。只读 worktree 为 `D:/Codex下载/GitHub项目/seevence/AIHOT-b-read`（detached HEAD），`npm ci --prefer-offline --no-audit --no-fund` 成功安装 296 个包；延续 ENV-01，出现 Node `24.19.0` 低于 `>=24.22.1` 的引擎警告。B worktree 无 tracked 改动、无提交。
+- 样本清单：`manifest.json` version `1.0`、generated_at `2026-11-18T08:30:17.677Z`；`moe-policy`、`ndrc-policy`、`state-council-policy` 各有 `list.html` 与 `detail-1/2/3.html`，另有逐文件 `.meta.json`。本次只解析 9 个 detail，list 用于列表日期回退。
+- 核验：9/9 解析成功、9/9 sidecar 为 HTTP 200 + `text/html`、9/9 HTML 字节 SHA-256 与 manifest/sidecar 一致、9/9 `published_at` 非空；跳过 0 条。标题、正文与日期来自 B 的 `parseMoePolicyDetail` / `parseNdrcPolicyDetail` / `parseGovPolicyDetail`。B 的 `PolicyDetailDraft.issuingAuthority` 原始值均为 `null`，入库机关不是伪装成解析器输出：教育部第 1 条取正文署名，另 2 条取 HTML `source`；发改委 3 条取正文标题的联合署名；中国政府网 3 条取标题/正文首段或国务院令。
+
+**9 条真实政策/官方文件字段**
+
+| 来源 / 样本 | 标题 | 机构（issuer） | published_at | theme_ids | official_url |
+|---|---|---|---|---|---|
+| `moe-policy/detail-1` | 关于2025年中小学实验教学能力展示活动现场展示案例名单的公告 | 教育部基础教育司 | 2026-10-26 | `[]`（未命中主题词典） | https://www.moe.gov.cn/jyb_xxgk/s5743/s5744/202610/t20261026_1456016.html |
+| `moe-policy/detail-2` | 学位授予单位（不含军队单位）自主设置二级学科和交叉学科名单 | 教育部 | 2026-10-09 | `[]`（未命中主题词典） | https://www.moe.gov.cn/jyb_xxgk/s5743/s5744/202610/t20261008_1453325.html |
+| `moe-policy/detail-3` | 2026年“讲述我的育人故事”全国展示活动入围教师名单 | 教育部 | 2026-09-04 | `[]`（未命中主题词典） | https://www.moe.gov.cn/jyb_xxgk/s5743/s5744/202609/t20260904_1449021.html |
+| `ndrc-policy/detail-1` | 关于印发《“十五五”新型储能实施方案》的通知(发改能源〔2026〕1565号) | 国家发展改革委 国家能源局 | 2026-11-13 | `[]`（未命中主题词典） | https://www.ndrc.gov.cn/xxgk/zcfb/tz/202611/t20261113_1408810.html |
+| `ndrc-policy/detail-2` | 关于印发《全国守信激励措施基础清单(2026年版)》的通知(发改财金〔2026〕1593号) | 国家发展改革委 中国人民银行 | 2026-11-09 | `[]`（未命中主题词典） | https://www.ndrc.gov.cn/xxgk/zcfb/tz/202611/t20261109_1408709.html |
+| `ndrc-policy/detail-3` | 关于印发《实施全面节约战略行动方案》的通知(发改环资〔2026〕1424号) | 国家发展改革委等部门 | 2026-11-04 | `[]`（未命中主题词典） | https://www.ndrc.gov.cn/xxgk/zcfb/tz/202611/t20261103_1408504.html |
+| `state-council-policy/detail-1` | 中共中央印发《中国共产党地方委员会工作条例》 | 中共中央 | 2026-11-15 | `[]`（未命中主题词典） | https://www.gov.cn/zhengce/202611/content_7086080.htm |
+| `state-council-policy/detail-2` | 中医药传统知识保护条例 | 国务院 | 2026-11-09 | `["talent_development"]` | https://www.gov.cn/zhengce/content/202611/content_7085591.htm |
+| `state-council-policy/detail-3` | 中共中央发出通知 部署党的二十一大代表选举工作 | 中共中央 | 2026-11-07 | `["employment_promotion"]` | https://www.gov.cn/zhengce/202611/content_7085529.htm |
+
+- 主题完全按 B 的 `THEME_KEYWORDS` 顺序与最多 3 个主题规则匹配，不自行润色。`talent_development` 的正文证据关键词为“人才培养”（第九条）；`employment_promotion` 是词典关键词“就业”对正文“新就业群体”的确定性字面命中，不扩展解释为一份就业促进专项政策。其余 7 条保留空数组。
+- `evidence_excerpt` 均取解析正文且不超过 500 字；两条非空主题截取包含对应关键词的片段，空主题保留正文开头证据。9 条摘录长度依次为 156、135、500、172、500、250、500、500、500 字。
+
+**逐条追溯字段**
+
+| 样本 sample_id | policy_item_id（规范化 URL SHA-256 前 32 位） | fetched_at = manifest.captured_at |
+|---|---|---|
+| `79f90652791e0346` | `d9c8cd9a197cb8466a217092c4e9e15d` | `2026-11-18T05:43:18.258Z` |
+| `831a34730ecd4d1c` | `616c93da6ea4b27b4e22034948f27a37` | `2026-11-18T05:43:19.994Z` |
+| `db486595f3b34bc8` | `3d9ae49fa08e5c2f5b233a2a4ada831d` | `2026-11-18T05:43:21.850Z` |
+| `453e887f46184649` | `46f2709ff6aa5b132f492a71a7d0dbfb` | `2026-11-18T04:51:41.699Z` |
+| `95efabc103269693` | `f1e0e4c1cb1689b880bdf1da9b70a6fe` | `2026-11-18T04:51:43.274Z` |
+| `6e53aa244fcf67be` | `640d711f0b58fc50361597d32d51a804` | `2026-11-18T04:51:44.893Z` |
+| `a7d3f4bac5a0a3e7` | `afd94811efd271f832bd1d42e18517af` | `2026-11-18T04:51:35.074Z` |
+| `02cd30c1ddb738e5` | `b87b277d5cb2c5b6f619ecde1f92edad` | `2026-11-18T04:51:36.660Z` |
+| `2945923f7ae5691f` | `f55bcb09f8721ec71ea4d2f96600bd53` | `2026-11-18T04:51:38.290Z` |
+
+- `content_hash` 为各条 `bodyRaw` 的 SHA-256；`collector_version=policy-html/0.1.0`；`source_tier=government_official`（真实 `.gov.cn` 原文）；`official_url` 逐项使用 manifest 的 `request_url`。
+- `data_origin=verified_import` 的理由：这是 B 已保存的真实 HTML 样本在本机的确定性重放，不冒充 D 本机实时采集；每条均可由来源 URL、`captured_at`、HTML `body_sha256` 与正文 `content_hash` 回溯。
+- 入库统一调用 D 的 `writePolicyBatch`，每来源一批。输出（`accepted/updated/duplicates/rejected/errors`）：
+
+```json
+{"source_key":"moe-policy","fetched_at":"2026-11-18T05:43:21.850Z","accepted":3,"updated":0,"duplicates":0,"rejected":0,"errors":[]}
+{"source_key":"ndrc-policy","fetched_at":"2026-11-18T04:51:44.893Z","accepted":3,"updated":0,"duplicates":0,"rejected":0,"errors":[]}
+{"source_key":"state-council-policy","fetched_at":"2026-11-18T04:51:38.290Z","accepted":3,"updated":0,"duplicates":0,"rejected":0,"errors":[]}
+```
+
+**入库后分组与 JSONB 类型校正**
+
+| source_key | source_tier | data_origin | count |
+|---|---|---|---:|
+| `moe-policy` | `government_official` | `verified_import` | 3 |
+| `ndrc-policy` | `government_official` | `verified_import` | 3 |
+| `people-policy` | `official_media` | `live` | 1 |
+| `state-council-policy` | `government_official` | `verified_import` | 3 |
+| `xinhuanet-policy` | `official_media` | `live` | 1 |
+
+- 既有 `people-policy` 与 `xinhuanet-policy` 两条官方媒体样本保留，未删除；总计 11 条。
+- 首次入库后实测发现 D 的现有 `writePolicyBatch` 将 `JSON.stringify(theme_ids)` 作为参数再 cast `jsonb`，postgres.js 实际把 11 条（包括既有 2 条）都存为 JSONB `string`，而非数组，导致第一轮 summary 错为 `shared_themes=[]` / `insufficient_data`。这不是 B 的解析失败。
+- 为符合表字段与 API 契约，仅执行 `UPDATE career_policies SET theme_ids = (theme_ids #>> '{}')::jsonb WHERE jsonb_typeof(theme_ids) = 'string'`，输出 `UPDATE 11`；复核 `jsonb_typeof=array` 共 11 条。未改标题、机关、日期、URL、正文哈希、来源层级、data_origin 或删除记录。Node UTF-8 读回确认 9 条中文文本正确，Windows `psql` 控制台的中文乱码仅为显示问题。
+- 遗留：本任务按要求只提交路线图，未改 `policy-repository.ts`。后续 D 写集应单独把政策 `theme_ids` 写入改为 `sql.json` 语义并补数组类型回归，否则后续新批次仍会写成 JSONB 字符串。
+
+**最终 summary 实测**
+
+`GET http://127.0.0.1:3010/api/site/career-insights/summary`，HTTP 200。下列为实测响应的共享主题投影（政策/职位证据仅保留 URL，计数与指标字段未改）：
+
+```json
+{
+  "http_status": 200,
+  "shared_themes": [
+    {
+      "theme_id": "artificial_intelligence",
+      "label": "人工智能",
+      "policy_count": 1,
+      "job_count": 34,
+      "policy_evidence_urls": [
+        "https://edu.people.com.cn/n1/2026/1117/c1006-40835222.html"
+      ],
+      "job_evidence_urls": [
+        "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/Singapore-CapitaSky/AI-Senior-Research-Scientist_R106716",
+        "https://careers.tencent.com/jobdesc.html?postId=2077246087458111488",
+        "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/US-California-Palo-Alto/Associate--Global-AI-Policy_R107663",
+        "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/United-Kingdom-London/Tencent-Cloud---AI---LLM-Solution-Architect_R108081-1",
+        "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/China-Shenzhen/AI-Compute-Strategy-Manager_R107955-2",
+        "https://careers.tencent.com/jobdesc.html?postId=2076558136331907072",
+        "https://careers.tencent.com/jobdesc.html?postId=2080544639538081792",
+        "https://careers.tencent.com/jobdesc.html?postId=2038501839850336256",
+        "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/France-Paris/Tencent-Cloud---AI---LLM-Solution-Architect_R108082-1",
+        "https://careers.tencent.com/jobdesc.html?postId=2108741444050268160",
+        "https://careers.tencent.com/jobdesc.html?postId=2114921880401129472",
+        "https://tencent.wd1.myworkdayjobs.com/Tencent_Careers/job/United-Kingdom-London/Generative-AI-Research-Intern_R108261-1",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7572109459654510902/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7677821082208487723/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7688191804617885961/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7341311451086995564/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7647129066297887014/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7490843683207446636/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7644074042286213418/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/internship/position/7621513292817729798/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7694856377403443499/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7660334855938689316/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7623320138863642922/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7477484759926014061/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7530883365408653420/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/campus/position/7670928765471852843/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7688968617917172011/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7699324096350783763/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/internship/position/7695965003716004132/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7628511795221301513/detail",
+        "https://xiaomi.jobs.f.mioffice.cn/index/position/7505968665029066860/detail",
+        "https://hr.163.com/job-detail.html?id=74515",
+        "https://hr.163.com/job-detail.html?id=65758",
+        "https://hr.163.com/job-detail.html?id=79115"
+      ]
+    }
+  ],
+  "policy_job_shared_themes": {
+    "status": "ok",
+    "value": null,
+    "numerator_count": 1
+  },
+  "warnings": [
+    {
+      "code": "unknown_fields",
+      "message": "存在未识别职族的职位，已单列 unknown。"
+    },
+    {
+      "code": "unknown_fields",
+      "message": "存在未标记应届友好度的职位，unknown 不表示不友好。"
+    },
+    {
+      "code": "unknown_fields",
+      "message": "样本混合自动采集与人工核验导入（verified_import），整体按较保守口径标注。"
+    }
+  ]
+}
+```
+
+- 唯一共享主题的政策证据是既有的人民网《AI浪潮下，毕业生如何锻造就业竞争力》；9 条新政府样本没有与当前职位主题交集，但仍作为政策证据保留。`theme_list` 指标 `status=ok` 时 `value=null` 是既有契约形态，主题结果由 `shared_themes` 与 `numerator_count=1` 表达。
+- 服务只使用 API 3002 与 web 3010；初测和复测后均停止对应监听进程，最终复测 PID 为 26896（3002）与 31764（3010），全程未使用 3000/3001。
+- 本地临时脚本 `scripts/import-b-policy-samples.local.ts` 只用于解析、核验和调用 `writePolicyBatch`，不纳入提交。本阶段只有本路线图进入提交；B 的样本 HTML、解析器、`collector/**`、`scripts/collect-career*`、`.env` 均未暂存，B worktree 不做任何提交。
