@@ -66,7 +66,7 @@ test("注册表只构造已启用来源，job 与 policy 分离且不发起网�
   );
   assert.deepEqual(
     set.policies.map((adapter) => adapter.definition.source_key),
-    [],
+    ["ndrc-policy"],
   );
   assert.equal(calls.length, 0);
 });

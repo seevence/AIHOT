@@ -67,9 +67,9 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
     kind: "government_policy",
     entry_url: "https://www.ndrc.gov.cn/xxgk/zcfb/",
     access: "http",
-    enabled: false,
+    enabled: true,
     notes:
-      "2026-11-18 试抓：列表 https://www.ndrc.gov.cn/xxgk/zcfb/tz/、详情 .TRS_Editor；已存 1 列表 + 3 详情样本，解析与适配器通过。待启用评审。",
+      "2026-11-18 试抓：列表 https://www.ndrc.gov.cn/xxgk/zcfb/tz/、详情 .TRS_Editor；已存 1 列表 + 3 详情样本，解析与适配器通过。2026-11-18 B2b 单源 gate 后启用。",
   },
   {
     source_key: "moe-policy",

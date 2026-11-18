@@ -10,7 +10,7 @@
 | B0 准备 | 候选来源登记、纪律层（超时/限速/阻断/预算）、样本 manifest 与 quota | 无 | 已完成（`ea5fc43`） |
 | B1 门禁修复 | 四项共同架构修复 + 腾讯单源启用与 live 证据 | 无 | **PASS，已合入集成（PR #3 + follow-up #4，`d406c16`）** |
 | B2a 三家 job 源 | 腾讯 + 美团 + 百度，三家均为国内互联网/AI 公司，公开 JSON、无登录、无签名 | B1 PASS | **PASS，已合入集成 `a738569`** |
-| B2b 政策逐源 | 发改委 → 教育部 → 国务院 顺序启用，每源单独 gate | B1 PASS | 未开始 |
+| B2b 政策逐源 | 发改委 → 国务院（教育部因 https 必跳 http 暂缓） | B1 PASS | 发改委完成，待 A 复核；国务院未开始 |
 | B3 真实入库 | normalize → ingest → career_jobs/observations 闭环 | D2 合入 `feat/integration` | 未开始 |
 
 ## B1 已完成内容（2026-11-18）
@@ -80,3 +80,22 @@
 - 因此本项目采集的是"公开招聘需求结构"，用于观察技能与经验门槛的变化趋势，**不能表述为"校招岗位统计"**。
 - 应届友好度的判定不放在采集层：B 只保留 `hints.experience_raw` / `hints.degree_raw` 原文，由 C 在指标层输出经验门槛分布与"应届友好岗位占比"（经验为空或 0–1 年）。
 - 腾讯 / 美团 / 百度三条数据的 `employment_type` 统一为 `unknown`，不做推断。
+
+## B2b 政策源（2026-11-18）
+
+顺序调整说明：A 原定 发改委 → 教育部 → 国务院，但实测教育部所有请求 https 必跳 http（4 份样本 `final_url` 全为 `http://`），与"live 时 final_url 必须 HTTPS"的门禁冲突且无法通过重新抓取满足；工信部/人社部栏目为 JS 空壳（约 2KB、零静态链接）不可零依赖抓取。故 B2b 实际顺序改为 发改委 → 国务院。
+
+### 发改委（已启用）
+
+| 项 | 结果 |
+|---|---|
+| 适配器 | 既有 `createNdrcPolicySourceAdapter`，issuer 固定 "国家发展改革委" |
+| 启用 | `sources.ts` 中 `ndrc-policy` = `enabled=true`；`createCareerAdapters` 的 policy 注册表只含它 |
+| 测试 | collector standalone **88/88** |
+| live | 1 列表 + 3 详情全 success，3 条 PolicyEvidenceRefV1，5.8s |
+| 证据 | `evidence/live-runs/20261118T1508Z-with-ndrc.json`（同时含三家 job 源当晚 live） |
+
+### 国务院（未开始）
+
+- 风险最高：issuer 需从标题/正文推断，详情 URL 两种形态需都覆盖，跳过数必须为 0。
+- 启用前需单独复抓样本并核对 3/3 解析。
