@@ -504,3 +504,25 @@
 - 唯一共享主题的政策证据是既有的人民网《AI浪潮下，毕业生如何锻造就业竞争力》；9 条新政府样本没有与当前职位主题交集，但仍作为政策证据保留。`theme_list` 指标 `status=ok` 时 `value=null` 是既有契约形态，主题结果由 `shared_themes` 与 `numerator_count=1` 表达。
 - 服务只使用 API 3002 与 web 3010；初测和复测后均停止对应监听进程，最终复测 PID 为 26896（3002）与 31764（3010），全程未使用 3000/3001。
 - 本地临时脚本 `scripts/import-b-policy-samples.local.ts` 只用于解析、核验和调用 `writePolicyBatch`，不纳入提交。本阶段只有本路线图进入提交；B 的样本 HTML、解析器、`collector/**`、`scripts/collect-career*`、`.env` 均未暂存，B worktree 不做任何提交。
+### 修复：政策 theme_ids JSONB 写入（2026-11-18）
+
+**缺陷原因。** `modules/career-insights/backend/policy-repository.ts` 的 `writePolicyBatch` 此前在 INSERT/UPDATE 中都使用 `${JSON.stringify(item.theme_ids)}::jsonb`。postgres.js 把 `JSON.stringify(...)` 返回的 JavaScript 字符串当作字符串参数绑定，`::jsonb` 只会把这个字符串再包装为 JSONB 字符串字面量（带引号），而不是 JSONB 数组。结果 `career_policies.theme_ids` 在数据库里是 `"[\"talent_development\"]"` 这样的字符串值，而不是 `["talent_development"]` 数组，下游 `jsonb_typeof` 返回 `string`、GIN 索引与共享主题查询都无法命中。
+
+**修复方式。** 与 `modules/career-insights/backend/ingest.ts` 中 `jsonColumn` 同模式：在 `policy-repository.ts` 顶部 `import { sql as postgresSql } from "@aihot/backend/db"`，新增局部辅助函数 `jsonThemes(themeIds)` 返回 `postgresSql.json(themeIds)`，由 postgres.js 用 JSONB 二进制序列化写入；INSERT 与 UPDATE 中的两处 `${JSON.stringify(item.theme_ids)}::jsonb` 均替换为 `${jsonThemes(item.theme_ids)}::jsonb`。
+
+**主库复核（11 条政策全部已为 array）。**
+- `select jsonb_typeof(theme_ids) as t, count(*) from career_policies group by 1;` → `[{t:"array", n:11}]`，无 string/null 行。
+- `select source_key, count(*) from career_policies group by 1 order by 1;` → `moe-policy=3, ndrc-policy=3, people-policy=1, state-council-policy=3, xinhuanet-policy=1`。既有 11 行 `theme_ids` 已先用 SQL 修正为 array，本次验证不再修改主库。
+
+**aihot_test 写入路径验证。** 迁移已应用至 `0162_career_policies_published_idx.sql`，`career_policies` 在测试前为空。从主库 SELECT `state-council-policy` 的《中医药传统知识保护条例》（`policy_item_id=b87b277d5cb2c5b6f619ecde1f92edad`，`theme_ids=["talent_development"]`）作为完整字段样本，通过 `writePolicyBatch` 写入 aihot_test，`data_origin=verified_import`、`source_tier=government_official`、`source_key` 与 `fetched_at` 沿用主库原值：
+- 第一次调用返回 `{accepted:1, updated:0, duplicates:0, rejected:0}`。
+- 写入后 `select jsonb_typeof(theme_ids), theme_ids from career_policies where policy_item_id='b87b277d5cb2c5b6f619ecde1f92edad'` 返回 `t="array"`，`theme_ids=["talent_development"]`。
+- 第二次同批次调用返回 `{accepted:0, updated:0, duplicates:1, rejected:0}`，`career_policies` 中该 `policy_item_id` 行数仍为 1；`career_ingest_runs` 因幂等键（kind/source_key/fetched_at/collector_version/data_origin）仅一行，`duplicates=1`、`status="ok"`。
+- 验证结束后删除 aihot_test 中该政策行与对应 `career_ingest_runs` 行；测试结束后 `career_policies=0`、`career_ingest_runs=0`，未在主库产生任何写入。
+
+**summary 复验（API 3002 + web 3010，主库 aihot）。** `GET /api/site/career-insights/summary`（直连 API 与通过 web 代理各一次，均 HTTP 200）：
+- `shared_themes` 仅 1 项，`theme_id="artificial_intelligence"`，`policy_count=1`、`job_count=34`，证据政策仍为 `c3816147b71599d84830ba513c8431ef`（人民网《AI浪潮下，毕业生如何锻造就业竞争力》）。
+- `metrics` 中 `metric_id="policy_job_shared_themes"` 项：`status="ok"`、`unit="theme_list"`、`value=null`、`numerator_count=1`、`sample_size=70`、`as_of="2026-11-17T16:16:30.798Z"`，与既有契约形态一致。
+- 验证使用 `API_PORT=3002`、`WEB_PORT=3010`、`API_BASE_URL=http://127.0.0.1:3002`，全程未使用 3000/3001，验证结束后即停止两个进程。
+
+**提交范围。** 仅 `modules/career-insights/backend/policy-repository.ts`（两处 SQL 替换 + 新增 `jsonThemes` 辅助函数与 import）与本路线图小节。`collector/**`、`scripts/collect-career*`、`.env`、样本 HTML、临时验证脚本均未纳入提交。

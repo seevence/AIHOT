@@ -1,4 +1,5 @@
-import type { Db } from "@aihot/backend/db";
+import { sql as postgresSql, type Db } from "@aihot/backend/db";
+import type { JSONValue } from "postgres";
 import type { IngestResultV1 } from "../contracts/api.ts";
 import type { DataOrigin, PolicyEvidenceRefV1 } from "../contracts/index.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
@@ -81,6 +82,10 @@ interface JobProjectionRow {
   official_url: string;
 }
 
+function jsonThemes(themeIds: readonly string[]) {
+  return postgresSql.json(themeIds as unknown as JSONValue);
+}
+
 function isOfficialUrl(value: string): boolean {
   let url: URL;
   try {
@@ -159,7 +164,7 @@ export async function writePolicyBatch(db: Db, batch: PolicyBatchInputV1): Promi
             fetched_at, first_seen_at, last_seen_at
           ) VALUES (
             ${item.policy_item_id}, ${item.source_key}, ${item.source_tier}, ${item.title}, ${item.issuer},
-            ${item.published_at}, ${item.official_url}, ${JSON.stringify(item.theme_ids)}::jsonb,
+            ${item.published_at}, ${item.official_url}, ${jsonThemes(item.theme_ids)}::jsonb,
             ${item.evidence_excerpt.slice(0, EXCERPT_LIMIT)}, ${item.content_hash},
             ${item.collector_version}, ${batch.data_origin},
             ${item.fetched_at}::timestamptz, ${item.fetched_at}::timestamptz, ${item.fetched_at}::timestamptz
@@ -179,7 +184,7 @@ export async function writePolicyBatch(db: Db, batch: PolicyBatchInputV1): Promi
             issuer = ${item.issuer},
             published_at = ${item.published_at},
             official_url = ${item.official_url},
-            theme_ids = ${JSON.stringify(item.theme_ids)}::jsonb,
+            theme_ids = ${jsonThemes(item.theme_ids)}::jsonb,
             evidence_excerpt = ${item.evidence_excerpt.slice(0, EXCERPT_LIMIT)},
             content_hash = ${item.content_hash},
             collector_version = ${item.collector_version},
