@@ -2,7 +2,8 @@ import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
 import { HttpTransport } from "../fetch/http-transport.ts";
 import { createCareerAdapters } from "../registry.ts";
-import { runEnabledPolicySources, runEnabledSources } from "../orchestration/runner.ts";
+import { runEnabledPolicySources, runEnabledSources, type RunContext } from "../orchestration/runner.ts";
+import { parsePageLimit } from "./args.ts";
 import { normalizeRawJobs } from "../../data/index.ts";
 import { ingestWithRun } from "../../backend/run-ingest.ts";
 import {
@@ -38,12 +39,22 @@ interface PolicyRoundRecord {
   readonly elapsed_ms: number;
 }
 
-async function ingestJobSources(): Promise<JobRoundRecord[]> {
+/** ingest 与 collect 共用同一套 `--pages` 解析：缺省 1，非法取值直接抛错，不静默回退。 */
+export function resolveIngestPageLimit(argv: readonly string[]): number {
+  return parsePageLimit(argv);
+}
+
+/** ingest 的实际采集上下文；pageLimit 经 runner 透传给 adapter.collect。 */
+export function ingestRunContext(pageLimit: number): RunContext {
+  return { collectEnabled: true, pageLimit };
+}
+
+async function ingestJobSources(pageLimit: number): Promise<JobRoundRecord[]> {
   const { jobs: adapters } = createCareerAdapters(new HttpTransport());
   const records: JobRoundRecord[] = [];
   for (const adapter of adapters) {
     const started = Date.now();
-    const [result] = await runEnabledSources([adapter], { collectEnabled: true });
+    const [result] = await runEnabledSources([adapter], ingestRunContext(pageLimit));
     if (result === undefined) {
       continue;
     }
@@ -170,26 +181,54 @@ async function snapshotCounts(): Promise<Record<string, number>> {
   return { ...(rows[0] ?? { jobs: 0, observations: 0, policies: 0, runs: 0 }) };
 }
 
+export interface IngestReportInput {
+  readonly startedAt: string;
+  readonly finishedAt: string;
+  readonly pageLimit: number;
+  readonly jobs: readonly JobRoundRecord[];
+  readonly policies: readonly PolicyRoundRecord[];
+  readonly counts: Record<string, number>;
+}
+
+export function buildIngestReport(input: IngestReportInput) {
+  return {
+    schema_version: "1.0",
+    kind: "career-ingest",
+    started_at: input.startedAt,
+    page_limit: input.pageLimit,
+    finished_at: input.finishedAt,
+    data_origin: "live",
+    jobs: input.jobs,
+    policies: input.policies,
+    counts: input.counts,
+  };
+}
+
 async function main(): Promise<void> {
   if (!process.argv.includes("--live")) {
     console.error("默认不入库。确认要采集公开招聘/政策页面并写入 live 数据时，显式加 --live。");
     process.exit(2);
   }
+  let pageLimit: number;
+  try {
+    pageLimit = resolveIngestPageLimit(process.argv);
+  } catch (error) {
+    console.error(error instanceof Error ? error.message : String(error));
+    process.exit(2);
+  }
   const startedAt = new Date().toISOString();
   try {
-    const jobs = await ingestJobSources();
+    const jobs = await ingestJobSources(pageLimit);
     const policies = await ingestPolicySources();
     const counts = await snapshotCounts();
-    const report = {
-      schema_version: "1.0",
-      kind: "career-ingest",
-      started_at: startedAt,
-      finished_at: new Date().toISOString(),
-      data_origin: "live",
+    const report = buildIngestReport({
+      startedAt,
+      finishedAt: new Date().toISOString(),
+      pageLimit,
       jobs,
       policies,
       counts,
-    };
+    });
     const body = `${JSON.stringify(report, null, 2)}\n`;
     const outIndex = process.argv.indexOf("--out");
     const target = outIndex === -1 ? undefined : process.argv[outIndex + 1];
@@ -206,4 +245,6 @@ async function main(): Promise<void> {
   }
 }
 
-void main();
+if (import.meta.main) {
+  void main();
+}
