@@ -186,3 +186,7 @@ test("明确的 AI 产品/工程标题仍然被识别，不受负例收窄影响
   assert.equal(resolveRoleFamily("unknown", "全栈开发工程师（J107271）"), "ai_application_development");
   assert.equal(resolveRoleFamily("data", "AI后端开发工程师"), "data", "已知提示仍然优先于标题");
 });
+
+test("归一化版本随 B1 规则 bump 到 normalizer/0.3.0", () => {
+  assert.equal(NORMALIZER_VERSION, "normalizer/0.3.0");
+});

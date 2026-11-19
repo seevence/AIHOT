@@ -359,3 +359,12 @@ export const ROLE_FAMILY_THEMES: Readonly<Partial<Record<RoleFamily, readonly st
   data: ["data_infrastructure", "digital_economy"],
   ai_product_operations: ["ai_innovation", "digital_economy"],
 };
+
+/** 岗位标题 → 主题。技能与职族画像产不出的人才培养、就业促进方向靠标题补齐。 */
+export const JOB_THEME_TITLE_KEYWORDS: Readonly<Record<string, readonly string[]>> = {
+  talent_development: ["培训", "教研", "讲师", "人才", "学习发展"],
+  employment_promotion: ["校招", "应届", "实习", "管培", "高校毕业生"],
+};
+
+/** 资深类标题词。命中即不按初级岗位判学生友好。 */
+export const SENIOR_TITLE_KEYWORDS: readonly string[] = ["资深", "专家", "高级", "senior", "lead"];
