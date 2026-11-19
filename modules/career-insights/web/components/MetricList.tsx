@@ -31,13 +31,29 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
       : metric.dimension.theme_id;
   const isUnknownFamily = metric.metric_id === "job_family_share" && roleFamily === "unknown";
   const isStudentFriendly = metric.metric_id === "student_friendly_share";
+  const studentUnavailable = isStudentFriendly && (metric.status !== "ok" || metric.sample_size === 0);
   const studentYes = metric.numerator_count ?? 0;
   const studentUnknown = metric.unknown_count ?? 0;
+  // 明确非学生友好数由 sample_size − yes − unknown 前端派生，API 未提供该字段；仅用于展示，不回写任何指标。
   const studentNo = Math.max(metric.sample_size - studentYes - studentUnknown, 0);
   const studentNoPercent = metric.sample_size > 0 ? `${((studentNo / metric.sample_size) * 100).toFixed(1)}%` : "—";
   const title = isUnknownFamily ? "未分类职位占比" : metric.label;
   const titleSuffix = isUnknownFamily ? "" : dimensionSuffix ? ` · ${dimensionSuffix}` : "";
-  const valueText = isStudentFriendly ? `${studentYes} 个` : formatValue(metric);
+  const unknownCoverageText = isUnknownFamily && metric.unknown_count !== undefined
+    ? [
+        `未分类 ${metric.unknown_count} 个`,
+        metric.unknown_ratio !== undefined && metric.unknown_ratio !== null
+          ? `占比 ${(metric.unknown_ratio * 100).toFixed(1)}%`
+          : undefined,
+      ].filter((part): part is string => part !== undefined).join(" · ")
+    : unknownText;
+  const valueText = isStudentFriendly
+    ? studentUnavailable
+      ? metric.status === "not_applicable"
+        ? "不适用"
+        : "数据不足"
+      : `${studentYes} 个`
+    : formatValue(metric);
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
@@ -73,13 +89,15 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
       </dl>
 
       {isStudentFriendly ? (
-        <div className="mt-1 space-y-1 text-[12px] text-ink-4">
-          <p>明确标注学生友好的职位：{studentYes} 个（{metric.sample_size} 条中 {studentUnknown} 条未标注）</p>
-          {studentYes === 0 && <p>当前窗口暂无明确标注学生友好的样本。</p>}
-          <p>明确非学生友好 {studentNo}（{studentNoPercent}）</p>
-        </div>
+        !studentUnavailable && (
+          <div className="mt-1 space-y-1 text-[12px] text-ink-4">
+            <p>明确标注学生友好的职位：{studentYes} 个（{metric.sample_size} 条中 {studentUnknown} 条未标注）</p>
+            {studentYes === 0 && <p>当前窗口暂无明确标注学生友好的样本。</p>}
+            <p>明确非学生友好 {studentNo}（{studentNoPercent}）</p>
+          </div>
+        )
       ) : (
-        unknownText !== undefined && <p className="mt-1 text-[12px] text-ink-4">{unknownText}</p>
+        unknownCoverageText !== undefined && <p className="mt-1 text-[12px] text-ink-4">{unknownCoverageText}</p>
       )}
 
       {isUnknownFamily && (

@@ -161,7 +161,12 @@ export function DirectionView({
               </Link>
             </div>
           ) : (
-            <p className="mt-3 rounded-card border border-line bg-surface p-6 text-center text-[14px] text-ink-3">该方向暂无职位</p>
+            <div className="mt-3 rounded-card border border-line bg-surface p-6 text-center">
+              <p className="text-[14px] text-ink-3">该方向暂无职位</p>
+              {filters.student_friendly === "yes" && (
+                <p className="mt-2 text-[13px] leading-relaxed text-ink-3">本次样本中没有明确标注学生友好的职位。</p>
+              )}
+            </div>
           )
         ) : (
           <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
