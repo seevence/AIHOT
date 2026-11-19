@@ -6,6 +6,8 @@ import type {
   JobListResponseV1,
   SummaryResponseV1,
 } from "../contracts/api.ts";
+import type { CareerDailyResponseV1, CareerHotResponseV1 } from "../contracts/insights.ts";
+import type { HotCompanyOptions } from "./career-analytics.ts";
 import type { PolicyFiltersV1, PolicyListResponseV1 } from "./policy-read.ts";
 
 export interface CareerRepository {
@@ -13,5 +15,7 @@ export interface CareerRepository {
   listJobs(filters: JobFiltersV1): Promise<JobListResponseV1>;
   jobDetail(id: string): Promise<JobDetailResponseV1 | null>;
   listPolicies(filters: PolicyFiltersV1): Promise<PolicyListResponseV1>;
+  hotCompanies(options: HotCompanyOptions): Promise<CareerHotResponseV1>;
+  dailySummary(): Promise<CareerDailyResponseV1>;
   writeBatch(batch: CareerObservationBatchV1): Promise<IngestResultV1>;
 }
