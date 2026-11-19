@@ -9,6 +9,7 @@ import { DIRECTION_VALUES, DirectionView } from "./DirectionView";
 import { FilterEmpty } from "./FilterEmpty";
 import { MetricList } from "./MetricList";
 import { Pagination } from "./Pagination";
+import { PolicyEntry } from "./PolicyEntry";
 import { SharedThemeList } from "./SharedThemeList";
 
 export type DirectionTarget = { roleFamily: RoleFamily; studentFriendlyTotal: number };
@@ -78,6 +79,8 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
       <CareerFilters filters={filters} view={direction ? "direction" : undefined} />
 
       {!direction && <DirectionLinks />}
+
+      <PolicyEntry />
 
       <section aria-labelledby="career-sample" className="rounded-card border border-line bg-surface p-5">
         <h2 id="career-sample" className="text-[16px] font-semibold text-ink">样本概况</h2>
