@@ -1,5 +1,6 @@
 
 import type {
+  DataOrigin,
   DegreeLevel,
   EmploymentType,
   MetricSpecV1,
@@ -9,8 +10,10 @@ import type {
 } from "../contracts/index.ts";
 import type { EvidenceLinkV1, MetricResultV1, SharedThemeV1 } from "../contracts/api.ts";
 import {
+  EXPERIENCE_UNLIMITED_PHRASES,
   JOB_THEME_SKILLS,
   ROLE_FAMILY_THEMES,
+  SKILL_ALIASES,
   SKILL_DICTIONARY_VERSION,
   THEME_DICTIONARY_VERSION,
   THEME_LABELS,
@@ -482,4 +485,226 @@ function makeMetricResult(input: MetricResultInputV1): MetricResultV1 {
     evidence: input.evidence,
     disclaimer: input.spec.disclaimer,
   };
+}
+/**
+ * 诊断输入只依赖经验与技能字段，不要求完整 MetricJobInputV1。
+ * data_origin 非 live 的行由诊断函数自身排除；fixture/策略排除仍由调用方负责。
+ */
+export interface DiagnosticJobInputV1 {
+  source_key: string;
+  job_key: string;
+  experience_raw: string | null;
+  experience_min_years: number | null;
+  experience_max_years: number | null;
+  skills: readonly string[];
+  data_origin?: DataOrigin;
+}
+
+export type ExperienceBucketV1 =
+  | "missing"
+  | "zero"
+  | "zero_to_one"
+  | "two_to_three"
+  | "four_to_five"
+  | "six_to_nine"
+  | "ten_plus"
+  | "unlimited"
+  | "unparsed";
+
+export const EXPERIENCE_BUCKETS_V1: readonly ExperienceBucketV1[] = [
+  "missing",
+  "zero",
+  "zero_to_one",
+  "two_to_three",
+  "four_to_five",
+  "six_to_nine",
+  "ten_plus",
+  "unlimited",
+  "unparsed",
+];
+
+export interface ExperienceBucketCountV1 {
+  count: number;
+  share: number | null;
+}
+
+export interface ExperienceDistributionV1 {
+  sample_size: number;
+  input_count: number;
+  excluded_count: number;
+  duplicate_count: number;
+  buckets: Record<ExperienceBucketV1, ExperienceBucketCountV1>;
+}
+
+export interface EntryLevelShareV1 {
+  numerator_count: number;
+  denominator_count: number;
+  value: number | null;
+  status: MetricResultV1["status"];
+  /** 分子实际包含的桶；missing/zero/zero_to_one 才是「经验缺失或 0–1 年」。 */
+  numerator_buckets: readonly ExperienceBucketV1[];
+  excluded_count: number;
+  duplicate_count: number;
+}
+
+export interface SkillHitRateV1 {
+  sample_size: number;
+  input_count: number;
+  excluded_count: number;
+  duplicate_count: number;
+  with_skill_count: number;
+  value: number | null;
+  status: MetricResultV1["status"];
+  unknown_count: number;
+  unknown_ratio: number | null;
+  dictionary_version: string;
+}
+
+const KNOWN_SKILL_IDS: ReadonlySet<string> = new Set(Object.values(SKILL_ALIASES));
+
+
+/**
+ * 经验分布：九桶计数与占比，计数和占比合计等于去重后的 live 样本量。
+ * 经验为空是 missing；写了文本但解析不出数字是 unparsed；两者都不回填 0。
+ */
+export function computeExperienceDistribution(
+  jobs: readonly DiagnosticJobInputV1[],
+): ExperienceDistributionV1 {
+  const sample = liveDedupedSample(jobs);
+  const counts = new Map<ExperienceBucketV1, number>(
+    EXPERIENCE_BUCKETS_V1.map((bucket) => [bucket, 0]),
+  );
+  for (const job of sample.jobs) {
+    const bucket = experienceBucketOf(job);
+    counts.set(bucket, (counts.get(bucket) ?? 0) + 1);
+  }
+
+  const buckets = {} as Record<ExperienceBucketV1, ExperienceBucketCountV1>;
+  for (const bucket of EXPERIENCE_BUCKETS_V1) {
+    const count = counts.get(bucket) ?? 0;
+    buckets[bucket] = {
+      count,
+      share: sample.jobs.length === 0 ? null : count / sample.jobs.length,
+    };
+  }
+
+  return {
+    sample_size: sample.jobs.length,
+    input_count: sample.input_count,
+    excluded_count: sample.excluded_count,
+    duplicate_count: sample.duplicate_count,
+    buckets,
+  };
+}
+
+/** 入门占比：经验缺失 + 0 年 + 0–1 年；「不限」单列，不并入分子。 */
+export function computeEntryLevelShare(
+  jobs: readonly DiagnosticJobInputV1[],
+): EntryLevelShareV1 {
+  const distribution = computeExperienceDistribution(jobs);
+  const numeratorBuckets: readonly ExperienceBucketV1[] = ["missing", "zero", "zero_to_one"];
+  const numeratorCount = numeratorBuckets.reduce(
+    (sum, bucket) => sum + distribution.buckets[bucket].count,
+    0,
+  );
+  const denominator = distribution.sample_size;
+
+  return {
+    numerator_count: numeratorCount,
+    denominator_count: denominator,
+    value: denominator === 0 ? null : numeratorCount / denominator,
+    status: denominator === 0 ? "insufficient_data" : "ok",
+    numerator_buckets: numeratorBuckets,
+    excluded_count: distribution.excluded_count,
+    duplicate_count: distribution.duplicate_count,
+  };
+}
+
+/** 技能命中率：至少识别出一个技能的去重职位 / 去重职位；字典版本与未知比例一并返回。 */
+export function computeSkillHitRate(
+  jobs: readonly DiagnosticJobInputV1[],
+): SkillHitRateV1 {
+  const sample = liveDedupedSample(jobs);
+  const sampleSize = sample.jobs.length;
+  const withSkill = sample.jobs.filter((job) =>
+    job.skills.some((skillId) => KNOWN_SKILL_IDS.has(skillId)),
+  ).length;
+  const unknownCount = sampleSize - withSkill;
+
+  return {
+    sample_size: sampleSize,
+    input_count: sample.input_count,
+    excluded_count: sample.excluded_count,
+    duplicate_count: sample.duplicate_count,
+    with_skill_count: withSkill,
+    value: sampleSize === 0 ? null : withSkill / sampleSize,
+    // 一个技能都没识别出来不等于指标成功，按证据不足处理。
+    status: sampleSize === 0 || withSkill === 0 ? "insufficient_data" : "ok",
+    unknown_count: unknownCount,
+    unknown_ratio: sampleSize === 0 ? null : unknownCount / sampleSize,
+    dictionary_version: SKILL_DICTIONARY_VERSION,
+  };
+}
+
+interface DiagnosticSampleV1 {
+  jobs: DiagnosticJobInputV1[];
+  input_count: number;
+  excluded_count: number;
+  duplicate_count: number;
+}
+
+/** 排除非 live 行，并按 source_key + job_key 去重。 */
+function liveDedupedSample(jobs: readonly DiagnosticJobInputV1[]): DiagnosticSampleV1 {
+  const seen = new Set<string>();
+  const kept: DiagnosticJobInputV1[] = [];
+  let excludedCount = 0;
+  let duplicateCount = 0;
+
+  for (const job of jobs) {
+    if (job.data_origin !== undefined && job.data_origin !== "live") {
+      excludedCount += 1;
+      continue;
+    }
+    const key = `${job.source_key}\u0000${job.job_key}`;
+    if (seen.has(key)) {
+      duplicateCount += 1;
+      continue;
+    }
+    seen.add(key);
+    kept.push(job);
+  }
+
+  return {
+    jobs: kept,
+    input_count: jobs.length,
+    excluded_count: excludedCount,
+    duplicate_count: duplicateCount,
+  };
+}
+
+function experienceBucketOf(job: DiagnosticJobInputV1): ExperienceBucketV1 {
+  const raw = (job.experience_raw ?? "").trim();
+  const min = job.experience_min_years;
+  const max = job.experience_max_years;
+
+  if (min === null && max === null) {
+    if (raw === "") return "missing";
+    return isUnlimitedExperienceRaw(raw) ? "unlimited" : "unparsed";
+  }
+
+  if (min === 0 && (max === null || max === 0)) return "zero";
+  if (min === 0) return "zero_to_one";
+
+  const years = min ?? max;
+  if (years === null) return "unparsed";
+  if (years <= 1) return "zero_to_one";
+  if (years <= 3) return "two_to_three";
+  if (years <= 5) return "four_to_five";
+  if (years <= 9) return "six_to_nine";
+  return "ten_plus";
+}
+
+function isUnlimitedExperienceRaw(raw: string): boolean {
+  if (raw === "不限") return true;
+  return EXPERIENCE_UNLIMITED_PHRASES.some((phrase) => raw.includes(phrase));
 }

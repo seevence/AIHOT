@@ -78,6 +78,7 @@ export const SKILL_ALIASES: Readonly<Record<string, string>> = {
   "算法基础": "algorithms",
   英语: "english",
   english: "english",
+  electron: "electron",
 };
 
 /** 展示用技能名。词典新增技能时同步补充，避免页面直接展示 ID。 */
@@ -126,6 +127,7 @@ export const SKILL_LABELS: Readonly<Record<string, string>> = {
   growth_operations: "用户增长",
   algorithms: "数据结构与算法",
   english: "英语",
+  electron: "Electron",
 };
 
 export const THEME_LABELS: Readonly<Record<string, string>> = {
@@ -178,6 +180,7 @@ export const ROLE_FAMILY_KEYWORDS: Readonly<
   ],
   ai_application_development: [
     "后端",
+    "后台",
     "前端",
     "全栈",
     "软件开发",
@@ -188,11 +191,35 @@ export const ROLE_FAMILY_KEYWORDS: Readonly<
     "ai应用",
     "ai工程",
     "服务端",
+    "服务器开发",
     "客户端",
+    "移动端",
+    "桌面端",
+    "架构师",
+    "electron",
     "测试开发",
   ],
-  data: ["数据分析", "数据开发", "数据仓库", "大数据", "数据科学", "数仓", "数据平台", "bi工程师"],
-  ai_product_operations: ["ai产品", "产品经理", "产品运营", "解决方案", "增长运营", "运营"],
+  data: [
+    "数据分析",
+    "数据开发",
+    "数据仓库",
+    "大数据",
+    "数据科学",
+    "数仓",
+    "数据平台",
+    "bi工程师",
+    "分析师",
+  ],
+  ai_product_operations: [
+    "ai产品",
+    "产品经理",
+    "产品运营",
+    "产品策划",
+    "产品营销",
+    "解决方案",
+    "增长运营",
+    "运营",
+  ],
 };
 
 /** 用工类型关键词。按顺序匹配，先命中者生效。 */

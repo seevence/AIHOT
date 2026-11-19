@@ -107,7 +107,8 @@ export function normalizeRawJobs(raws: readonly RawCollectedJobV1[]): NormalizeR
 }
 
 export function resolveRoleFamily(hint: RoleFamily | undefined, title: string): RoleFamily {
-  if (hint !== undefined && ROLE_FAMILIES.includes(hint)) return hint;
+  // hint=unknown 只说明采集侧没有判定，不是最终答案；必须继续按标题扫描关键词。
+  if (hint !== undefined && hint !== "unknown" && ROLE_FAMILIES.includes(hint)) return hint;
   const lower = title.toLowerCase();
   for (const [family, keywords] of Object.entries(ROLE_FAMILY_KEYWORDS)) {
     if (keywords.some((keyword) => lower.includes(keyword.toLowerCase()))) {
@@ -152,6 +153,8 @@ export interface ExperienceRequirementV1 {
   raw: string | null;
 }
 
+const YEAR_TOKEN = "(\\d{1,3}|[零一二两三四五六七八九十]{1,3})";
+
 export function resolveExperience(
   hintRaw: string | null | undefined,
   text: string,
@@ -160,24 +163,39 @@ export function resolveExperience(
   const source = hint !== undefined && hint !== "" ? hint : null;
   const scanned = source ?? text;
 
-  const range = scanned.match(/(\d{1,2})\s*(?:-|~|—|–|至|到)\s*(\d{1,2})\s*年(?:工作)?(?:经验)?/);
-  if (range !== null && range[1] !== undefined && range[2] !== undefined) {
-    return { min: Number(range[1]), max: Number(range[2]), raw: source ?? range[0] };
+  if (source !== null && isUnlimitedExperienceText(source)) {
+    return { min: null, max: null, raw: source };
   }
 
-  const above = scanned.match(/(\d{1,2})\s*年(?:以上|及以上|\+)(?:工作)?(?:经验)?/);
-  if (above !== null && above[1] !== undefined) {
-    return { min: Number(above[1]), max: null, raw: source ?? above[0] };
+  const range = scanned.match(
+    new RegExp(`${YEAR_TOKEN}\\s*(?:-|~|—|–|至|到)\\s*${YEAR_TOKEN}\\s*年(?:工作)?(?:经验)?`),
+  );
+  if (range !== null) {
+    const min = toYears(range[1]);
+    const max = toYears(range[2]);
+    if (min !== null && max !== null) return { min, max, raw: source ?? range[0] };
   }
 
-  const below = scanned.match(/(\d{1,2})\s*年(?:以内|以下)(?:工作)?(?:经验)?/);
-  if (below !== null && below[1] !== undefined) {
-    return { min: null, max: Number(below[1]), raw: source ?? below[0] };
+  const above = scanned.match(
+    new RegExp(`${YEAR_TOKEN}\\s*年\\s*(?:及以上|以上|\\+)\\s*(?:工作)?(?:经验)?`),
+  );
+  if (above !== null) {
+    const min = toYears(above[1]);
+    if (min !== null) return { min, max: null, raw: source ?? above[0] };
   }
 
-  const single = scanned.match(/(\d{1,2})\s*年(?:工作)?经验/);
-  if (single !== null && single[1] !== undefined) {
-    return { min: Number(single[1]), max: null, raw: source ?? single[0] };
+  const below = scanned.match(
+    new RegExp(`${YEAR_TOKEN}\\s*年\\s*(?:及以内|以内|以下)\\s*(?:工作)?(?:经验)?`),
+  );
+  if (below !== null) {
+    const max = toYears(below[1]);
+    if (max !== null) return { min: null, max, raw: source ?? below[0] };
+  }
+
+  const single = scanned.match(new RegExp(`${YEAR_TOKEN}\\s*年\\s*(?:工作)?经验`));
+  if (single !== null) {
+    const min = toYears(single[1]);
+    if (min !== null) return { min, max: null, raw: source ?? single[0] };
   }
 
   if (source !== null) {
@@ -352,4 +370,49 @@ function excerpt(text: string, index: number, length: number): string {
 
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+const CHINESE_DIGITS: Readonly<Record<string, number>> = {
+  零: 0,
+  一: 1,
+  二: 2,
+  两: 2,
+  三: 3,
+  四: 4,
+  五: 5,
+  六: 6,
+  七: 7,
+  八: 8,
+  九: 9,
+};
+
+/** 中文年份「十」「十五」「二十」「二十三」等，支持 1–99；无法确定时返回 null，不猜。 */
+function parseChineseYears(value: string): number | null {
+  if (!/^[零一二两三四五六七八九十]+$/.test(value)) return null;
+  const tenIndex = value.indexOf("十");
+  if (tenIndex < 0) {
+    return value.length === 1 ? (CHINESE_DIGITS[value] ?? null) : null;
+  }
+  if (value.indexOf("十", tenIndex + 1) >= 0) return null;
+  const tensPart = value.slice(0, tenIndex);
+  const onesPart = value.slice(tenIndex + 1);
+  if (tensPart.length > 1 || onesPart.length > 1) return null;
+  const tens = tensPart === "" ? 1 : CHINESE_DIGITS[tensPart];
+  const ones = onesPart === "" ? 0 : CHINESE_DIGITS[onesPart];
+  if (tens === undefined || ones === undefined) return null;
+  return tens * 10 + ones;
+}
+
+function toYears(value: string | undefined): number | null {
+  if (value === undefined) return null;
+  if (/^\d+$/.test(value)) {
+    const parsed = Number(value);
+    return Number.isNaN(parsed) ? null : parsed;
+  }
+  return parseChineseYears(value);
+}
+
+/** 经验字段本身就是「不限」时保留原文，不回填 0 年。 */
+function isUnlimitedExperienceText(value: string): boolean {
+  if (value === "不限") return true;
+  return EXPERIENCE_UNLIMITED_PHRASES.some((phrase) => value.includes(phrase));
 }
