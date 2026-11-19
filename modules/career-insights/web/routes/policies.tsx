@@ -1,4 +1,4 @@
-import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router";
+import { Link, isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import { loadPolicies } from "../api";
 import {
@@ -10,7 +10,9 @@ import {
 } from "../policy";
 import { Pagination } from "../components/Pagination";
 import { PolicyList } from "../components/PolicyList";
-import { CareerError, CareerLoading, FixtureNotice } from "../components/CareerStates";
+import { CareerError, CareerLoading, CareerPending, FixtureNotice } from "../components/CareerStates";
+
+const POLICY_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
 
 export function PoliciesView({ policies, filters }: { policies: PolicyListResponse; filters: PolicyPageFilters }) {
@@ -24,6 +26,24 @@ export function PoliciesView({ policies, filters }: { policies: PolicyListRespon
       {policies.data_origin === "synthetic_fixture" && <FixtureNotice />}
 
       <PolicyList policies={policies} filters={filters} />
+
+      <div className="flex flex-wrap items-center gap-2 text-[12px]">
+        <span className="text-ink-4">每页</span>
+        {POLICY_PAGE_SIZE_OPTIONS.map((size) => (
+          <Link
+            key={size}
+            to={buildPoliciesHref({ ...filters, page: 1, page_size: size })}
+            aria-current={size === policies.page_size ? "true" : undefined}
+            className={`rounded-control px-2 py-1 ${
+              size === policies.page_size
+                ? "bg-accent font-medium text-accent-contrast"
+                : "border border-line text-ink-2 hover:bg-bg-sunk"
+            }`}
+          >
+            {size} 条
+          </Link>
+        ))}
+      </div>
 
       {policies.items.length > 0 && (
         <Pagination
@@ -61,5 +81,16 @@ export function ErrorBoundary() {
 
 export default function CareerPoliciesRoute() {
   const data = useLoaderData<typeof loader>();
-  return <PoliciesView policies={data.policies} filters={data.filters} />;
+  const navigation = useNavigation();
+  const pending = navigation.state === "loading";
+  return (
+    <>
+      {pending && (
+        <div className="mb-3">
+          <CareerPending label="正在加载政策结果…" />
+        </div>
+      )}
+      <PoliciesView policies={data.policies} filters={data.filters} />
+    </>
+  );
 }
