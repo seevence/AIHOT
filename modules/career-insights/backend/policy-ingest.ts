@@ -1,5 +1,6 @@
 import type { PolicyDetailDraft } from "../collector/index.ts";
 import type { DataOrigin } from "../contracts/index.ts";
+import { policyItemIdFromUrl, policyItemPathSegment } from "../collector/adapters/policy-id.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import { sha256Hex } from "../data/dedupe.ts";
 import { InvalidParameterError } from "./errors.ts";
@@ -31,10 +32,14 @@ function canonicalUrl(rawUrl: string): string {
   return url.toString();
 }
 
+/**
+ * The collector path writes `policy_item_id` from the URL, so an imported draft must produce the
+ * same id for the same policy; the document number is not part of the identity and stays on the
+ * draft only. A URL without a last path segment falls back to the canonical URL.
+ */
 export function policyItemIdFromDraft(draft: PolicyDetailDraft): string {
-  const documentNumber = draft.documentNumber?.replace(/\s+/g, "");
-  if (documentNumber !== undefined && documentNumber !== "") return `doc:${documentNumber}`;
-  return `url:${canonicalUrl(draft.url)}`;
+  if (policyItemPathSegment(draft.url) === null) return `url:${canonicalUrl(draft.url)}`;
+  return policyItemIdFromUrl(draft.url);
 }
 
 export function detectPolicyThemes(text: string): string[] {
