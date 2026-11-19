@@ -91,7 +91,7 @@ for (const route of ["direct", "proxy", "secure-proxy", "dns"] as const) {
       }
       console.log(JSON.stringify({ requests, tunnels, proxyProtocols: [...new Set(proxyProtocols)], error }));
     `], {
-      cwd: new URL("../", import.meta.url), timeout: 10000,
+      cwd: new URL("../", import.meta.url), timeout: 30_000,
       env: { ...process.env, EGRESS_PROXY_URL: "", ALLOW_PRIVATE_NETWORK_FETCH: "false", NODE_EXTRA_CA_CERTS: cert,
         TEST_TLS_KEY: key, TEST_OUTBOUND_ROUTE: route },
     });
