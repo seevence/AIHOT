@@ -31,10 +31,10 @@ test("真实 manifest 通过结构校验并满足样本配额", async () => {
     [
       "moe-policy:policy:4",
       "ndrc-policy:policy:4",
-      "state-council-policy:policy:4",
       "tencent-official-careers:job:6",
       "meituan-official-careers:job:5",
       "baidu-official-careers:job:5",
+      "state-council-policy:policy:4",
     ],
   );
 });
