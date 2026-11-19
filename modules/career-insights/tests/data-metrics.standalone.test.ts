@@ -578,8 +578,9 @@ function diagnosticJob(overrides: Partial<DiagnosticJobInputV1> = {}): Diagnosti
     data_origin: overrides.data_origin ?? "live",
   };
 }
-// A1/B1 回归样本：5433 模板库 career_insights_test 当前为 0 行，取只读诊断行的标题与经验做 fixture，
-// job_key 沿用诊断 key，保证断言可复现且不依赖 live 库。
+// A1/B1 回归样本全部为 fixture：fixture mirrors the diagnosed live row (title/experience from
+// 2026-11-19 diagnosis); keys reused for traceability。5433 模板库 career_insights_test 为空，
+// fixture 不依赖 live 库。
 function diagnosedRawJob(
   jobKey: string,
   title: string,
@@ -656,27 +657,15 @@ const SENIOR_LOW_EXPERIENCE_ROWS: readonly {
   title: string;
   experience_raw: string | null;
 }[] = [
+  { job_key: "7dec1e39", title: "培训设计与教研专家", experience_raw: null },
   {
-    job_key: "59814615-f2c7-41fc-826a-3dfa5f59a782",
-    title: "伙伴FDE培训设计与教研专家（J107259）",
-    experience_raw: null,
-  },
-  {
-    job_key: "7d8ebd32-d6f3-4c52-9049-73d2d242237c",
+    job_key: "7d8ebd32",
     title: "AI 产品专家（Agent 知识引擎方向）（J107146）",
     experience_raw: null,
   },
   { job_key: "4938022216", title: "HRSSC智能运营优化专家", experience_raw: null },
-  {
-    job_key: "d9a60bea-fa0a-47f7-81a9-51b8af101513",
-    title: "产品营销专家（J104088）",
-    experience_raw: "1-3年",
-  },
-  {
-    job_key: "2049825920281391104",
-    title: "王者荣耀IP预研游戏-资深UI动效",
-    experience_raw: "一年以上工作经验",
-  },
+  { job_key: "d9a60bea", title: "产品营销专家（J104088）", experience_raw: "1-3年" },
+  { job_key: "4791236953", title: "高级安全运营工程师", experience_raw: null },
 ];
 
 test("B1：经验缺失或 1-3 年但标题含资深类词的 5 行仍为 no", () => {

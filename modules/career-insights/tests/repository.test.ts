@@ -10,6 +10,7 @@ import { SqlCareerRepository } from "../backend/sql-repository.ts";
 
 import { SKILL_DICTIONARY_VERSION } from "../data/dictionaries.ts";
 import { METRIC_SPECS_V1 } from "../data/metrics.ts";
+import { NORMALIZER_VERSION } from "../data/normalize.ts";
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
 const NOTICE = "当前状态以最近一次成功观测为准；单次未采集到不代表职位已下架。";
@@ -21,7 +22,7 @@ const digest = (seed: string) => createHash("sha256").update(seed).digest("hex")
 function job(overrides: Partial<NormalizedJobV1> = {}): NormalizedJobV1 {
   return {
     schema_version: "1.0",
-    normalizer_version: "normalizer/0.2.0",
+    normalizer_version: NORMALIZER_VERSION,
     source_key: "career-test",
     job_key: "job-1",
     company_name: "测试科技有限公司",
@@ -410,7 +411,7 @@ test("jobDetail returns the current state with its recent observations and hides
   );
   const [newest, oldest] = detail!.observations;
   assert.equal(typeof newest!.id, "string");
-  assert.equal(newest!.observed_at, "2026-01-02T00:00:00.000Z");
+  assert.equal(newest!.observed_at, "2026-01-01T16:00:00.000Z", "观测按 Asia/Shanghai 日粒度对齐");
   assert.equal(newest!.collector_version, "test-collector-1");
   assert.equal(newest!.source_url, "https://careers.example/jobs/job-1-v2");
   assert.equal(newest!.evidence_excerpt, changedText.slice(0, 500));
