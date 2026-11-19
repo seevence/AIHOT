@@ -376,7 +376,38 @@ B 侧落地要点：
 | 1 | evidence 逐源 elapsed 合计 45.2s vs wall 62.3s | 约 17s 未归因（进程启动、DB 写入、归一化等未被逐源计时覆盖） |
 | 2 | observation 与 run 仅靠 `batch_id` 关联 | `career_ingest_runs` 无直接外键，跨表对账需经 `batch_id` |
 | 3 | `collector_version` 固定 `collector/0.1.0` | 采集层版本未随分页能力升级，行为变更无法从该字段区分 |
+## 候选源启用评估（2026-11-19，只读）
+
+本节为只读实测评估，不改变任何源的启用状态。结论：本轮不启用任何新源，74 行基线不变。
+
+### `moe-policy`（政策源，不产出 job；代码已就绪，待 A 裁决 HTTP）
+
+| 项 | 实测 |
+|---|---|
+| 类型 | 政府政策源（`kind=government_policy`），只产出 `PolicyEvidenceRefV1`，**不产出 job** |
+| 代码就绪 | `parseMoePolicyList` / `parseMoePolicyDetail`（`adapters/policy-parse.ts`）、适配器 `createMoePolicySourceAdapter`（`adapters/policy-sources.ts`）、`registry.ts` 的 case 均存在 |
+| 唯一阻塞 | 源站 https 全部 302 → http，项目 `HttpTransport` 实测抛 `SchemeDowngradeError`（`access_blocked` / `scheme_downgrade`） |
+| 最小改动 | 4 处 ≈1h：① `adapters/policy-parse.ts:163` 的 `MOE_POLICY_LIST_URL` 常量；② `sources.ts:78` 的 `entry_url`；③ `sources.ts:80` 的 `enabled` 与 `sources.ts:81-82` 的 `notes`；④ `tests/collector-policy-sources.standalone.test.ts:128` 的 `official_url` 断言（另加文档同步） |
+| 冲突 | 与既有 B2b 门禁「live 时 `final_url` 必须 HTTPS」直接冲突，**需 A 裁决**；本次不启用 |
+| 实测（用该解析器跑真实页面） | 列表 20 条、翻页 20 条、详情解析通过；端到端产出 3 条政策，issuer 均为「教育部」，主题为空 |
+
+### `alibaba-official-careers`（不建议）
+
+- `POST /social/position/recommendPosition.json` 带 XSRF token 仍返回 `LOGIN_EXPIRED`；不带 token 直接 403 → 必须有登录态。
+- 代码仅骨架：`collect()` 必抛 `SchemaChangedError`，`registry` 无 case。
+
+### `bytedance-official-careers`（不建议）
+
+- 列表页无 SSR 数据；`/api/v1/search/job/posts` 返回 HTML；`POST` 返回 405。
+- 无适配器，且需 JS 渲染；`fetch/create-transport.ts:35` 禁止库进程启动浏览器（动态渲染须在独立 CLI 子进程执行）。
+
+### 结论
+
+- 本轮不启用任何新源；74 行基线（3 源 × 2 页）不变。
+- 后续启用顺序：`moe-policy`（待 A 对 HTTP 门禁裁决）→ 阿里 / 字节（需登录态或浏览器渲染，超出当前架构）。
+
 ## 最近更新
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`（merge：按 A 裁定修正 unknown 与应届友好文案，源提交 `04f7cc4`）。
 - 本次同步：未关闭项 #7 与待办 #2 的「E 复验已启动」已被后续取代——E1–E5 + E6 已合入（`cd69c68`），真实数据复验第一段 22/22、第二段 43/43、扩采 74 行增量 39/39 全 PASS；政策列表页前端仍 404，属未覆盖项（路由归 A）。历史结论与 74 行基线数字（jobs 74 / obs 230 / policies 6 / runs 38 等）保持不变。
+- **2026-11-19**：`1ae9ccd`（含政策页 `8e81f33`）——新增「候选源启用评估（2026-11-19，只读）」：`moe-policy` 代码就绪但受 HTTP 降级门禁阻塞、待 A 裁决；阿里与字节不建议；本轮不启用任何新源，74 行基线不变。
