@@ -5,6 +5,10 @@
 // 只更新 role_family / student_friendly / skills / experience_min_years / experience_max_years /
 // normalizer_version / updated_at；不写 career_job_observations，不动 last_seen_at / content_hash /
 // created_at / raw_payload 等来源侧字段。日志只输出 job id 与 title，不输出 JD 正文或密钥。
+//
+// 数据安全：模型输出只做增量。skills 与既有值取并集，经验年限仅在模型给出非 null 时覆盖，
+// role_family / student_friendly 仅在既有为 unknown 时才接受模型的 unknown。模型是低置信兜底，
+// 用它抹掉已确认的结构化字段是净损失，因此宁可少改也不回退既有数据。
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -119,6 +123,8 @@ export interface RunSummary {
   retries: number;
   droppedSkillTerms: number;
   usage: { prompt_tokens: number; completion_tokens: number };
+  /** 未返回 usage 的调用次数：这些调用的 token 未计入上面的 usage。 */
+  usageMissingCalls: number;
 }
 
 export interface RunOptions {
@@ -138,6 +144,8 @@ interface RowOutcome {
   droppedSkillTerms?: number;
   usage?: { prompt_tokens: number; completion_tokens: number };
   failure?: string;
+  schemaRejected?: boolean;
+  usageMissingCalls?: number;
   calls: number;
   retries: number;
 }
@@ -195,6 +203,7 @@ export function buildUserPrompt(row: CareerJobRow): string {
   });
 }
 
+
 /** 模型给的技能词按既有词表映射；映射不上的丢弃并返回，供汇总计数。 */
 export function mapSkillsToKnown(terms: readonly string[]): { skills: string[]; dropped: string[] } {
   const knownIds = new Set(Object.keys(SKILL_LABELS));
@@ -214,6 +223,45 @@ export function mapSkillsToKnown(terms: readonly string[]): { skills: string[]; 
     if (!skills.includes(id)) skills.push(id);
   }
   return { skills, dropped };
+}
+
+/** 既有技能只增不减：并集后按字典序稳定排序，保证同一输入两次运行结果一致。 */
+export function mergeSkills(existing: readonly string[] | null, fromModel: readonly string[]): string[] {
+  const merged = new Set<string>(existing ?? []);
+  for (const id of fromModel) merged.add(id);
+  return [...merged].sort();
+}
+
+/** 模型判不出（unknown）时不覆盖既有的已分类枚举值。 */
+function preferKnownValue<T extends string>(existing: string, fromModel: T, values: readonly T[]): T {
+  if (fromModel === "unknown" && existing !== "unknown") {
+    const known = values.find((value) => value === existing);
+    if (known !== undefined) return known;
+  }
+  return fromModel;
+}
+
+/**
+ * 把模型输出并入既有行：skills 取并集，年限仅在模型给出非 null 时覆盖，
+ * 枚举仅在既有为 unknown 时接受模型的 unknown。
+ */
+export function mergeNormalizedFields(
+  row: CareerJobRow,
+  parsed: LlmNormalization,
+): { fields: LlmNormalizedFields; droppedSkillTerms: number } {
+  const mapped = mapSkillsToKnown(parsed.skills);
+  const min = parsed.experience_min_years ?? row.experience_min_years;
+  const max = parsed.experience_max_years ?? row.experience_max_years;
+  // 单边覆盖可能把既有的一对年限拼成 min > max；这种组合宁可保持既有整对。
+  const inverted = min !== null && max !== null && min > max;
+  const fields: LlmNormalizedFields = {
+    role_family: preferKnownValue(row.role_family, parsed.role_family, ROLE_FAMILY_VALUES),
+    student_friendly: preferKnownValue(row.student_friendly, parsed.student_friendly, STUDENT_FRIENDLY_VALUES),
+    skills: mergeSkills(row.skills, mapped.skills),
+    experience_min_years: inverted ? row.experience_min_years : min,
+    experience_max_years: inverted ? row.experience_max_years : max,
+  };
+  return { fields, droppedSkillTerms: mapped.dropped.length };
 }
 
 function usageOf(usage: Record<string, unknown> | null | undefined): { prompt_tokens: number; completion_tokens: number } {
@@ -277,40 +325,62 @@ async function processRow(row: CareerJobRow, callLlm: LlmCaller, log: (line: str
   let calls = 0;
   let retries = 0;
   let lastFailure = "";
+  let schemaRejected = false;
+  let usageMissingCalls = 0;
   for (let attempt = 0; attempt <= 1; attempt += 1) {
     calls += 1;
     if (attempt > 0) retries += 1;
+    let response: LlmResponse;
     try {
-      const response = await callLlm({ subject: row.id, system, user });
-      const parsed = llmNormalizationSchema.parse(response.data);
-      const mapped = mapSkillsToKnown(parsed.skills);
-      const fields: LlmNormalizedFields = {
-        role_family: parsed.role_family,
-        student_friendly: parsed.student_friendly,
-        skills: mapped.skills,
-        experience_min_years: parsed.experience_min_years,
-        experience_max_years: parsed.experience_max_years,
-      };
-      log(
-        `  ${row.id} | ${row.title} | role: ${row.role_family}→${fields.role_family} | ` +
-          `student: ${row.student_friendly}→${fields.student_friendly} | skills: ${(row.skills ?? []).length}→${fields.skills.length}`,
-      );
-      return {
-        row,
-        status: "ok",
-        fields,
-        unchanged: alreadyNormalized(row, fields),
-        droppedSkillTerms: mapped.dropped.length,
-        usage: usageOf(response.usage),
-        calls,
-        retries,
-      };
+      response = await callLlm({ subject: row.id, system, user });
     } catch (error) {
       lastFailure = describeFailure(error);
+      usageMissingCalls += 1;
+      continue;
     }
+    const parsed = llmNormalizationSchema.safeParse(response.data);
+    if (!parsed.success) {
+      schemaRejected = true;
+      lastFailure = describeFailure(parsed.error);
+      usageMissingCalls += 1;
+      continue;
+    }
+    const merged = mergeNormalizedFields(row, parsed.data);
+    const fields = merged.fields;
+    log(
+      `  ${row.id} | ${row.title} | role: ${row.role_family}→${fields.role_family} | ` +
+        `student: ${row.student_friendly}→${fields.student_friendly} | skills: ${(row.skills ?? []).length}→${fields.skills.length} | ` +
+        `exp: ${formatRange(row.experience_min_years, row.experience_max_years)}→${formatRange(fields.experience_min_years, fields.experience_max_years)}`,
+    );
+    return {
+      row,
+      status: "ok",
+      fields,
+      unchanged: alreadyNormalized(row, fields),
+      droppedSkillTerms: merged.droppedSkillTerms,
+      usage: usageOf(response.usage),
+      schemaRejected: false,
+      usageMissingCalls,
+      calls,
+      retries,
+    };
   }
   log(`  ${row.id} | ${row.title} | ${lastFailure}`);
-  return { row, status: "failed", failure: lastFailure, calls, retries, droppedSkillTerms: 0 };
+  return {
+    row,
+    status: "failed",
+    failure: lastFailure,
+    schemaRejected,
+    usageMissingCalls,
+    calls,
+    retries,
+    droppedSkillTerms: 0,
+  };
+}
+
+function formatRange(min: number | null, max: number | null): string {
+  if (min === null && max === null) return "null";
+  return `${min === null ? "?" : min}-${max === null ? "?" : max}`;
 }
 
 /** 核心流程与 IO 解耦：模型与存储都由调用方注入，便于测试用 fake 覆盖。 */
@@ -328,6 +398,8 @@ export async function runBackfill(options: RunOptions): Promise<RunSummary> {
       row,
       status: "failed" as const,
       failure: describeFailure(error),
+      schemaRejected: false,
+      usageMissingCalls: 0,
       calls: 0,
       retries: 0,
       droppedSkillTerms: 0,
@@ -345,17 +417,19 @@ export async function runBackfill(options: RunOptions): Promise<RunSummary> {
     retries: 0,
     droppedSkillTerms: 0,
     usage: { prompt_tokens: 0, completion_tokens: 0 },
+    usageMissingCalls: 0,
   };
 
   for (const outcome of outcomes) {
     summary.calls += outcome.calls;
     summary.retries += outcome.retries;
+    summary.usageMissingCalls += outcome.usageMissingCalls ?? 0;
     summary.droppedSkillTerms += outcome.droppedSkillTerms ?? 0;
     summary.usage.prompt_tokens += outcome.usage?.prompt_tokens ?? 0;
     summary.usage.completion_tokens += outcome.usage?.completion_tokens ?? 0;
     if (outcome.status === "failed") {
       summary.failed += 1;
-      if (outcome.failure?.includes("schema 非法")) summary.schemaRejected += 1;
+      if (outcome.schemaRejected === true) summary.schemaRejected += 1;
       continue;
     }
     if (outcome.unchanged === true) {
@@ -386,6 +460,9 @@ export function printSummary(summary: RunSummary, apply: boolean, log: (line: st
   log(`  无变化行:   ${summary.unchanged}`);
   log(`  失败行:     ${summary.failed}（其中 schema 非法 ${summary.schemaRejected}）`);
   log(`  usage: prompt_tokens=${summary.usage.prompt_tokens}, completion_tokens=${summary.usage.completion_tokens}`);
+  if (summary.usageMissingCalls > 0) {
+    log(`  另有 ${summary.usageMissingCalls} 次失败调用未返回 usage（token 未计入上面的数字）`);
+  }
   log(`  技能词表映射丢弃: ${summary.droppedSkillTerms} 个词`);
 }
 

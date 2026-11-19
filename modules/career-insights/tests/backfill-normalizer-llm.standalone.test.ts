@@ -119,9 +119,82 @@ test("schema 非法行重试一次后跳过，不写库", async () => {
   assert.equal(summary.changed, 0);
   assert.equal(summary.calls, 2);
   assert.equal(summary.retries, 1);
+  assert.equal(summary.usageMissingCalls, 2);
+  assert.deepEqual(summary.usage, { prompt_tokens: 0, completion_tokens: 0 });
   assert.equal(store.updates.length, 0);
   assert.equal(store.jobs[0]!.normalizer_version, "normalizer/0.3.0");
   assert.equal(store.jobs[0]!.role_family, "unknown");
+});
+
+test("网络失败与 schema 非法分开计数，失败调用 token 标注未计入", async () => {
+  const store = new MemoryStore([job()]);
+  let calls = 0;
+  const callLlm: LlmCaller = async () => {
+    calls += 1;
+    throw new Error("network down");
+  };
+  const summary = await runBackfill({ apply: true, limit: null, callLlm, store });
+
+  assert.equal(calls, 2);
+  assert.equal(summary.failed, 1);
+  assert.equal(summary.schemaRejected, 0);
+  assert.equal(summary.usageMissingCalls, 2);
+  assert.deepEqual(summary.usage, { prompt_tokens: 0, completion_tokens: 0 });
+  assert.equal(store.updates.length, 0);
+});
+
+test("模型给不出结论时既有 skills / 年限 / 已分类枚举不被回退，第二次 0 变更", async () => {
+  const store = new MemoryStore([
+    job({
+      skills: ["machine_learning"],
+      experience_min_years: 1,
+      experience_max_years: 3,
+      role_family: "ai_product_operations",
+      student_friendly: "unknown",
+    }),
+  ]);
+  const llm = fakeLlm([
+    {
+      role_family: "unknown",
+      student_friendly: "unknown",
+      skills: [],
+      experience_min_years: null,
+      experience_max_years: null,
+    },
+  ]);
+
+  const first = await runBackfill({ apply: true, limit: null, callLlm: llm.callLlm, store });
+
+  assert.equal(first.changed, 1);
+  const fields = store.updates[0]!.fields;
+  assert.deepEqual(fields.skills, ["machine_learning"]);
+  assert.equal(fields.role_family, "ai_product_operations");
+  assert.equal(fields.experience_min_years, 1);
+  assert.equal(fields.experience_max_years, 3);
+  assert.equal(fields.student_friendly, "unknown");
+  assert.deepEqual(store.jobs[0]!.skills, ["machine_learning"]);
+  assert.equal(store.jobs[0]!.role_family, "ai_product_operations");
+  assert.equal(store.jobs[0]!.experience_min_years, 1);
+  assert.equal(store.jobs[0]!.experience_max_years, 3);
+
+  const second = await runBackfill({ apply: true, limit: null, callLlm: llm.callLlm, store });
+  assert.equal(second.candidates, 0);
+  assert.equal(second.changed, 0);
+  assert.equal(second.calls, 0);
+  assert.equal(store.updates.length, 1);
+});
+
+test("模型给出的技能与既有 skills 取并集，不丢既有项", async () => {
+  const store = new MemoryStore([
+    job({ skills: ["machine_learning"], role_family: "ai_algorithm", student_friendly: "unknown" }),
+  ]);
+  const llm = fakeLlm([{ ...validOutput, skills: ["Python", "machine_learning"] }]);
+
+  const summary = await runBackfill({ apply: true, limit: null, callLlm: llm.callLlm, store });
+
+  assert.equal(summary.changed, 1);
+  assert.deepEqual(store.updates[0]!.fields.skills, ["machine_learning", "python"]);
+  assert.equal(store.updates[0]!.fields.role_family, "ai_algorithm");
 });
 
 test("词表外的技能被丢弃并计数，其余按词表映射", async () => {
