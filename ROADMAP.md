@@ -1,12 +1,20 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1/D2、B1/B2a/B2b-1、C、E1–E5；A 独立验收项已闭环；三 job 源与发改委政策源已启用；B3 真实入库可开工  
+> 状态：集成分支已包含 A、D1–D4、B1–B3、C、E1–E6；真实数据窗口 74 行已跑通；A 独立验收项已闭环；等待最终验收与演示收口  
 > 启动日期：2026-11-16  
-> 最近更新：2026-11-18  
+> 最近更新：2026-11-19（3 次 merge + a5191f7 + 5 个收口提交）  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
 > 私有仓库：`https://github.com/seevence/AIHOT`  
 > 交付目标：下周评审  
 > 开发节奏：**5 天完成真实闭环 + 2 天联调、补证据和排练**  
+
+**2026-11-19 集成收口记录：**
+
+- staging 三次 merge：D `feat/career-api-d4` @`9c6c83a`、B-pager @`93365ac` + `344e952`、E `feat/career-dashboard` @`cd69c68`。
+- 基于 `a5191f7` 合入 5 个后续提交：`72c5330`（样本口径）、`254c7dc` / `04f7cc4`（E 文案）、`d36854b`（四份 roadmap）、`6dd5e57` / `ff7ceae`（M1）、`cd956ff`（术语收口）。
+- `content_hash` 已由 `e0bc809` 统一为源内容公式；6 行旧 fingerprint 首次写入会 first-write updated 一次，之后保持幂等。
+- 样本口径：腾讯/美团/百度 3 个 job 源 × 2 页，2026-11-19 窗口 74 条 raw jobs；unknown 47 条（63.5%），AI 岗位趋势用非 unknown 子集（27 条），不得表述为“AI 岗位总体样本”；40/74 窗口不可直接比较。
+- `student_friendly=yes` 0 条（no 57 / unknown 17）：保留原文语义，页面如实显示“当前窗口暂无明确应届友好样本”；不自行补 yes 规则。  
 > 首发范围：IT 行业中的 **人工智能+** 方向  
 > 核心受众：希望了解行业方向、岗位要求和技能准备路径的大学生
 
