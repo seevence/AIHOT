@@ -5,6 +5,7 @@ import { after, beforeEach, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
 import type { DataOrigin, NormalizedJobV1 } from "../contracts/index.ts";
 import { ingestBatch } from "../backend/ingest.ts";
+import { NORMALIZER_VERSION } from "../data/index.ts";
 import { SqlCareerRepository } from "../backend/sql-repository.ts";
 
 const FETCHED_AT = "2026-11-19T08:08:00.000Z";
@@ -13,6 +14,7 @@ const repository = new SqlCareerRepository(sql);
 function job(overrides: Partial<NormalizedJobV1> = {}): NormalizedJobV1 {
   return {
     schema_version: "1.0",
+    normalizer_version: NORMALIZER_VERSION,
     source_key: "career-test",
     job_key: "job-1",
     company_name: "甲科技有限公司",

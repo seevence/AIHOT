@@ -400,3 +400,56 @@ test("jobDetail returns the current state with its recent observations and hides
   assert.equal(oldest!.evidence_excerpt, rawText.slice(0, 500));
   assert.equal(oldest!.evidence_excerpt.length, 500);
 });
+test("old normalizer rows raise a stale warning and the unknown bucket reports coverage", async () => {
+  await seed(
+    job({ normalizer_version: "normalizer/0.1.0", role_family: "unknown" }),
+    job({ job_key: "job-2", content_hash: digest("j2"), role_family: "data" }),
+  );
+
+  const summary = await repository.summary();
+  assert.ok(
+    summary.warnings.some(
+      (warning) => warning.code === "stale_data" && warning.message === "部分职位仍为旧归一化版本，重入库后刷新。",
+    ),
+  );
+
+  const unknown = summary.metrics.find(
+    (entry) => entry.metric_id === "job_family_share" && entry.dimension.role_family === "unknown",
+  )!;
+  assert.equal(unknown.numerator_count, 1);
+  assert.equal(unknown.unknown_count, 1);
+  assert.equal(unknown.unknown_ratio, 0.5);
+
+  assert.equal(
+    JSON.stringify(summary).includes("normalizer_version"),
+    false,
+    "the summary does not expose the normalizer version",
+  );
+
+  const list = await repository.listJobs({ page: 1, page_size: 20 });
+  assert.equal(
+    JSON.stringify(list).includes("normalizer_version"),
+    false,
+    "the job list does not expose the normalizer version",
+  );
+  const detail = await repository.jobDetail(list.items[0]!.id);
+  assert.equal(
+    JSON.stringify(detail).includes("normalizer_version"),
+    false,
+    "the job detail does not expose the normalizer version",
+  );
+});
+
+test("a fully classified sample still reports an explicit zero unknown coverage", async () => {
+  await seed(job({ role_family: "data" }));
+
+  const summary = await repository.summary();
+  const unknown = summary.metrics.find(
+    (entry) => entry.metric_id === "job_family_share" && entry.dimension.role_family === "unknown",
+  )!;
+  assert.equal(unknown.status, "ok");
+  assert.equal(unknown.value, 0);
+  assert.equal(unknown.unknown_count, 0);
+  assert.equal(unknown.unknown_ratio, 0);
+  assert.equal(summary.warnings.some((warning) => warning.code === "stale_data"), false);
+});
