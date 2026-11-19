@@ -4,8 +4,16 @@
 
 - `/career-insights`：通过正式 HTTP API 并行读取 summary 与 jobs，展示样本、指标、共享主题和职位列表。
 - `/career-insights/jobs/:id`：读取职位详情与观测记录。
+- `/career-insights/policies`：政策列表页，通过正式 HTTP API 读取 `/api/site/career-insights/policies`，支持 `source_key`、`theme`、`page`、`page_size` 查询参数与分页；参数非法时显示页面级错误状态，不回退 fixture。
 
 正式页面只使用 `@aihot/web/lib/api.server` 请求 `/api/site/career-insights/*`，不导入 fixture、数据库或密钥。API 返回 503 时页面显示“数据尚未就绪”，不会自动回退 fixture；加载、空态、请求错误和单快照均有独立可见状态。
+
+## 接口现状（正式 API）
+
+- `GET /api/site/career-insights/summary`
+- `GET /api/site/career-insights/jobs`
+- `GET /api/site/career-insights/jobs/:id`
+- `GET /api/site/career-insights/policies`：查询参数 `source_key`、`theme`、`page`（1–10000）、`page_size`（1–100，默认 20）；未知的 `source_key` / `theme`、非法页码或未支持的查询参数均返回 400 `invalid_parameter`；所有响应带 `Cache-Control: no-store`。
 
 ## 本地 fixture 联调
 
@@ -21,4 +29,4 @@ node modules/career-insights/web/fixture-server.ts
 API_BASE_URL=http://127.0.0.1:3101 npm run dev:web
 ```
 
-fixture 服务只监听 `127.0.0.1:3101`，仅提供 summary、jobs 和固定职位详情三个 GET 数据响应，不写数据库。页面看到 `data_origin=synthetic_fixture` 时会显示“联调样例（非真实数据）”。
+fixture 服务只监听 `127.0.0.1:3101`，~~仅提供 summary、jobs 和固定职位详情三个 GET 数据响应~~（已更新：现在同时提供 `GET /api/site/career-insights/policies`，接受 `source_key`、`theme`、`page`、`page_size`；`source_key` 按 6 条样例的固定下标切分模拟后端过滤，非法参数返回 400 `invalid_parameter`，响应同样带 `no-store`），不写数据库。页面看到 `data_origin=synthetic_fixture` 时会显示“联调样例（非真实数据）”。

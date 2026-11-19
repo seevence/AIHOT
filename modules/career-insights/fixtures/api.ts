@@ -258,6 +258,7 @@ const FIXTURE_POLICY_ITEMS: PolicyEvidenceRefV1[] = [
   },
 ];
 
+/** 联调样例：`total` 与 `items` 保持一致（6 条）；真实政策数据来自数据库，不在此处。 */
 export const FIXTURE_POLICY_LIST_V1 = {
   contract_version: "0.1" as const,
   data_origin: "synthetic_fixture" as const,
@@ -265,6 +266,6 @@ export const FIXTURE_POLICY_LIST_V1 = {
   items: FIXTURE_POLICY_ITEMS,
   page: 1,
   page_size: 20,
-  total: 26,
+  total: 6,
   filters: { page: 1, page_size: 20 },
 };
