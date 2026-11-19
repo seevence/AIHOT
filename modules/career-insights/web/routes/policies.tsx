@@ -3,7 +3,7 @@ import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import { loadPolicies } from "../api";
 import {
   buildPoliciesHref,
-  parsePolicyFilters,
+  parsePolicyFiltersOrThrow,
   policyApiPath,
   type PolicyListResponse,
   type PolicyPageFilters,
@@ -39,7 +39,7 @@ export function PoliciesView({ policies, filters }: { policies: PolicyListRespon
 }
 
 export async function loader({ request }: LoaderArgs) {
-  const filters = parsePolicyFilters(new URL(request.url).searchParams);
+  const filters = parsePolicyFiltersOrThrow(new URL(request.url).searchParams);
   const policies = await loadPolicies(policyApiPath(filters), request.signal);
   return { policies, filters };
 }

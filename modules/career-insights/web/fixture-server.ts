@@ -8,6 +8,12 @@ const PORT = 3101;
 const MAX_PAGE = 10_000;
 const MAX_PAGE_SIZE = 100;
 
+/** fixture 条目没有 source_key 字段；按位置把 6 条样例分配给启用的政策源，模拟后端按 source_key 过滤。 */
+const POLICY_SOURCE_ITEM_INDEXES: Readonly<Record<string, readonly number[]>> = {
+  "state-council-policy": [0, 2, 4],
+  "ndrc-policy": [1, 3, 5],
+};
+
 function send(res: ServerResponse, status: number, body: unknown): void {
   res.writeHead(status, {
     "Cache-Control": "no-store",
@@ -61,12 +67,18 @@ export const fixtureServer = createServer((req, res) => {
         sendError(res, 400, "invalid_parameter", "unknown_source");
         return;
       }
-      if (theme !== null && !(theme in THEME_LABELS)) {
+      if (theme !== null && !Object.hasOwn(THEME_LABELS, theme)) {
         sendError(res, 400, "invalid_parameter", "unknown_theme");
         return;
       }
+      const items = sourceKey === null
+        ? FIXTURE_POLICY_LIST_V1.items
+        : FIXTURE_POLICY_LIST_V1.items.filter((_, index) =>
+            (POLICY_SOURCE_ITEM_INDEXES[sourceKey] ?? []).includes(index));
       send(res, 200, {
         ...FIXTURE_POLICY_LIST_V1,
+        items,
+        total: sourceKey === null ? FIXTURE_POLICY_LIST_V1.total : items.length,
         page,
         page_size: pageSize,
         filters: {

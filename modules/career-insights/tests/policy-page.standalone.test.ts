@@ -1,6 +1,7 @@
 // Policy list page, standalone: the fixture API answers the policies route, and the rendered list is
 // asserted without a database. The page's loader lives beside JSX that Node cannot run directly, so the
-// address it builds (policyApiPath) and the query parsing are asserted here directly.
+// address it builds (policyApiPath), the query parsing and the 400 it answers for bad filters are asserted
+// here through the same helpers the loader calls.
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import { after, test } from "node:test";
@@ -13,6 +14,7 @@ import {
   POLICY_PAGE_SIZE,
   buildPoliciesHref,
   parsePolicyFilters,
+  parsePolicyFiltersOrThrow,
   policyApiPath,
   type PolicyListResponse,
   type PolicyPageFilters,
@@ -41,6 +43,18 @@ function hrefOf(html: cheerio.CheerioAPI, label: string): URL {
   const link = html("a").filter((_, element) => html(element).text() === label).first();
   assert.ok(link.length > 0, `no link labelled ${label}`);
   return new URL(link.attr("href") ?? "", "http://site.local");
+}
+
+/** 与 loader 同款抛法（react-router 的 data()），沿用 job.tsx 的 400 错误页机制。 */
+function assertLoaderRejects400(query: string, parameter: string): void {
+  const result = parsePolicyFilters(new URLSearchParams(query));
+  assert.deepEqual(result, { ok: false, error: { code: "invalid_parameter", parameter } });
+  assert.throws(() => parsePolicyFiltersOrThrow(new URLSearchParams(query)), (error: unknown) => {
+    const rejection = error as { data?: { error?: { code?: string; parameter?: string } }; init?: { status?: number } };
+    return rejection.init?.status === 400
+      && rejection.data?.error?.code === "invalid_parameter"
+      && rejection.data.error.parameter === parameter;
+  }, `${query} should answer 400 instead of being dropped`);
 }
 
 test("the list renders every policy with its issuer, date and official link", () => {
@@ -83,7 +97,7 @@ test("source and theme filters link to the page with the other filter kept", () 
   assert.equal(cleared.searchParams.get("source_key"), "ndrc-policy");
 });
 
-test("no policies under the current filters shows the empty state", () => {
+test("no policies under a valid filter shows the empty state instead of an error", () => {
   const html = render(
     { ...FIXTURE_POLICY_LIST_V1, items: [], total: 0, filters: { ...FILTERS, source_key: "ndrc-policy" } },
     { ...FILTERS, source_key: "ndrc-policy" },
@@ -96,39 +110,72 @@ test("no policies under the current filters shows the empty state", () => {
 test("pagination and the API address keep the page size and filters", () => {
   const filters: PolicyPageFilters = {
     page: 2,
-    page_size: POLICY_PAGE_SIZE,
+    page_size: 50,
     source_key: "ndrc-policy",
     theme: "talent_development",
   };
   const href = new URL(buildPoliciesHref(filters), "http://site.local");
   assert.equal(href.pathname, POLICIES);
   assert.equal(href.searchParams.get("page"), "2");
-  assert.equal(href.searchParams.get("page_size"), "20");
+  assert.equal(href.searchParams.get("page_size"), "50");
   assert.equal(href.searchParams.get("source_key"), "ndrc-policy");
   assert.equal(href.searchParams.get("theme"), "talent_development");
 
   const parsed = parsePolicyFilters(
     new URLSearchParams("page=2&page_size=50&source_key=ndrc-policy&theme=talent_development"),
   );
-  assert.deepEqual(parsed, filters);
+  assert.deepEqual(parsed, { ok: true, filters });
   assert.equal(
-    policyApiPath(parsed),
-    "/policies?source_key=ndrc-policy&theme=talent_development&page=2&page_size=20",
+    policyApiPath(parsed.ok ? parsed.filters : filters),
+    "/policies?source_key=ndrc-policy&theme=talent_development&page=2&page_size=50",
   );
 });
 
-test("unknown filters are dropped and the page falls back to the first page", () => {
-  assert.deepEqual(parsePolicyFilters(new URLSearchParams("page=0&source_key=unknown-source&theme=unknown")), {
-    page: 1,
-    page_size: POLICY_PAGE_SIZE,
+test("valid filters are kept and absent filters stay absent", () => {
+  assert.deepEqual(parsePolicyFilters(new URLSearchParams("")), {
+    ok: true,
+    filters: { page: 1, page_size: POLICY_PAGE_SIZE },
+  });
+  assert.deepEqual(parsePolicyFilters(new URLSearchParams("source_key=ndrc-policy&theme=talent_development")), {
+    ok: true,
+    filters: { source_key: "ndrc-policy", theme: "talent_development", page: 1, page_size: POLICY_PAGE_SIZE },
   });
 });
 
-test("the fixture API serves the policy list and rejects parameters the backend rejects", async () => {
-  const response = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies?page=2&page_size=20&source_key=ndrc-policy&theme=talent_development`);
-  assert.equal(response.status, 200);
-  const body = (await response.json()) as PolicyListResponse;
-  assert.equal(body.items.length, 6);
+test("unknown, malformed and prototype-chain filters answer 400 instead of being dropped", () => {
+  assertLoaderRejects400("source_key=__bad__", "source_key");
+  assertLoaderRejects400("source_key=moe-policy", "source_key");
+  assertLoaderRejects400("theme=__bad__", "theme");
+  assertLoaderRejects400("theme=constructor", "theme");
+  assertLoaderRejects400("theme=__proto__", "theme");
+  assertLoaderRejects400("theme=toString", "theme");
+  assertLoaderRejects400("page=0", "page");
+  assertLoaderRejects400("page=abc", "page");
+  assertLoaderRejects400("page=10001", "page");
+  assertLoaderRejects400("page_size=0", "page_size");
+  assertLoaderRejects400("page_size=abc", "page_size");
+  assertLoaderRejects400("page_size=101", "page_size");
+});
+
+test("the fixture API serves the unfiltered list and narrows it by source_key", async () => {
+  const all = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies`);
+  assert.equal(all.status, 200);
+  const allBody = (await all.json()) as PolicyListResponse;
+  assert.equal(allBody.items.length, 6);
+
+  const ndrc = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies?source_key=ndrc-policy`);
+  assert.equal(ndrc.status, 200);
+  const ndrcBody = (await ndrc.json()) as PolicyListResponse;
+  assert.equal(ndrcBody.items.length, 3);
+  assert.equal(ndrcBody.total, 3);
+  assert.deepEqual(ndrcBody.filters, { page: 1, page_size: 20, source_key: "ndrc-policy" });
+});
+
+test("the fixture API rejects parameters the backend rejects", async () => {
+  const paged = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies?page=2&page_size=20&source_key=ndrc-policy&theme=talent_development`);
+  assert.equal(paged.status, 200);
+  const body = (await paged.json()) as PolicyListResponse;
+  assert.equal(body.items.length, 3);
   assert.equal(body.page, 2);
   assert.equal(body.page_size, 20);
   assert.deepEqual(body.filters, { page: 2, page_size: 20, source_key: "ndrc-policy", theme: "talent_development" });
@@ -138,4 +185,6 @@ test("the fixture API serves the policy list and rejects parameters the backend 
   assert.equal(badPage.status, 400);
   const badSource = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies?source_key=unknown-source`);
   assert.equal(badSource.status, 400);
+  const badTheme = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies?theme=constructor`);
+  assert.equal(badTheme.status, 400);
 });

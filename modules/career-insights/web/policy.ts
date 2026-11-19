@@ -1,9 +1,11 @@
+import { data } from "react-router";
 import type { DataOrigin, PolicyEvidenceRefV1 } from "@aihot/career-insights/contracts";
 import { POLICY_SOURCE_OPTIONS, THEME_LABELS } from "./labels.ts";
 
 /** 政策列表按 API 的默认页大小取数。 */
 export const POLICY_PAGE_SIZE = 20;
 const MAX_PAGE = 10_000;
+const MAX_PAGE_SIZE = 100;
 
 export interface PolicyPageFilters {
   source_key?: string;
@@ -23,19 +25,52 @@ export interface PolicyListResponse {
   filters: PolicyPageFilters;
 }
 
-function parsePolicyPage(raw: string | null): number {
-  if (raw === null || !/^[1-9]\d*$/.test(raw)) return 1;
-  const value = Number(raw);
-  return Number.isSafeInteger(value) && value <= MAX_PAGE ? value : 1;
+export type PolicyFilterParameter = "source_key" | "theme" | "page" | "page_size";
+
+export type PolicyFiltersResult =
+  | { ok: true; filters: PolicyPageFilters }
+  | { ok: false; error: { code: "invalid_parameter"; parameter: PolicyFilterParameter } };
+
+function invalid(parameter: PolicyFilterParameter): PolicyFiltersResult {
+  return { ok: false, error: { code: "invalid_parameter", parameter } };
 }
 
-export function parsePolicyFilters(search: URLSearchParams): PolicyPageFilters {
-  const filters: PolicyPageFilters = { page: parsePolicyPage(search.get("page")), page_size: POLICY_PAGE_SIZE };
+/** null 表示未提供；提供但不是 API 接受的正整数（含越界）返回 null。 */
+function parseBoundedInteger(raw: string | null, fallback: number, maximum: number): number | null {
+  if (raw === null) return fallback;
+  if (!/^[1-9]\d*$/.test(raw)) return null;
+  const value = Number(raw);
+  return Number.isSafeInteger(value) && value <= maximum ? value : null;
+}
+
+export function parsePolicyFilters(search: URLSearchParams): PolicyFiltersResult {
+  const page = parseBoundedInteger(search.get("page"), 1, MAX_PAGE);
+  if (page === null) return invalid("page");
+  const pageSize = parseBoundedInteger(search.get("page_size"), POLICY_PAGE_SIZE, MAX_PAGE_SIZE);
+  if (pageSize === null) return invalid("page_size");
+
+  const filters: PolicyPageFilters = { page, page_size: pageSize };
+
   const sourceKey = search.get("source_key");
-  if (sourceKey !== null && POLICY_SOURCE_OPTIONS.some((option) => option.value === sourceKey)) filters.source_key = sourceKey;
+  if (sourceKey !== null) {
+    if (!POLICY_SOURCE_OPTIONS.some((option) => option.value === sourceKey)) return invalid("source_key");
+    filters.source_key = sourceKey;
+  }
+
   const theme = search.get("theme");
-  if (theme !== null && theme in THEME_LABELS) filters.theme = theme;
-  return filters;
+  if (theme !== null) {
+    if (!Object.hasOwn(THEME_LABELS, theme)) return invalid("theme");
+    filters.theme = theme;
+  }
+
+  return { ok: true, filters };
+}
+
+/** loader 用：非法筛选与 API 同语义返回 400，交给 ErrorBoundary 显示错误页而不是丢弃参数展示全量。 */
+export function parsePolicyFiltersOrThrow(search: URLSearchParams): PolicyPageFilters {
+  const result = parsePolicyFilters(search);
+  if (!result.ok) throw data({ error: result.error }, { status: 400 });
+  return result.filters;
 }
 
 export function serializePolicyFilters(filters: Partial<PolicyPageFilters>): string {

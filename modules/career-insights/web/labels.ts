@@ -11,11 +11,10 @@ export const THEME_LABELS: Readonly<Record<string, string>> = {
   employment_promotion: "就业促进",
 };
 
-/** 政策来源与 collector/sources.ts 里启用的政府政策来源一致。 */
+/** 政策来源与 collector/sources.ts 中 `enabled: true` 的政策源一致。 */
 export const POLICY_SOURCE_OPTIONS: ReadonlyArray<{ value: string; label: string }> = [
   { value: "state-council-policy", label: "中国政府网政策文件库" },
   { value: "ndrc-policy", label: "国家发展改革委政策发布" },
-  { value: "moe-policy", label: "教育部公告公示" },
 ];
 
 export const POLICY_SOURCE_TIER_LABELS: Readonly<Record<string, string>> = {
