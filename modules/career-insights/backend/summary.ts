@@ -290,8 +290,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   if (sampleSize === 0) {
     warnings.push({ code: "insufficient_data", message: "尚未采集到任何职位。" });
   }
+  // 术语分工：职族维度用「未分类（unknown）」；技能维度保留「未识别」（指技能未命中词典），两者不混用。
   if (sampleSize > 0 && (familyCounts.get("unknown") ?? 0) > 0) {
-    warnings.push({ code: "unknown_fields", message: "存在未识别职族的职位，已单列 unknown。" });
+    warnings.push({ code: "unknown_fields", message: "存在未分类的职位，已单列未分类（unknown）。" });
   }
   if (sampleSize > 0 && students.unknown_count > 0) {
     warnings.push({ code: "unknown_fields", message: "存在未标记应届友好度的职位，unknown 不表示不友好。" });

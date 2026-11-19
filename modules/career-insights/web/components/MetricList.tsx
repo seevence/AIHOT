@@ -111,7 +111,7 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
       )}
 
       {isUnknownFamily && (
-        <p className="mt-1 text-[12px] text-ink-4">unknown 表示未归入四个方向，不代表存在该职族。</p>
+        <p className="mt-1 text-[12px] text-ink-4">未分类（unknown）表示未归入四个方向，不代表存在该职族。</p>
       )}
 
       <p className="mt-4 text-[12px] leading-relaxed text-ink-3">{metric.disclaimer}</p>
