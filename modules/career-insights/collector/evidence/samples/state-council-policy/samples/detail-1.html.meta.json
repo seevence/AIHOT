@@ -6,7 +6,7 @@
   "http_status": 200,
   "content_type": "text/html",
   "body_sha256": "a7d3f4bac5a0a3e7d25ca145576678990dd6143dd7513b36aa2fdc96b481c047",
-  "captured_at": "2026-11-18T04:51:35.074Z",
+  "captured_at": "2026-11-19T08:18:43.267Z",
   "collector_version": "collector/0.1.0",
   "extraction_ref": "detail-1",
   "sanitized": true,

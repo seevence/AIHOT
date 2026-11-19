@@ -57,9 +57,9 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
     kind: "government_policy",
     entry_url: "https://www.gov.cn/zhengce/zhengceku/",
     access: "http",
-    enabled: false,
+    enabled: true,
     notes:
-      "2026-11-18 试抓：列表 https://www.gov.cn/zhengce/index.htm、详情 #UCAP-CONTENT；已存 1 列表 + 3 详情样本，解析与适配器（PolicyEvidenceRefV1）通过。待启用评审。",
+      "2026-11-18 试抓：列表 https://www.gov.cn/zhengce/index.htm、详情 #UCAP-CONTENT；已存 1 列表 + 3 详情样本，解析与适配器通过。2026-11-19 复抓 1 列表+3 详情，live 3/3、issuer 可判定、跳过 0，启用。",
   },
   {
     source_key: "ndrc-policy",

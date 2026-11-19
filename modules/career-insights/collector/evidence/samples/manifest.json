@@ -1,6 +1,6 @@
 {
   "version": "1.0",
-  "generated_at": "2026-11-18T14:36:59.899Z",
+  "generated_at": "2026-11-19T08:18:52.518Z",
   "sources": [
     {
       "source_key": "moe-policy",
@@ -85,49 +85,6 @@
           "extraction_ref": "list",
           "body_file": "ndrc-policy/samples/list.html",
           "body_sha256": "88670c10c2f85144a03c4172f18c82ee3b366c11bed127531abc0ec399bf2bf3"
-        }
-      ]
-    },
-    {
-      "source_key": "state-council-policy",
-      "kind": "policy",
-      "sample_count": 4,
-      "samples": [
-        {
-          "sample_id": "a7d3f4bac5a0a3e7",
-          "request_key": "GET https://www.gov.cn/zhengce/202611/content_7086080.htm",
-          "request_url": "https://www.gov.cn/zhengce/202611/content_7086080.htm",
-          "captured_at": "2026-11-18T04:51:35.074Z",
-          "extraction_ref": "detail-1",
-          "body_file": "state-council-policy/samples/detail-1.html",
-          "body_sha256": "a7d3f4bac5a0a3e7d25ca145576678990dd6143dd7513b36aa2fdc96b481c047"
-        },
-        {
-          "sample_id": "02cd30c1ddb738e5",
-          "request_key": "GET https://www.gov.cn/zhengce/content/202611/content_7085591.htm",
-          "request_url": "https://www.gov.cn/zhengce/content/202611/content_7085591.htm",
-          "captured_at": "2026-11-18T04:51:36.660Z",
-          "extraction_ref": "detail-2",
-          "body_file": "state-council-policy/samples/detail-2.html",
-          "body_sha256": "02cd30c1ddb738e5b9c1ebbfb42ccda69aefd52d30be854591618cea7d372d40"
-        },
-        {
-          "sample_id": "2945923f7ae5691f",
-          "request_key": "GET https://www.gov.cn/zhengce/202611/content_7085529.htm",
-          "request_url": "https://www.gov.cn/zhengce/202611/content_7085529.htm",
-          "captured_at": "2026-11-18T04:51:38.290Z",
-          "extraction_ref": "detail-3",
-          "body_file": "state-council-policy/samples/detail-3.html",
-          "body_sha256": "2945923f7ae5691fc14cb8e80e6dac7616e10be5b2a49fff654fb73ad2eadd38"
-        },
-        {
-          "sample_id": "f8c24ce7b60d29eb",
-          "request_key": "GET https://www.gov.cn/zhengce/index.htm",
-          "request_url": "https://www.gov.cn/zhengce/index.htm",
-          "captured_at": "2026-11-18T04:51:33.412Z",
-          "extraction_ref": "list",
-          "body_file": "state-council-policy/samples/list.html",
-          "body_sha256": "f8c24ce7b60d29ebe42fa5c98bad7fd196f153e53ee41f19ececc17063dcaf2e"
         }
       ]
     },
@@ -293,6 +250,49 @@
           "extraction_ref": "list-5",
           "body_file": "baidu-official-careers/samples/list-5.json",
           "body_sha256": "03b83798f02a2af1b8ea3072f154ccf7d8fe728737c8ee788054ef7aaa0ea990"
+        }
+      ]
+    },
+    {
+      "source_key": "state-council-policy",
+      "kind": "policy",
+      "sample_count": 4,
+      "samples": [
+        {
+          "sample_id": "381b00885b6b8de8",
+          "request_key": "GET https://www.gov.cn/zhengce/index.htm",
+          "request_url": "https://www.gov.cn/zhengce/index.htm",
+          "captured_at": "2026-11-19T08:18:41.538Z",
+          "extraction_ref": "list",
+          "body_file": "state-council-policy/samples/list.html",
+          "body_sha256": "381b00885b6b8de8362862a0830be61f5a26054163d4dfb30116efae860d0d47"
+        },
+        {
+          "sample_id": "a7d3f4bac5a0a3e7",
+          "request_key": "GET https://www.gov.cn/zhengce/202611/content_7086080.htm",
+          "request_url": "https://www.gov.cn/zhengce/202611/content_7086080.htm",
+          "captured_at": "2026-11-19T08:18:43.267Z",
+          "extraction_ref": "detail-1",
+          "body_file": "state-council-policy/samples/detail-1.html",
+          "body_sha256": "a7d3f4bac5a0a3e7d25ca145576678990dd6143dd7513b36aa2fdc96b481c047"
+        },
+        {
+          "sample_id": "02cd30c1ddb738e5",
+          "request_key": "GET https://www.gov.cn/zhengce/content/202611/content_7085591.htm",
+          "request_url": "https://www.gov.cn/zhengce/content/202611/content_7085591.htm",
+          "captured_at": "2026-11-19T08:18:45.353Z",
+          "extraction_ref": "detail-2",
+          "body_file": "state-council-policy/samples/detail-2.html",
+          "body_sha256": "02cd30c1ddb738e5b9c1ebbfb42ccda69aefd52d30be854591618cea7d372d40"
+        },
+        {
+          "sample_id": "2945923f7ae5691f",
+          "request_key": "GET https://www.gov.cn/zhengce/202611/content_7085529.htm",
+          "request_url": "https://www.gov.cn/zhengce/202611/content_7085529.htm",
+          "captured_at": "2026-11-19T08:18:47.047Z",
+          "extraction_ref": "detail-3",
+          "body_file": "state-council-policy/samples/detail-3.html",
+          "body_sha256": "2945923f7ae5691fc14cb8e80e6dac7616e10be5b2a49fff654fb73ad2eadd38"
         }
       ]
     }
