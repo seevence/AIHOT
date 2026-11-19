@@ -108,3 +108,25 @@
 
 - 风险最高：issuer 需从标题/正文推断，详情 URL 两种形态需都覆盖，跳过数必须为 0。
 - 启用前需单独复抓样本并核对 3/3 解析。
+
+## B3 真实数据闭环（2026-11-19 跑通）
+
+命令：`npx tsx modules/career-insights/collector/cli/ingest-career.ts --live`（必须显式 `--live`）。
+
+| 项 | 结果 |
+|---|---|
+| job 入库 | 腾讯 / 美团 / 百度 各 10 条，`career_jobs=30`，`data_origin=live` |
+| 政策入库 | `ndrc-policy` 3 条，`career_policies=3` |
+| 观测历史 | `career_job_observations` 从 10 → 100（多个观测时点） |
+| 幂等 | 第二轮三源全部 `duplicates=10`、政策 `duplicates=3`，`career_jobs` 不增 |
+| API | `summary` 返回 `data_origin=live`、`sample_size=30`、`company_count=3` |
+| 验收 | `scripts/check-career-integration.ts --require-data` 六项全绿 |
+| 证据 | `evidence/live-runs/20261119T0818Z-ingest.json` |
+
+### 契约修复
+
+`source_tier` 两侧语义错位：collector 输出 `national`/`ministry`（层级），backend 只接受 `government_official`/`official_media`/`other_public`（来源性质）。已统一为 `government_official`，政策批次由 `rejected=3` 变为 `accepted=3`。
+
+### 已知质量缺口（转 C）
+
+真实数据上 `role_family` 全为 `unknown`、`skills` 全空、`student_friendly=unknown`，`job_family_share=1` 只反映 unknown 一类。C 需用真实样本复验词表与指标口径后才能进入 E 与最终门禁。
