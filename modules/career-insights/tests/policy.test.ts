@@ -291,6 +291,7 @@ test("an empty policy table lists nothing with an explicit empty origin", async 
   assert.equal(listed.total, 0);
   assert.equal(listed.data_origin, "live");
   assert.equal(listed.as_of, "1970-01-01T00:00:00.000Z");
+  assert.deepEqual(listed.facets, { sources: [], themes: [] });
 });
 test("the repository refuses out-of-range paging instead of clamping it", async () => {
   for (const filters of [
