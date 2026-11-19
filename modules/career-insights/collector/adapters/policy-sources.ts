@@ -158,7 +158,7 @@ export function createGovPolicySourceAdapter(
           continue;
         }
         try {
-          out.push(toPolicyRef(draft, issuer, "national"));
+          out.push(toPolicyRef(draft, issuer, "government_official"));
         } catch (error) {
           skipped.push(`${item.url} ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -207,7 +207,7 @@ export function createNdrcPolicySourceAdapter(
           item.publishedAt,
         );
         try {
-          out.push(toPolicyRef(draft, "国家发展改革委", "national"));
+          out.push(toPolicyRef(draft, "国家发展改革委", "government_official"));
         } catch (error) {
           skipped.push(`${item.url} ${error instanceof Error ? error.message : String(error)}`);
         }
@@ -255,7 +255,7 @@ export function createMoePolicySourceAdapter(
           item.publishedAt,
         );
         try {
-          out.push(toPolicyRef(draft, "教育部", "national"));
+          out.push(toPolicyRef(draft, "教育部", "government_official"));
         } catch (error) {
           skipped.push(`${item.url} ${error instanceof Error ? error.message : String(error)}`);
         }

@@ -148,7 +148,7 @@ const rawSample: RawCollectedJobV1 = {
 | `title` / `official_url` | 详情页标题与原始链接 |
 | `issuer` | 国务院源按标题/正文识别（中共中央 / 国务院办公厅 / 国务院），无法判定则该条跳过；发改委固定 `"国家发展改革委"` |
 | `published_at` | 解析结果转 `YYYY-MM-DD`；详情页缺失时回退列表页同条日期，仍缺失则跳过 |
-| `source_tier` | `"national"` |
+| `source_tier` | `"government_official"`（与 backend `PolicySourceTier` 对齐） |
 | `theme_ids` | 复用 `data/dictionaries.ts#THEME_KEYWORDS` 对标题+正文匹配，最多 3 个 |
 | `evidence_excerpt` | 正文前 200 字的原文摘录（非摘要） |
 
