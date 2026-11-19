@@ -1,13 +1,18 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ApiErrorResponseV1, JobFiltersV1 } from "../contracts/api.ts";
 import type { EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
+import { CAREER_SOURCE_DEFINITIONS } from "../collector/sources.ts";
+import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import { CareerApiError, InvalidParameterError, NotFoundError } from "./errors.ts";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
+import type { PolicyFiltersV1 } from "./policy-read.ts";
 import type { CareerRepository } from "./repository.ts";
 
 const ROLE_FAMILIES = ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown"] as const;
 const EMPLOYMENT_TYPES = ["campus", "internship", "experienced", "other", "unknown"] as const;
 const STUDENT_FRIENDLY_VALUES = ["yes", "no", "unknown"] as const;
 const FILTER_KEYS = new Set(["role_family", "company", "city", "employment_type", "student_friendly", "skill", "page", "page_size"]);
+const POLICY_FILTER_KEYS = new Set(["source_key", "theme", "page", "page_size"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidParameter(parameter: string, message: string): InvalidParameterError {
@@ -78,8 +83,30 @@ function parseJobFilters(query: unknown): JobFiltersV1 {
     ...(employmentType === undefined ? {} : { employment_type: employmentType }),
     ...(studentFriendly === undefined ? {} : { student_friendly: studentFriendly }),
     ...(skill === undefined ? {} : { skill }),
-    page: pageNumber(input, "page", 1),
-    page_size: pageNumber(input, "page_size", 20, 100),
+    page: pageNumber(input, "page", 1, MAX_PAGE),
+    page_size: pageNumber(input, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
+  };
+}
+
+function parsePolicyFilters(query: unknown): PolicyFiltersV1 {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !POLICY_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+
+  const sourceKey = optionalText(input, "source_key");
+  if (sourceKey !== undefined && !CAREER_SOURCE_DEFINITIONS.some((definition) => definition.source_key === sourceKey)) {
+    throw invalidParameter("source_key", `Unknown source: ${sourceKey}.`);
+  }
+  const theme = optionalText(input, "theme");
+  if (theme !== undefined && !Object.hasOwn(THEME_KEYWORDS, theme)) {
+    throw invalidParameter("theme", `Unknown theme: ${theme}.`);
+  }
+
+  return {
+    ...(sourceKey === undefined ? {} : { source_key: sourceKey }),
+    ...(theme === undefined ? {} : { theme }),
+    page: pageNumber(input, "page", 1, MAX_PAGE),
+    page_size: pageNumber(input, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
   };
 }
 
@@ -118,5 +145,9 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
     const detail = await repository.jobDetail(request.params.id);
     if (detail === null) throw new NotFoundError();
     return detail;
+  }));
+
+  app.get("/api/site/career-insights/policies", async (request, reply) => respond(reply, async () => {
+    return repository.listPolicies(parsePolicyFilters(request.query));
   }));
 }

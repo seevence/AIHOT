@@ -13,6 +13,7 @@ import {
   parseNdrcPolicyList,
 } from "./policy-parse.ts";
 import type { PolicyDetailDraft } from "./policy-parse.ts";
+import { policyItemIdFromUrl } from "./policy-id.ts";
 import { THEME_KEYWORDS } from "../../data/dictionaries.ts";
 
 const GOV_SOURCE_KEY = "state-council-policy";
@@ -54,11 +55,6 @@ function buildRequest(url: string, sourceKey: string, signal: AbortSignal | unde
     sourceKey,
     ...(signal === undefined ? {} : { signal }),
   };
-}
-
-function itemIdFromUrl(url: string): string {
-  const last = new URL(url).pathname.split("/").filter((part) => part.length > 0).at(-1) ?? url;
-  return last.replace(/\.html?$/i, "");
 }
 
 
@@ -104,7 +100,7 @@ function toPolicyRef(draft: PolicyDetailDraft, issuer: string, sourceTier: strin
     throw new ParseFailedError(`政策 ${draft.url} 缺少可解析的发布时间`, draft.sourceKey);
   }
   return {
-    policy_item_id: itemIdFromUrl(draft.url),
+    policy_item_id: policyItemIdFromUrl(draft.url),
     title: draft.title,
     issuer,
     published_at: publishedAt,

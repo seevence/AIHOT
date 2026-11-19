@@ -226,3 +226,78 @@ test("a policy batch over one hundred items is refused before anything is writte
   await assert.rejects(() => writePolicyBatch(sql, batchOf(many)), InvalidParameterError);
   assert.equal(await count("career_policies"), 0);
 });
+test("the policy list pages newest first and filters by source and theme", async () => {
+  await writePolicyBatch(
+    sql,
+    batchOf([
+      policy({ source_key: "ndrc-policy", policy_item_id: "p-old", published_at: "2026-10-01", theme_ids: ["employment_promotion"] }),
+      policy({
+        source_key: "ndrc-policy",
+        policy_item_id: "p-new",
+        published_at: "2026-11-10",
+        theme_ids: ["artificial_intelligence"],
+      }),
+    ]),
+  );
+  await writePolicyBatch(
+    sql,
+    batchOf([
+      policy({
+        source_key: "state-council-policy",
+        policy_item_id: "p-other",
+        published_at: "2026-11-05",
+        theme_ids: ["employment_promotion"],
+      }),
+    ]),
+  );
+
+  const firstPage = await repository.listPolicies({ page: 1, page_size: 2 });
+  assert.equal(firstPage.total, 3);
+  assert.deepEqual(firstPage.items.map((item) => item.policy_item_id), ["p-new", "p-other"]);
+  assert.deepEqual(firstPage.filters, { page: 1, page_size: 2 });
+
+  const bySource = await repository.listPolicies({ source_key: "ndrc-policy", page: 1, page_size: 20 });
+  assert.equal(bySource.total, 2);
+  assert.deepEqual(bySource.items.map((item) => item.policy_item_id), ["p-new", "p-old"]);
+
+  const byTheme = await repository.listPolicies({ theme: "employment_promotion", page: 1, page_size: 20 });
+  assert.deepEqual(byTheme.items.map((item) => item.policy_item_id), ["p-other", "p-old"]);
+});
+
+test("the policy list reports the conservative origin and refuses synthetic rows", async () => {
+  await writePolicyBatch(sql, batchOf([policy({ source_key: "ndrc-policy", policy_item_id: "p-import" })]));
+  await writePolicyBatch(
+    sql,
+    batchOf([policy({ source_key: "state-council-policy", policy_item_id: "p-live", content_hash: "e".repeat(64) })], {
+      data_origin: "live",
+    }),
+  );
+
+  const listed = await repository.listPolicies({ page: 1, page_size: 20 });
+  assert.equal(listed.data_origin, "verified_import");
+
+  await writePolicyBatch(
+    sql,
+    batchOf([policy({ source_key: "synthetic-source", policy_item_id: "p-synthetic" })], {
+      data_origin: "synthetic_fixture",
+    }),
+  );
+  await assert.rejects(() => repository.listPolicies({ page: 1, page_size: 20 }));
+});
+
+test("an empty policy table lists nothing with an explicit empty origin", async () => {
+  const listed = await repository.listPolicies({ page: 1, page_size: 20 });
+  assert.deepEqual(listed.items, []);
+  assert.equal(listed.total, 0);
+  assert.equal(listed.data_origin, "live");
+  assert.equal(listed.as_of, "1970-01-01T00:00:00.000Z");
+});
+test("the repository refuses out-of-range paging instead of clamping it", async () => {
+  for (const filters of [
+    { page: 1, page_size: 1000 },
+    { page: 1, page_size: 0 },
+    { page: 10_001, page_size: 20 },
+  ]) {
+    await assert.rejects(() => repository.listPolicies(filters), InvalidParameterError);
+  }
+});

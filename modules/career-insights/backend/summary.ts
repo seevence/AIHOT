@@ -7,6 +7,7 @@ import type {
 } from "../contracts/api.ts";
 import type { MetricSpecV1, RoleFamily } from "../contracts/job.ts";
 import { SKILL_DICTIONARY_VERSION } from "../data/dictionaries.ts";
+import { NORMALIZER_VERSION } from "../data/index.ts";
 import {
   computePolicyJobSharedThemesMetric,
   computeSharedThemes,
@@ -123,7 +124,7 @@ async function studentEvidence(db: Db): Promise<EvidenceLinkV1[]> {
 }
 
 export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
-  const [counts, familyRows, skillRows, student, snapshots, unknownSkill] = await Promise.all([
+  const [counts, familyRows, skillRows, student, snapshots, unknownSkill, staleNormalizer] = await Promise.all([
     db<SummaryCounts[]>`
       SELECT COUNT(*)::int AS sample_size,
              COUNT(DISTINCT company_name)::int AS company_count,
@@ -157,6 +158,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
     db<{ unknown_count: number }[]>`
       SELECT COUNT(*) FILTER (WHERE COALESCE(skills, '[]'::jsonb) = '[]'::jsonb)::int AS unknown_count
       FROM career_jobs`,
+    db<{ stale_count: number }[]>`
+      SELECT COUNT(*) FILTER (WHERE normalizer_version <> ${NORMALIZER_VERSION})::int AS stale_count
+      FROM career_jobs`,
   ]);
 
   const count = counts[0];
@@ -166,6 +170,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   const sampleSize = count.sample_size;
   const asOf = toIsoOrEpoch(count.last_observed_at);
   const hasMultipleSnapshots = snapshots.length >= 2;
+  const staleNormalizerCount = staleNormalizer[0]?.stale_count ?? 0;
   const unknownSkillCount = unknownSkill[0]?.unknown_count ?? 0;
   const unknownSkillRatio = ratioValue(unknownSkillCount, sampleSize);
   const familyCounts = new Map<RoleFamily, number>(
@@ -183,6 +188,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
             sample_size: 0,
             as_of: asOf,
             dimension: { role_family: roleFamily },
+            ...(roleFamily === "unknown" ? { unknown_count: 0, unknown_ratio: null } : {}),
             evidence: [],
           }),
         )
@@ -190,7 +196,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
           await Promise.all(
             ROLE_FAMILY_ORDER.flatMap((roleFamily) => {
               const numeratorCount = familyCounts.get(roleFamily) ?? 0;
-              if (numeratorCount === 0) return [];
+              // unknown is a coverage bucket, not a role: always report it so a fully classified
+              // sample is distinguishable from "we never looked".
+              if (numeratorCount === 0 && roleFamily !== "unknown") return [];
               return [
                 roleFamilyEvidence(db, roleFamily).then((evidence) =>
                   metric("job_family_share", {
@@ -201,6 +209,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
                     sample_size: sampleSize,
                     as_of: asOf,
                     dimension: { role_family: roleFamily },
+                    ...(roleFamily === "unknown"
+                      ? { unknown_count: numeratorCount, unknown_ratio: ratioValue(numeratorCount, sampleSize) }
+                      : {}),
                     evidence,
                   }),
                 ),
@@ -284,6 +295,9 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   }
   if (sampleSize > 0 && students.unknown_count > 0) {
     warnings.push({ code: "unknown_fields", message: "存在未标记应届友好度的职位，unknown 不表示不友好。" });
+  }
+  if (sampleSize > 0 && staleNormalizerCount > 0) {
+    warnings.push({ code: "stale_data", message: "部分职位仍为旧归一化版本，重入库后刷新。" });
   }
   if (policies.length === 0) {
     warnings.push({ code: "insufficient_data", message: "尚未接入政策证据，共享主题暂不计算。" });

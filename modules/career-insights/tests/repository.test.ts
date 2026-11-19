@@ -115,6 +115,9 @@ test("an empty table answers summary with insufficient_data instead of a made-up
     assert.deepEqual(Object.keys(entry.dimension), ["role_family"]);
     assert.deepEqual(entry.evidence, []);
   }
+  const unknownFamily = families.find((entry) => entry.dimension.role_family === "unknown")!;
+  assert.equal(unknownFamily.unknown_count, 0, "an empty sample reports zero unclassified jobs");
+  assert.equal(unknownFamily.unknown_ratio, null, "an empty sample has no coverage ratio, not a guessed zero");
   assert.equal(metric(summary, "skill_demand_share").denominator_count, 0);
   assert.equal(metric(summary, "skill_demand_share").numerator_count, 0);
   assert.deepEqual(metric(summary, "skill_demand_share").dimension, {});
@@ -399,4 +402,57 @@ test("jobDetail returns the current state with its recent observations and hides
   assert.equal(newest!.evidence_excerpt, changedText.slice(0, 500));
   assert.equal(oldest!.evidence_excerpt, rawText.slice(0, 500));
   assert.equal(oldest!.evidence_excerpt.length, 500);
+});
+test("old normalizer rows raise a stale warning and the unknown bucket reports coverage", async () => {
+  await seed(
+    job({ normalizer_version: "normalizer/0.1.0", role_family: "unknown" }),
+    job({ job_key: "job-2", content_hash: digest("j2"), role_family: "data" }),
+  );
+
+  const summary = await repository.summary();
+  assert.ok(
+    summary.warnings.some(
+      (warning) => warning.code === "stale_data" && warning.message === "部分职位仍为旧归一化版本，重入库后刷新。",
+    ),
+  );
+
+  const unknown = summary.metrics.find(
+    (entry) => entry.metric_id === "job_family_share" && entry.dimension.role_family === "unknown",
+  )!;
+  assert.equal(unknown.numerator_count, 1);
+  assert.equal(unknown.unknown_count, 1);
+  assert.equal(unknown.unknown_ratio, 0.5);
+
+  assert.equal(
+    Object.keys(summary).includes("normalizer_version"),
+    false,
+    "the summary does not expose the normalizer version",
+  );
+
+  const list = await repository.listJobs({ page: 1, page_size: 20 });
+  assert.equal(
+    Object.keys(list.items[0]!).includes("normalizer_version"),
+    false,
+    "the job list item does not expose the normalizer version",
+  );
+  const detail = await repository.jobDetail(list.items[0]!.id);
+  assert.equal(
+    Object.keys(detail!.job).includes("normalizer_version"),
+    false,
+    "the job detail does not expose the normalizer version",
+  );
+});
+
+test("a fully classified sample still reports an explicit zero unknown coverage", async () => {
+  await seed(job({ role_family: "data" }));
+
+  const summary = await repository.summary();
+  const unknown = summary.metrics.find(
+    (entry) => entry.metric_id === "job_family_share" && entry.dimension.role_family === "unknown",
+  )!;
+  assert.equal(unknown.status, "ok");
+  assert.equal(unknown.value, 0);
+  assert.equal(unknown.unknown_count, 0);
+  assert.equal(unknown.unknown_ratio, 0);
+  assert.equal(summary.warnings.some((warning) => warning.code === "stale_data"), false);
 });
