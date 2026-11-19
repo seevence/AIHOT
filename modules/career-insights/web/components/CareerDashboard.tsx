@@ -125,7 +125,19 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
                     回到第 1 页
                   </Link>
                 </div>
-              ) : jobs.total === 0 && hasActiveFilters(filters) ? <div className="mt-3"><FilterEmpty /></div> : <div className="mt-3"><CareerEmpty /></div>
+              ) : jobs.total === 0 && hasActiveFilters(filters) ? (
+                <div className="mt-3">
+                  <FilterEmpty
+                    hint={
+                      filters.student_friendly === "yes"
+                        ? "本次样本中没有明确标注学生友好的职位。"
+                        : undefined
+                    }
+                  />
+                </div>
+              ) : (
+                <div className="mt-3"><CareerEmpty /></div>
+              )
             ) : (
               <>
                 <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
