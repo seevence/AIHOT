@@ -141,6 +141,13 @@ export default function StarredPage() {
         <div className="mt-3 flex flex-col items-center rounded-card border border-dashed border-line-strong px-6 py-12 text-center">
           <IconBookmark size={20} className="text-ink-4" />
           <p className="mt-3 text-[13px] text-ink-3">还没有收藏内容。点开任意一条内容，在详情页点击收藏即可添加。</p>
+          <p className="mt-1.5 text-[13px] text-ink-3">
+            本站内容暂未接入，可先查看
+            <Link to="/career-insights" className="font-medium text-accent hover:underline">
+              就业趋势洞察
+            </Link>
+            。
+          </p>
           <Link to="/" className="mt-4 text-[12.5px] font-medium text-accent hover:text-accent-ink">
             去看精选 →
           </Link>

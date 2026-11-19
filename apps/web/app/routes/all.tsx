@@ -151,6 +151,11 @@ export default function AllPage() {
               }
             >
               {f.q ? "换个说法，或者去掉筛选再试。" : "这个筛选下暂时没有内容。"}
+              {" "}本站内容暂未接入，可先查看
+              <Link to="/career-insights" className="font-medium text-accent hover:underline">
+                就业趋势洞察
+              </Link>
+              。
             </EmptyState>
           </div>
         ) : (
