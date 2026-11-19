@@ -58,7 +58,7 @@
 | 5 | ~~C 归一化覆盖率与 duplicate 刷新缺口~~：已关闭——0.2.0 经 backfill 覆盖 40/40（100%）；duplicate 刷新派生字段与 `NORMALIZER_VERSION` 落库（`0163`）此前已关闭 | 已关闭 |
 | 6 | C 侧口径待决策：`content_hash` 语义边界（`f7dc6f4` 已收窄输入）、标题 vs hint 优先级、是否设 `sales` 职族、"运营"词精度 | A |
 | 7 | E 真实数据复验：backfill 已完成（40/40），E 复验已启动 | E（进行中） |
-| 8 | 采集覆盖率改进（`pageLimit=1 × pageSize=10`，tencent 在售 2091 条）：样本量受采集窗口限制，属下一阶段可选项 | B（下阶段）/ A 排期 |
+| 8 | 采集覆盖率改进：`--pages` 已打通（`1d80431` / `93365ac` / `344e952`），2 页已实测（见「采集窗口打通与 --pages 2 扩采」）；是否继续扩到 3–10 页待 A 排期 | B / A 排期 |
 
 ## B2a 三家 job 源（2026-11-18）
 
@@ -283,7 +283,7 @@ job 侧合计 accepted 6 / updated 0 / duplicates 24；`career_job_observations`
 
 | # | 事项 | 归属 / 状态 |
 |---|---|---|
-| 1 | 采集覆盖率改进：`pageLimit` / 分页（首发 10 条/源，tencent 在售 2091 条），改进后重跑以扩大样本 | B 写集；下一阶段可选项，待 review |
+| 1 | 采集覆盖率改进：`--pages` 已打通并完成 2 页扩采（74 行基线），是否继续扩页待 A 排期 | B 写集；2 页已完成，见下节 |
 | 2 | E 真实数据复验 | 已启动 |
 
 ### 待 A 决策的 C 侧口径
@@ -295,3 +295,65 @@ job 侧合计 accepted 6 / updated 0 / duplicates 24；`career_job_observations`
 3. 是否单设 `sales` 职族，避免销售岗位被"大模型"等词抢占。
 4. "运营"词精度：是否排除运营商 / 安全运营等组合。
 5. ~~duplicate 分支是否应刷新派生字段~~：已由 0.2.0 关闭（duplicates 分支现刷新派生字段，仅不写 observations）。
+## 采集窗口打通与 --pages 2 扩采（2026-11-19）
+
+本节数字均来自 `20261119T1134Z-ingest-pages2.json` 与主库（`aihot-db-1`，库 `aihot`）psql 实测，未做推算。
+
+### CLI → runner → adapter 打通
+
+- `--pages N` 已从 ingest CLI 贯通到 runner 的 `RunContext.pageLimit`，再透传给三个 job adapter 的分页循环：`1d80431`（CLI 接 `--pages`）、`93365ac`（识别 `--pages=N` 等号写法）、`344e952`（ingest 路径接通并在 report 记录 `page_limit`）。
+- 缺省仍为 1（`DEFAULT_PAGE_LIMIT`），保持每源首屏既有口径；`--pages=N` 与 `--pages N` 等价。
+- 空值、非整数、越界（1..10）均抛 `CliArgumentError` 并 `exit=2`，在发起任何网络请求前退出，不静默回退。
+- 提交后 report 顶层写入 `page_limit`；本次证据为 `page_limit=2`。
+
+### 扩采实测
+
+命令：`npx tsx modules/career-insights/collector/cli/ingest-career.ts --live --pages 2`
+
+证据：`modules/career-insights/collector/evidence/live-runs/20261119T1134Z-ingest-pages2.json`（started `11:34:50.770Z` / finished `11:35:53.073Z`，wall 62.3s）。
+
+| 源 | collected | accepted | updated | duplicates | elapsed |
+|---|---|---|---|---|---|
+| `tencent-official-careers` | 20 | 10 | 0 | 10 | 37.158s |
+| `meituan-official-careers` | 20 | 15 | 0 | 5 | 3.861s |
+| `baidu-official-careers` | 20 | 9 | 0 | 11 | 4.109s |
+| `state-council-policy` | 3 | 0 | 3 | 0 | 0.020s |
+| `ndrc-policy` | 3 | 0 | 3 | 0 | 0.009s |
+
+job 侧 collected 60 / accepted 34 / updated 0 / duplicates 26；全源 `rejected=0`。
+
+### 库内结果（psql 实测）
+
+| 维度 | 扩采前 | 扩采后 |
+|---|---|---|
+| `career_jobs` | 40 | 74 |
+| `career_job_observations` | 196 | 230（+34，等于本轮 accepted） |
+| `career_policies` | 6 | 6 |
+| `career_ingest_runs` | 33 | 38（+5：3 job + 2 policy） |
+
+- 按源：baidu 20 / meituan 33 / tencent 21。
+- `normalizer_version`：`normalizer/0.2.0` = 74（全表统一，无 0.1.0 残留）。
+- `role_family`：unknown 47 / ai_product_operations 13 / ai_application_development 10 / data 2 / ai_algorithm 2。
+- `student_friendly`：no 57 / unknown 17（`yes` = 0）。
+- `skills` 非空：55/74。
+- `official_url` 重复组 0；`(source_key, job_key)` 重复组 0。
+- `--require-data`：6/6 通过。
+
+### 口径披露（必须随数字一起引用）
+
+| 项 | 实测 |
+|---|---|
+| 新增 34 行 unknown 占比 | 24/34 = 70.6% |
+| 旧 40 行 unknown 占比 | 23/40 = 57.5%（+13.1pp） |
+| 偏移原因 | 第 2 页含采购 / HRBP / 测试 / 售前等非 AI 岗（如 meituan「硬件采购岗」「HRBP（外派中东）」、baidu「山东售前解决方案架构师」、meituan「骑行硬件-电气部件测试工程师」），复核实测，非词典漂移 |
+| `student_friendly=yes` | 0（no 57 / unknown 17）；按该字段筛选会恒空，待 C 裁决 |
+| 启用源 | 仍只有 3 个 job 源（alibaba / bytedance / moe 均 `enabled:false`）；2 页上限约 60 条/轮 |
+| 样本口径 | 74 行为 2 页窗口基线，不是全量岗位库；趋势结论仍须注明窗口 |
+
+### 残余 minor（如实记录，本轮未修正）
+
+| # | 项 | 说明 |
+|---|---|---|
+| 1 | evidence 逐源 elapsed 合计 45.2s vs wall 62.3s | 约 17s 未归因（进程启动、DB 写入、归一化等未被逐源计时覆盖） |
+| 2 | observation 与 run 仅靠 `batch_id` 关联 | `career_ingest_runs` 无直接外键，跨表对账需经 `batch_id` |
+| 3 | `collector_version` 固定 `collector/0.1.0` | 采集层版本未随分页能力升级，行为变更无法从该字段区分 |
