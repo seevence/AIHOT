@@ -94,6 +94,10 @@ export function DirectionView({
 }) {
   const skillMetrics = summary.metrics.filter((metric) => metric.metric_id === "skill_demand_share");
   const otherMetrics = summary.metrics.filter((metric) => metric.metric_id !== "skill_demand_share");
+  const unknownRoleFamilyCount =
+    summary.metrics.find(
+      (metric) => metric.metric_id === "job_family_share" && metric.dimension.role_family === "unknown",
+    )?.numerator_count ?? 0;
   const directionHref = buildDirectionHref(roleFamily);
   const allJobsHref = buildJobsHref({ ...filters, role_family: roleFamily, page: 1 });
 
@@ -122,6 +126,7 @@ export function DirectionView({
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-[13px] text-ink-3">
         <span className="num">该方向职位 {jobs.total}</span>
         <span className="num">其中学生友好 {studentFriendlyTotal}</span>
+        {unknownRoleFamilyCount > 0 && <span className="num">另有 {unknownRoleFamilyCount} 条未分类职位</span>}
       </div>
 
       <section aria-labelledby="direction-skills">

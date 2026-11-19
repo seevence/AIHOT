@@ -1,5 +1,5 @@
 import type { MetricResultV1 } from "@aihot/career-insights/contracts";
-import { ROLE_FAMILY_LABELS } from "../labels";
+import { ROLE_FAMILY_LABELS, skillLabel } from "../labels";
 import { CareerTime } from "../time";
 import { EvidenceList } from "./EvidenceList";
 
@@ -24,10 +24,18 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
   const unknownText = unknownParts.length > 0 ? unknownParts.join(" · ") : undefined;
   const roleFamily = metric.dimension.role_family;
   const roleFamilyLabel = roleFamily ? ROLE_FAMILY_LABELS[roleFamily] ?? roleFamily : undefined;
+  const dimensionSuffix = roleFamily
+    ? ROLE_FAMILY_LABELS[roleFamily] ?? roleFamily
+    : metric.dimension.skill_id
+      ? skillLabel(metric.dimension.skill_id)
+      : metric.dimension.theme_id;
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
-      <h3 className="text-[13px] font-medium text-ink-3">{metric.label}</h3>
+      <h3 className="text-[13px] font-medium text-ink-3">
+        {metric.label}
+        {dimensionSuffix ? ` · ${dimensionSuffix}` : ""}
+      </h3>
       <p className="mt-2 text-[26px] font-bold leading-none text-ink">{formatValue(metric)}</p>
 
       <dl className="mt-4 space-y-1 text-[12px] text-ink-4">

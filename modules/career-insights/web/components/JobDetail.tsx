@@ -77,7 +77,7 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
       <section aria-labelledby="job-skill-evidence">
         <h2 id="job-skill-evidence" className="text-[17px] font-semibold text-ink">技能与证据</h2>
         {job.skill_evidence.length === 0 ? (
-          <p className="mt-3 text-[13px] text-ink-3">暂无可确认的技能证据。</p>
+          <p className="mt-3 text-[13px] text-ink-3">未识别到技能要求；这不代表该职位没有技能要求。</p>
         ) : (
           <ul className="mt-3 space-y-2">
             {job.skill_evidence.map((evidence) => (
