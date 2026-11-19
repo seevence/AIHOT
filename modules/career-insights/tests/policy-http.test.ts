@@ -82,6 +82,27 @@ test("the policy route rejects unsupported and malformed parameters", async () =
   const pageOverflow = await app.inject({ url: "/api/site/career-insights/policies?page=9007199254740991" });
   assert.equal(pageOverflow.statusCode, 400);
 
+  for (const pageSize of [0, 1000]) {
+    const response = await app.inject({ url: `/api/site/career-insights/policies?page_size=${pageSize}` });
+    assert.equal(response.statusCode, 400, `page_size=${pageSize}`);
+  }
+
+  for (const theme of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
+    const response = await app.inject({ url: `/api/site/career-insights/policies?theme=${theme}` });
+    assert.equal(response.statusCode, 400, `theme=${theme}`);
+    assert.equal(response.json().error.code, "invalid_parameter", `theme=${theme}`);
+  }
+
+  await app.close();
+});
+
+test("the jobs route rejects page and page_size outside the bounds", async () => {
+  const app = await build(fakeRepository());
+  for (const query of ["page=10001", "page=9007199254740991", "page_size=0", "page_size=1000"]) {
+    const response = await app.inject({ url: `/api/site/career-insights/jobs?${query}` });
+    assert.equal(response.statusCode, 400, query);
+    assert.equal(response.json().error.code, "invalid_parameter", query);
+  }
   await app.close();
 });
 

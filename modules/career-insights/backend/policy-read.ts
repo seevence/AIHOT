@@ -2,10 +2,8 @@ import { sql, type Db } from "@aihot/backend/db";
 import type { DataOrigin } from "../contracts/index.ts";
 import type { PolicyEvidenceRefV1 } from "../contracts/job.ts";
 import { InvalidParameterError } from "./errors.ts";
+import { MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
 import { resolveDataOrigin } from "./provenance.ts";
-
-const MAX_PAGE_SIZE = 100;
-const MAX_PAGE = 10_000;
 const EPOCH_ISO = "1970-01-01T00:00:00.000Z";
 const EXCERPT_LIMIT = 500;
 
@@ -61,11 +59,16 @@ function toEvidenceRef(row: PolicyRow): PolicyEvidenceRefV1 {
  * stored theme array.
  */
 export async function listPolicies(db: Db, filters: PolicyFiltersV1): Promise<PolicyListResponseV1> {
-  const pageSize = Math.min(Math.max(filters.page_size, 1), MAX_PAGE_SIZE);
   if (!Number.isSafeInteger(filters.page) || filters.page < 1 || filters.page > MAX_PAGE) {
     throw new InvalidParameterError(`Query parameter must be between 1 and ${MAX_PAGE}: page.`, { parameter: "page" });
   }
+  if (!Number.isSafeInteger(filters.page_size) || filters.page_size < 1 || filters.page_size > MAX_PAGE_SIZE) {
+    throw new InvalidParameterError(`Query parameter must be between 1 and ${MAX_PAGE_SIZE}: page_size.`, {
+      parameter: "page_size",
+    });
+  }
   const page = filters.page;
+  const pageSize = filters.page_size;
   const condition = sql`
     ${filters.source_key === undefined ? sql`` : sql`AND source_key = ${filters.source_key}`}
     ${filters.theme === undefined ? sql`` : sql`AND theme_ids @> to_jsonb(ARRAY[${filters.theme}::text])`}

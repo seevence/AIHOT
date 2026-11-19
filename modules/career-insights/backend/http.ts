@@ -4,6 +4,7 @@ import type { EmploymentType, RoleFamily, StudentFriendly } from "../contracts/i
 import { CAREER_SOURCE_DEFINITIONS } from "../collector/sources.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import { CareerApiError, InvalidParameterError, NotFoundError } from "./errors.ts";
+import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
 import type { PolicyFiltersV1 } from "./policy-read.ts";
 import type { CareerRepository } from "./repository.ts";
 
@@ -82,8 +83,8 @@ function parseJobFilters(query: unknown): JobFiltersV1 {
     ...(employmentType === undefined ? {} : { employment_type: employmentType }),
     ...(studentFriendly === undefined ? {} : { student_friendly: studentFriendly }),
     ...(skill === undefined ? {} : { skill }),
-    page: pageNumber(input, "page", 1),
-    page_size: pageNumber(input, "page_size", 20, 100),
+    page: pageNumber(input, "page", 1, MAX_PAGE),
+    page_size: pageNumber(input, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
   };
 }
 
@@ -97,15 +98,15 @@ function parsePolicyFilters(query: unknown): PolicyFiltersV1 {
     throw invalidParameter("source_key", `Unknown source: ${sourceKey}.`);
   }
   const theme = optionalText(input, "theme");
-  if (theme !== undefined && !(theme in THEME_KEYWORDS)) {
+  if (theme !== undefined && !Object.hasOwn(THEME_KEYWORDS, theme)) {
     throw invalidParameter("theme", `Unknown theme: ${theme}.`);
   }
 
   return {
     ...(sourceKey === undefined ? {} : { source_key: sourceKey }),
     ...(theme === undefined ? {} : { theme }),
-    page: pageNumber(input, "page", 1, 10_000),
-    page_size: pageNumber(input, "page_size", 20, 100),
+    page: pageNumber(input, "page", 1, MAX_PAGE),
+    page_size: pageNumber(input, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
   };
 }
 

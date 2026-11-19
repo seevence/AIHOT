@@ -292,3 +292,12 @@ test("an empty policy table lists nothing with an explicit empty origin", async 
   assert.equal(listed.data_origin, "live");
   assert.equal(listed.as_of, "1970-01-01T00:00:00.000Z");
 });
+test("the repository refuses out-of-range paging instead of clamping it", async () => {
+  for (const filters of [
+    { page: 1, page_size: 1000 },
+    { page: 1, page_size: 0 },
+    { page: 10_001, page_size: 20 },
+  ]) {
+    await assert.rejects(() => repository.listPolicies(filters), InvalidParameterError);
+  }
+});
