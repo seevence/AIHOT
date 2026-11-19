@@ -1,5 +1,5 @@
-import { createHash } from "node:crypto";
 import { writeFileSync } from "node:fs";
+import { policyContentHash } from "../adapters/policy-fingerprint.ts";
 import { HttpTransport } from "../fetch/http-transport.ts";
 import { createCareerAdapters } from "../registry.ts";
 import { runEnabledPolicySources, runEnabledSources } from "../orchestration/runner.ts";
@@ -137,9 +137,13 @@ async function ingestPolicySources(): Promise<PolicyRoundRecord[]> {
         official_url: policy.official_url,
         theme_ids: [...policy.theme_ids],
         evidence_excerpt: policy.evidence_excerpt,
-        content_hash: createHash("sha256")
-          .update(`${policy.official_url}\n${policy.evidence_excerpt}`)
-          .digest("hex"),
+        content_hash: policyContentHash({
+          source_key: result.source_key,
+          policy_item_id: policy.policy_item_id,
+          title: policy.title,
+          published_at: policy.published_at,
+          excerpt: policy.evidence_excerpt,
+        }),
         collector_version: "collector/0.1.0",
         fetched_at: fetchedAt,
       })),

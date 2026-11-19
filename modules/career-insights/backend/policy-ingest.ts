@@ -1,8 +1,8 @@
 import type { PolicyDetailDraft } from "../collector/index.ts";
 import type { DataOrigin } from "../contracts/index.ts";
 import { policyItemIdFromUrl, policyItemPathSegment } from "../collector/adapters/policy-id.ts";
+import { policyContentHash } from "../collector/adapters/policy-fingerprint.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
-import { sha256Hex } from "../data/dedupe.ts";
 import { InvalidParameterError } from "./errors.ts";
 import type { PolicyBatchInputV1, PolicyItemInputV1 } from "./policy-repository.ts";
 
@@ -73,15 +73,13 @@ export function policyItemFromDraft(draft: PolicyDetailDraft, envelope: PolicyIm
     official_url: draft.url,
     theme_ids: detectPolicyThemes(`${title}\n${body}`),
     evidence_excerpt: body.slice(0, EXCERPT_LIMIT),
-    content_hash: sha256Hex(
-      JSON.stringify({
-        source_key: envelope.source_key,
-        policy_item_id: policyItemId,
-        title,
-        published_at: publishedAt,
-        body,
-      }),
-    ),
+    content_hash: policyContentHash({
+      source_key: envelope.source_key,
+      policy_item_id: policyItemId,
+      title,
+      published_at: publishedAt,
+      excerpt: body,
+    }),
     collector_version: envelope.collector_version,
     fetched_at: envelope.fetched_at,
   };
