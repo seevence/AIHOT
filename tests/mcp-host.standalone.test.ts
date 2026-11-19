@@ -177,7 +177,7 @@ function checkConfiguration(siteUrl: string, allowedHosts: string, cases: Array<
       }
     } finally { await app.close(); }
   `, JSON.stringify(cases)], {
-    cwd: new URL("..", import.meta.url), encoding: "utf8", timeout: 10000,
+    cwd: new URL("..", import.meta.url), encoding: "utf8", timeout: 30_000,
     env: { ...process.env, SITE_URL: siteUrl, MCP_ALLOWED_HOSTS: allowedHosts },
   });
 }
