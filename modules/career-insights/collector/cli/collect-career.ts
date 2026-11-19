@@ -6,6 +6,7 @@ import {
   runEnabledPolicySources,
   runEnabledSources,
 } from "../index.ts";
+import { parsePageLimit } from "./args.ts";
 
 interface LiveRecord {
   readonly phase: "jobs" | "policies";
@@ -27,6 +28,14 @@ if (!process.argv.includes("--live")) {
   process.exit(2);
 }
 
+let pageLimit: number;
+try {
+  pageLimit = parsePageLimit(process.argv);
+} catch (error) {
+  console.error(error instanceof Error ? error.message : String(error));
+  process.exit(2);
+}
+
 const transport = new HttpTransport();
 const adapters = createCareerAdapters(transport);
 const records: LiveRecord[] = [];
@@ -35,7 +44,7 @@ const startedAt = new Date().toISOString();
 
 for (const adapter of adapters.jobs) {
   const started = Date.now();
-  const [result] = await runEnabledSources([adapter], { collectEnabled: true });
+  const [result] = await runEnabledSources([adapter], { collectEnabled: true, pageLimit });
   if (result === undefined) {
     continue;
   }
@@ -93,6 +102,7 @@ for (const adapter of adapters.policies) {
 const report = {
   schema_version: "1.0",
   started_at: startedAt,
+  page_limit: pageLimit,
   finished_at: new Date().toISOString(),
   network_calls_note: "仅公开页面；同域间隔 >=1s；未绕登录/验证码/403",
   records,

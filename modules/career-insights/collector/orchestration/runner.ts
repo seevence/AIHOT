@@ -38,6 +38,8 @@ export interface RunContext {
   readonly collectEnabled: boolean;
   readonly signal?: AbortSignal;
   readonly now?: () => string;
+  /** 每个来源翻页数，1..10；缺省时由适配器自身配置决定（默认 1，即首屏）。 */
+  readonly pageLimit?: number;
 }
 
 function toFailureType(error: unknown): CollectorFailureType {
@@ -116,7 +118,10 @@ export async function runSource(
   }
 
   try {
-    const raw = await adapter.collect(context.signal);
+    const raw = await adapter.collect(
+      context.signal,
+      context.pageLimit === undefined ? undefined : { pageLimit: context.pageLimit },
+    );
     const checked = validateCollectedJobs(raw);
     const failure = checked.valid.length === 0 && checked.invalid.length === 0 ? "empty_result" : null;
     const decision = decideSourceStatus({

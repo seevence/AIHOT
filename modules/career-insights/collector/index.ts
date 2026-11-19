@@ -10,9 +10,14 @@ export interface CareerSourceDefinition {
   notes: string;
 }
 
+/** 单次采集调用的覆盖项；缺省时沿用适配器构造时的配置。 */
+export interface CareerCollectOptions {
+  readonly pageLimit?: number;
+}
+
 export interface CareerSourceAdapter {
   readonly definition: CareerSourceDefinition;
-  collect(signal?: AbortSignal): Promise<RawCollectedJobV1[]>;
+  collect(signal?: AbortSignal, options?: CareerCollectOptions): Promise<RawCollectedJobV1[]>;
 }
 
 export { CAREER_SOURCE_DEFINITIONS } from "./sources.ts";

@@ -184,3 +184,18 @@ test("成功与拒绝路径同样携带 entry_url 与 UTC 尝试时间", async (
   assert.equal(rejected.status, "rejected");
   assert.equal(rejected.entry_url, definition("alibaba-official-careers").entry_url);
 });
+test("pageLimit 经 RunContext 传给 adapter；缺省时不传覆盖项", async () => {
+  const received: (number | undefined)[] = [];
+  const target: CareerSourceAdapter = {
+    definition: definition("tencent-official-careers"),
+    collect: async (_signal, options) => {
+      received.push(options?.pageLimit);
+      return [job({ source_key: "tencent-official-careers" })];
+    },
+  };
+
+  await runSource(target, { collectEnabled: true, pageLimit: 3 });
+  await runSource(target, { collectEnabled: true });
+
+  assert.deepEqual(received, [3, undefined]);
+});

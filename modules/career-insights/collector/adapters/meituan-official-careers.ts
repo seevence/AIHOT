@@ -1,5 +1,5 @@
 import type { RawCollectedJobV1 } from "../../contracts/index.ts";
-import type { CareerSourceAdapter } from "../index.ts";
+import type { CareerCollectOptions, CareerSourceAdapter } from "../index.ts";
 import { CAREER_SOURCE_DEFINITIONS } from "../sources.ts";
 import { ConfigError, ParseFailedError, SchemaChangedError } from "../fetch/errors.ts";
 import { createPageRequest } from "../fetch/transport.ts";
@@ -156,13 +156,17 @@ export function createMeituanOfficialCareersAdapter(
   if (definition === undefined) {
     throw new ConfigError(`来源 ${SOURCE_KEY} 未在 CAREER_SOURCE_DEFINITIONS 中登记`);
   }
-  const pageLimit = Math.max(1, Math.min(options.pageLimit ?? 1, 10));
+  const defaultPageLimit = Math.max(1, Math.min(options.pageLimit ?? 1, 10));
   const sleep = options.sleep ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const now = options.now ?? (() => new Date().toISOString());
 
   return {
     definition,
-    async collect(signal?: AbortSignal): Promise<RawCollectedJobV1[]> {
+    async collect(
+      signal?: AbortSignal,
+      callOptions?: CareerCollectOptions,
+    ): Promise<RawCollectedJobV1[]> {
+      const pageLimit = Math.max(1, Math.min(callOptions?.pageLimit ?? defaultPageLimit, 10));
       const jobs: RawCollectedJobV1[] = [];
       for (let page = 1; page <= pageLimit; page += 1) {
         if (page > 1) {
