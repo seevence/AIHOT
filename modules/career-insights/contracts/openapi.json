@@ -1,0 +1,318 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Career Insights API",
+    "version": "0.1",
+    "description": "AI+ 就业趋势平台的只读 HTTP 契约。准备阶段的正式数据源未就绪时返回 503，不返回空成功响应或联调 fixture。"
+  },
+  "servers": [{ "url": "/" }],
+  "paths": {
+    "/api/site/career-insights/summary": {
+      "get": {
+        "operationId": "getCareerSummary",
+        "summary": "就业看板总览",
+        "responses": {
+          "200": {
+            "description": "看板总览",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/SummaryResponseV1" } } }
+          },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/site/career-insights/jobs": {
+      "get": {
+        "operationId": "listCareerJobs",
+        "summary": "职位列表",
+        "parameters": [
+          { "name": "role_family", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/RoleFamily" } },
+          { "name": "company", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "city", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "employment_type", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/EmploymentType" } },
+          { "name": "student_friendly", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/StudentFriendly" } },
+          { "name": "skill", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "default": 1 } },
+          { "name": "page_size", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "职位列表",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobListResponseV1" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/site/career-insights/jobs/{id}": {
+      "get": {
+        "operationId": "getCareerJob",
+        "summary": "职位详情与公开观测",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string", "format": "uuid" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "职位详情",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobDetailResponseV1" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "404": { "$ref": "#/components/responses/NotFound" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "responses": {
+      "InvalidParameter": {
+        "description": "筛选参数、分页或 ID 格式错误",
+        "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponseV1" }, "example": { "error": { "code": "invalid_parameter", "message": "请求参数无效" } } } }
+      },
+      "NotFound": {
+        "description": "职位不存在",
+        "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponseV1" }, "example": { "error": { "code": "not_found", "message": "职位不存在" } } } }
+      },
+      "DataUnavailable": {
+        "description": "正式数据源尚未就绪或不可用",
+        "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponseV1" }, "example": { "error": { "code": "data_unavailable", "message": "数据尚未就绪" } } } }
+      },
+      "InternalError": {
+        "description": "未预期内部错误；响应不包含堆栈",
+        "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+        "content": { "application/json": { "schema": { "$ref": "#/components/schemas/ApiErrorResponseV1" }, "example": { "error": { "code": "internal_error", "message": "服务暂时不可用" } } } }
+      }
+    },
+    "schemas": {
+      "RoleFamily": {
+        "type": "string",
+        "enum": ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown"]
+      },
+      "EmploymentType": {
+        "type": "string",
+        "enum": ["campus", "internship", "experienced", "other", "unknown"]
+      },
+      "DegreeLevel": {
+        "type": "string",
+        "enum": ["any_explicit", "bachelor", "master", "doctor", "other", "unknown"]
+      },
+      "StudentFriendly": { "type": "string", "enum": ["yes", "no", "unknown"] },
+      "DataOrigin": { "type": "string", "enum": ["live", "verified_import", "synthetic_fixture"] },
+      "EvidenceLinkV1": {
+        "type": "object",
+        "required": ["kind", "id", "title", "official_url"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["job", "observation", "policy"] },
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "official_url": { "type": "string", "format": "uri" }
+        }
+      },
+      "CareerWarningV1": {
+        "type": "object",
+        "required": ["code", "message"],
+        "properties": {
+          "code": { "type": "string", "enum": ["source_failed", "insufficient_data", "unknown_fields", "stale_data", "synthetic_fixture"] },
+          "message": { "type": "string" }
+        }
+      },
+      "PolicyEvidenceRefV1": {
+        "type": "object",
+        "required": ["policy_item_id", "title", "issuer", "published_at", "official_url", "source_tier", "theme_ids", "evidence_excerpt"],
+        "properties": {
+          "policy_item_id": { "type": "string" },
+          "title": { "type": "string" },
+          "issuer": { "type": "string" },
+          "published_at": { "type": "string" },
+          "official_url": { "type": "string", "format": "uri" },
+          "source_tier": { "type": "string" },
+          "theme_ids": { "type": "array", "items": { "type": "string" } },
+          "evidence_excerpt": { "type": "string" }
+        }
+      },
+      "MetricResultV1": {
+        "type": "object",
+        "required": ["metric_id", "version", "label", "unit", "status", "value", "numerator_count", "denominator_count", "sample_size", "as_of", "dimension", "evidence", "disclaimer"],
+        "properties": {
+          "metric_id": { "type": "string", "enum": ["job_family_share", "skill_demand_share", "student_friendly_share", "observed_new_jobs", "policy_job_shared_themes"] },
+          "version": { "type": "string", "const": "1.0" },
+          "label": { "type": "string" },
+          "unit": { "type": "string", "enum": ["count", "ratio", "theme_list"] },
+          "status": { "type": "string", "enum": ["ok", "insufficient_data", "not_applicable"] },
+          "value": { "type": ["number", "null"] },
+          "numerator_count": { "type": "integer", "minimum": 0 },
+          "denominator_count": { "type": ["integer", "null"], "minimum": 0 },
+          "sample_size": { "type": "integer", "minimum": 0 },
+          "as_of": { "type": "string", "format": "date-time" },
+          "dimension": {
+            "type": "object",
+            "properties": {
+              "role_family": { "$ref": "#/components/schemas/RoleFamily" },
+              "skill_id": { "type": "string" },
+              "theme_id": { "type": "string" }
+            }
+          },
+          "unknown_count": { "type": "integer", "minimum": 0 },
+          "unknown_ratio": { "type": ["number", "null"], "minimum": 0, "maximum": 1 },
+          "dictionary_version": { "type": "string" },
+          "evidence": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceLinkV1" } },
+          "disclaimer": { "type": "string" }
+        }
+      },
+      "SharedThemeV1": {
+        "type": "object",
+        "required": ["theme_id", "label", "policy_count", "job_count", "policies", "jobs"],
+        "properties": {
+          "theme_id": { "type": "string" },
+          "label": { "type": "string" },
+          "policy_count": { "type": "integer", "minimum": 0 },
+          "job_count": { "type": "integer", "minimum": 0 },
+          "policies": { "type": "array", "items": { "$ref": "#/components/schemas/PolicyEvidenceRefV1" } },
+          "jobs": { "type": "array", "items": { "$ref": "#/components/schemas/EvidenceLinkV1" } }
+        }
+      },
+      "SummaryResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "as_of", "sample_size", "company_count", "source_count", "first_observed_at", "last_observed_at", "has_multiple_snapshots", "metrics", "shared_themes", "dictionary_version", "warnings"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "as_of": { "type": "string", "format": "date-time" },
+          "sample_size": { "type": "integer", "minimum": 0 },
+          "company_count": { "type": "integer", "minimum": 0 },
+          "source_count": { "type": "integer", "minimum": 0 },
+          "first_observed_at": { "type": "string", "format": "date-time" },
+          "last_observed_at": { "type": "string", "format": "date-time" },
+          "has_multiple_snapshots": { "type": "boolean" },
+          "metrics": { "type": "array", "items": { "$ref": "#/components/schemas/MetricResultV1" } },
+          "shared_themes": { "type": "array", "items": { "$ref": "#/components/schemas/SharedThemeV1" } },
+          "dictionary_version": { "type": "string" },
+          "warnings": { "type": "array", "items": { "$ref": "#/components/schemas/CareerWarningV1" } }
+        }
+      },
+      "JobFiltersV1": {
+        "type": "object",
+        "required": ["page", "page_size"],
+        "properties": {
+          "role_family": { "$ref": "#/components/schemas/RoleFamily" },
+          "company": { "type": "string" },
+          "city": { "type": "string" },
+          "employment_type": { "$ref": "#/components/schemas/EmploymentType" },
+          "student_friendly": { "$ref": "#/components/schemas/StudentFriendly" },
+          "skill": { "type": "string" },
+          "page": { "type": "integer", "minimum": 1 },
+          "page_size": { "type": "integer", "minimum": 1, "maximum": 100 }
+        }
+      },
+      "JobListItemV1": {
+        "type": "object",
+        "required": ["id", "company_name", "title", "role_family", "locations", "employment_type", "student_friendly", "skills", "published_at", "first_seen_at", "last_seen_at", "official_url"],
+        "properties": {
+          "id": { "type": "string", "format": "uuid" },
+          "company_name": { "type": "string" },
+          "title": { "type": "string" },
+          "role_family": { "$ref": "#/components/schemas/RoleFamily" },
+          "locations": { "type": "array", "items": { "type": "string" } },
+          "employment_type": { "$ref": "#/components/schemas/EmploymentType" },
+          "student_friendly": { "$ref": "#/components/schemas/StudentFriendly" },
+          "skills": { "type": "array", "items": { "type": "string" } },
+          "published_at": { "type": ["string", "null"] },
+          "first_seen_at": { "type": "string", "format": "date-time" },
+          "last_seen_at": { "type": "string", "format": "date-time" },
+          "official_url": { "type": "string", "format": "uri" }
+        }
+      },
+      "JobListResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "items", "page", "page_size", "total", "as_of", "filters"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/JobListItemV1" } },
+          "page": { "type": "integer", "minimum": 1 },
+          "page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "total": { "type": "integer", "minimum": 0 },
+          "as_of": { "type": "string", "format": "date-time" },
+          "filters": { "$ref": "#/components/schemas/JobFiltersV1" }
+        }
+      },
+      "ObservationPublicV1": {
+        "type": "object",
+        "required": ["id", "observed_at", "content_hash", "collector_version", "source_url", "evidence_excerpt"],
+        "properties": {
+          "id": { "type": "string" },
+          "observed_at": { "type": "string", "format": "date-time" },
+          "content_hash": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
+          "collector_version": { "type": "string" },
+          "source_url": { "type": "string", "format": "uri" },
+          "evidence_excerpt": { "type": "string" }
+        }
+      },
+      "JobDetailV1": {
+        "allOf": [
+          { "$ref": "#/components/schemas/JobListItemV1" },
+          {
+            "type": "object",
+            "required": ["source_key", "job_key", "degree", "degree_raw", "experience_min_years", "experience_max_years", "experience_raw", "skill_evidence", "collector_version"],
+            "properties": {
+              "source_key": { "type": "string" },
+              "job_key": { "type": "string" },
+              "degree": { "$ref": "#/components/schemas/DegreeLevel" },
+              "degree_raw": { "type": ["string", "null"] },
+              "experience_min_years": { "type": ["number", "null"] },
+              "experience_max_years": { "type": ["number", "null"] },
+              "experience_raw": { "type": ["string", "null"] },
+              "skill_evidence": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "required": ["skill_id", "evidence_text"],
+                  "properties": {
+                    "skill_id": { "type": "string" },
+                    "evidence_text": { "type": "string" }
+                  }
+                }
+              },
+              "collector_version": { "type": "string" }
+            }
+          }
+        ]
+      },
+      "JobDetailResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "job", "observations", "notice"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "job": { "$ref": "#/components/schemas/JobDetailV1" },
+          "observations": { "type": "array", "items": { "$ref": "#/components/schemas/ObservationPublicV1" } },
+          "notice": { "type": "string" }
+        }
+      },
+      "ApiErrorResponseV1": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": { "type": "string", "enum": ["invalid_parameter", "not_found", "data_unavailable", "internal_error"] },
+              "message": { "type": "string" },
+              "details": { "type": "object" }
+            }
+          }
+        }
+      }
+    }
+  }
+}
