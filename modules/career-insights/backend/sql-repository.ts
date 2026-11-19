@@ -13,6 +13,7 @@ import type {
 import type { DataOrigin, DegreeLevel, EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
 import { DataUnavailableError } from "./errors.ts";
 import { ingestBatch } from "./ingest.ts";
+import { listPolicies, type PolicyFiltersV1, type PolicyListResponseV1 } from "./policy-read.ts";
 import { resolveDataOrigin } from "./provenance.ts";
 import type { CareerRepository } from "./repository.ts";
 import { buildSummary } from "./summary.ts";
@@ -215,6 +216,10 @@ export class SqlCareerRepository implements CareerRepository {
         notice: NOTICE,
       };
     });
+  }
+
+  async listPolicies(filters: PolicyFiltersV1): Promise<PolicyListResponseV1> {
+    return this.run(() => listPolicies(this.db, filters));
   }
 
   async writeBatch(batch: CareerObservationBatchV1): Promise<IngestResultV1> {

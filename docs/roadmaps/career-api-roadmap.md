@@ -41,7 +41,7 @@
 |---|---|---|---|---|
 | D1 | D2 后端部分 | SQL repository（summary/listJobs/jobDetail）、幂等观测写入、`career-insights.ingest` 队列、后端数据库测试 | 已完成 | PASS（2026-11-17） |
 | D2 | S0–S5（tasks.md） | 云端基线、迁移、批次事实、两时点、政策真实样本、门禁复跑 | 完成，待独立 review | 本机补强事务/日期/测试后待审 |
-| D3 | D3 | SQL 指标冻结：五项指标真实样本验证、政策 `shared_themes` 接入真实政策证据、证据回溯 | 未开始 | - |
+| D3 | D3 | SQL 指标冻结 + 政策读取接口（`/policies`）、真实数据三接口验收清单 | 进行中 | 待独立 review |
 | D4 | D4–D5 | 后端只修缺陷：第二次采集观测验证、性能与错误处理、联调期问题 | 未开始 | - |
 | S0 | tasks.md S0 | 云端基线 worktree、路线图登记、基线门禁、写集隔离模板 | 完成，待独立 review | 门禁部分通过（环境缺陷 2 例） |
 
@@ -544,3 +544,88 @@
 独立 review：**PASS**（无 blocker / major）；确认移除事务包装或日历校验都会让测试失败（非 tautological），现有行为未变，写集仅 D 范围。
 非阻断项已处理：政策批次 >100 改用 `InvalidParameterError`；补闰日正向（2028-02-29）与 >100 拒绝用例。剩余观察：复用外部事务时失败记录会随外部事务回滚（当前唯一调用方传顶层 `sql`，无触发路径），留待出现外部事务调用方时再收紧。
 提交在 `feat/career-api-d2` 本地，待队长确认后推送，不并入集成分支。
+### D3 政策读取接口与真实数据验收（2026-11-18，进行中）
+
+分支 `feat/career-api-d3`，基线 `origin/feat/integration` `92fa8a2`（含 D2 PR #6 与 B2b-1 PR #7）。
+
+**新增接口。** `GET /api/site/career-insights/policies?source_key=&theme=&page=&page_size=`：
+
+- 只返回有 `published_at` 的政策（每条以日期作为证据），按 `published_at DESC, policy_item_id ASC`；`page_size` 上限 100，未知参数 400，数据库不可用 503。
+- `data_origin` 由 `career_policies` 的来源分布派生（保守：存在 `verified_import` 即降级；出现 `synthetic_fixture` 直接抛错）；`as_of = MAX(fetched_at)`。
+- 仓储 `backend/policy-read.ts` 的 `listPolicies(db, filters)`；`PolicyFiltersV1` / `PolicyListResponseV1` 暂放 backend 并复用 `PolicyEvidenceRefV1`，待 A 登记到 `contracts/`（不擅自改契约写集）。
+- 为什么需要：政策原只能通过 `summary.shared_themes` 看到“与职位主题有交集”的政策；`ndrc-policy` 的就业/人才主题与 AI 职位无交集时，页面完全看不到，需要一个独立的政策读取面。
+
+**测试。** `tests/policy.test.ts` 增 3 项（分页/来源/主题过滤、保守 origin 与 synthetic 拒绝、空表结构）；`tests/policy-http.test.ts` 3 项（过滤透传、400 校验、503 映射）。`tsc -p modules` 通过，D 线 28/28 通过。
+
+**真实数据验收清单（data_origin=live）。**
+
+SQL（按顺序执行，库为真实采集库）：
+
+```sql
+-- 1 来源分布：纯 live 库应只有 live 一个分组
+SELECT data_origin, COUNT(*) FROM career_jobs GROUP BY data_origin;
+SELECT data_origin, COUNT(*) FROM career_policies GROUP BY data_origin;
+-- 2 有效职位与观测规模
+SELECT COUNT(*) AS jobs, COUNT(DISTINCT source_key) AS sources,
+       COUNT(DISTINCT company_name) AS companies,
+       MIN(first_seen_at) AS first_seen, MAX(last_seen_at) AS last_seen
+FROM career_jobs;
+SELECT COUNT(*) AS observations, COUNT(DISTINCT job_id) AS observed_jobs,
+       COUNT(DISTINCT observed_at) AS snapshots
+FROM career_job_observations;
+-- 3 批次事实
+SELECT source_key, fetched_at, status, job_count, accepted, updated, duplicates, rejected, data_origin
+FROM career_ingest_runs ORDER BY fetched_at DESC LIMIT 5;
+-- 4 观测与批次关联
+SELECT COUNT(*) AS linked FROM career_job_observations o JOIN career_ingest_runs r ON r.id = o.batch_id;
+-- 5 jsonb 形态（必须都为 0）
+SELECT COUNT(*) FILTER (WHERE jsonb_typeof(locations) <> 'array') AS bad_locations,
+       COUNT(*) FILTER (WHERE jsonb_typeof(skills) <> 'array') AS bad_skills
+FROM career_jobs;
+-- 6 政策
+SELECT source_key, COUNT(*) AS n, MIN(published_at) AS oldest, MAX(published_at) AS newest
+FROM career_policies GROUP BY source_key;
+SELECT COUNT(*) FILTER (WHERE jsonb_typeof(theme_ids) <> 'array') AS bad_themes FROM career_policies;
+```
+
+HTTP（站点已启动；`BASE` 指向 API 端口）：
+
+```bash
+BASE=http://127.0.0.1:3000
+curl -s "$BASE/api/site/career-insights/summary" | jq '{data_origin,sample_size,company_count,source_count,as_of,has_multiple_snapshots,metrics:[.metrics[]|{metric_id,status,value,numerator_count,denominator_count}],shared_themes:[.shared_themes[]|{theme_id,policy_count,job_count}]}'
+curl -s "$BASE/api/site/career-insights/jobs?page=1&page_size=5" | jq '{data_origin,total,as_of,items:[.items[]|{id,company_name,title,role_family,locations,skills,student_friendly,official_url}]}'
+ID=$(curl -s "$BASE/api/site/career-insights/jobs?page=1&page_size=1" | jq -r '.items[0].id')
+curl -s "$BASE/api/site/career-insights/jobs/$ID" | jq '{data_origin,job,observations,notice}'
+curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=ndrc-policy" | jq '{data_origin,total,as_of,items:[.items[]|{policy_item_id,issuer,published_at,source_tier,theme_ids,official_url}]}'
+```
+
+断言点：
+
+1. `summary.data_origin="live"`、`sample_size` 与 SQL 的 jobs 数一致、`as_of` 等于 `MAX(last_seen_at)`、`source_count` 等于实际源数、五项指标齐全且 `policy_job_shared_themes` 在政策无交集时为 `insufficient_data`。
+2. `jobs.data_origin` 是**当前筛选结果集**口径（不是全表）；`items` 的 `official_url` 全为 https，`locations`/`skills` 为数组，`student_friendly` 只出现 `yes/no/unknown`。
+3. 详情 `data_origin` 由该行派生；`observations` 至少 1 条、按时间倒序；响应不含 `raw_text`/`raw_payload`；`notice` 为固定文案。
+4. 政策接口的 `data_origin` 反映政策来源（`ndrc-policy` 若以 `verified_import` 导入则为 `verified_import`），`items` 日期非空、`theme_ids` 为数组、`official_url` 为 https。
+**政策入库入口（本轮补齐缺口）。**
+
+- 现状：`writePolicyBatch(db, batch)` 存在且是唯一写入入口（单事务、幂等、写 `career_ingest_runs`），但全仓没有调用方；缺的是 `PolicyDetailDraft[]` → `PolicyBatchInputV1` 的映射。
+- 新增 `backend/policy-ingest.ts`：`policyItemFromDraft`、`policyBatchFromDrafts`、`policyItemIdFromDraft`、`detectPolicyThemes`。
+  - `policy_item_id`：有文号用 `doc:` + 去空白文号；否则 `url:` + 去 query/hash 的 URL，保证带追踪参数重抓同一条政策不会产生新行。
+  - `published_at`：从 draft 的 ISO 时间截成 `YYYY-MM-DD`（非法日历日期仍由 `validatePolicy` 拒绝）。
+  - `issuer`：`draft.issuingAuthority?.trim()` 为空串或 null 时回落 `envelope.source_issuer`，兜底值由调用方提供真实机关名，不猜。
+  - `theme_ids`：只用 `THEME_KEYWORDS` 关键词匹配标题+正文；无命中为空数组（合法，不编造主题）。
+  - `content_hash`：源键、id、标题、日期、正文的 sha256；正文变化即为 `updated`。
+- B 侧调用口径（不改 `collector/`）：
+  1. 列表：`PolicySourceAdapter.collect(signal?)` 返回 `Promise<PolicyEvidenceRefV1[]>`，是列表项，不是 draft。
+  2. 详情：对每条列表项用 collector 的传输层（`createTransport` / `HttpTransport` + `createPageRequest`）抓详情页 HTML，再调用 `parseGov/Ndrc/MoePolicyDetail(html, url, fallbackPublishedAt?)` 得到 `PolicyDetailDraft`；`url` 必传，第三参传列表项的 `published_at`，否则无日期政策不会出现在 `/policies`（列表只返回有 `published_at` 的政策）。
+  3. 入批次：`policyBatchFromDrafts(drafts, envelope)` → `writePolicyBatch(sql, batch)`。`envelope.source_tier` 只接受 `government_official` / `official_media` / `other_public`，而列表项的 `PolicyEvidenceRefV1.source_tier` 实际值是 `"national"`，必须显式映射；`envelope.source_issuer` 必须是真实机关名（如“国家发展和改革委员会”），不要用文本推断结果。
+
+- 测试：`tests/policy-import.test.ts` 4 项（字段/主题/哈希、URL id 去参数、跨源拒绝、draft→batch→write→list 端到端幂等）。
+
+**data_origin 回归覆盖。** 新增 `tests/data-origin.test.ts` 4 项：
+
+1. 纯 live 表：`summary`、`jobs`、详情三处都返回 `live`。
+2. 混入 `verified_import`：`summary` 与 `jobs` 降级为 `verified_import` 并带 warning，而 `verified_import` 行的详情仍是 `verified_import`、live 行的详情仍是 `live`（按行派生）。
+3. `jobs` 的 `data_origin` 跟随**筛选结果集**：按公司过滤 live 行返回 `live`，过滤 import 行返回 `verified_import`。
+4. `synthetic_fixture` 行在 summary、list、detail 三条读路径都拒绝发布。
+
+验证：`npx tsc -p modules/tsconfig.json` 通过；D 线 6 个测试文件 **36/36 通过**（本地 PostgreSQL 5433）。
