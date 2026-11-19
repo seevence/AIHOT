@@ -12,6 +12,7 @@ import type { EvidenceLinkV1, MetricResultV1, SharedThemeV1 } from "../contracts
 import {
   EXPERIENCE_UNLIMITED_PHRASES,
   JOB_THEME_SKILLS,
+  JOB_THEME_TITLE_KEYWORDS,
   ROLE_FAMILY_THEMES,
   SKILL_ALIASES,
   SKILL_DICTIONARY_VERSION,
@@ -424,13 +425,16 @@ export function computeCareerMetrics(input: CareerMetricsInputV1): CareerMetrics
   };
 }
 
-function themesForJob(job: MetricJobInputV1): string[] {
+export function themesForJob(job: MetricJobInputV1): string[] {
   const themes = new Set<string>();
   const skills = new Set(job.skills);
   for (const [themeId, requiredSkills] of Object.entries(JOB_THEME_SKILLS)) {
     if (requiredSkills.some((skill) => skills.has(skill))) themes.add(themeId);
   }
   for (const themeId of ROLE_FAMILY_THEMES[job.role_family] ?? []) themes.add(themeId);
+  for (const [themeId, keywords] of Object.entries(JOB_THEME_TITLE_KEYWORDS)) {
+    if (keywords.some((keyword) => job.title.includes(keyword))) themes.add(themeId);
+  }
   return [...themes];
 }
 

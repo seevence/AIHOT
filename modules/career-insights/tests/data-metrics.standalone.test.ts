@@ -12,6 +12,7 @@ import {
   computeSkillHitRate,
   computeStudentFriendlyShareMetric,
   EXPERIENCE_BUCKETS_V1,
+  themesForJob,
   type DiagnosticJobInputV1,
   type MetricJobInputV1,
   type ObservationSnapshotV1,
@@ -312,7 +313,7 @@ test("checked-in 腾讯列表样本（示例数据）10 行标题按规则映射
       experienceRaw: "一年以上工作经验",
       minYears: 1,
       roleFamily: "ai_application_development",
-      studentFriendly: "unknown",
+      studentFriendly: "yes",
     },
     {
       title: "K6合作部-游戏运营-社区及用户运营",
@@ -577,3 +578,107 @@ function diagnosticJob(overrides: Partial<DiagnosticJobInputV1> = {}): Diagnosti
     data_origin: overrides.data_origin ?? "live",
   };
 }
+// A1/B1 回归样本全部为 fixture：fixture mirrors the diagnosed live row (title/experience from
+// 2026-11-19 diagnosis); keys reused for traceability。5433 模板库 career_insights_test 为空，
+// fixture 不依赖 live 库。
+function diagnosedRawJob(
+  jobKey: string,
+  title: string,
+  experienceRaw: string | null,
+): RawCollectedJobV1 {
+  return {
+    schema_version: "1.0",
+    source_key: "tencent-official-careers",
+    source_job_id: jobKey,
+    company_name: "腾讯",
+    title,
+    official_url: `https://careers.tencent.com/jobdesc.html?postId=${jobKey}`,
+    raw_text: "",
+    published_at: "2026-11-18",
+    fetched_at: "2026-11-18T00:00:00.000Z",
+    collector_version: "test/1.0",
+    hints: {
+      role_family: "unknown",
+      ...(experienceRaw === null ? {} : { experience_raw: experienceRaw }),
+    },
+  };
+}
+
+const TRAINING_JOB = job({
+  id: "7dec1e39",
+  job_key: "7dec1e39",
+  company_name: "百度",
+  title: "培训设计与教研专家",
+  role_family: "unknown",
+  skills: [],
+});
+
+test("A1：标题含培训/教研的岗位得到 talent_development", () => {
+  assert.ok(
+    themesForJob(TRAINING_JOB).includes("talent_development"),
+    "政策侧 talent_development 需要岗位侧标题证据",
+  );
+});
+
+test("A1：政策 content_7085591 与培训教研岗位产出至少一条共享主题", () => {
+  const trainingPolicy: PolicyEvidenceRefV1 = {
+    policy_item_id: "content_7085591",
+    title: "中医药传统知识保护条例",
+    issuer: "国务院",
+    published_at: "2026-11-09",
+    official_url: "https://www.gov.cn/zhengce/content/202611/content_7085591.htm",
+    source_tier: "national",
+    theme_ids: ["talent_development"],
+    evidence_excerpt: "加强中医药人才队伍建设。",
+  };
+
+  const shared = computeSharedThemes([trainingPolicy], [TRAINING_JOB]);
+
+  assert.ok(shared.length >= 1);
+  const theme = shared.find((item) => item.theme_id === "talent_development");
+  assert.ok(theme !== undefined);
+  assert.equal(theme?.job_count, 1);
+  assert.equal(theme?.policies[0]?.policy_item_id, "content_7085591");
+  assert.equal(theme?.jobs[0]?.id, "7dec1e39");
+});
+
+test("B1：一年以上、无上界且标题不含资深类词的岗位判 yes", () => {
+  const normalized = normalizeRawJob(
+    diagnosedRawJob("a5fb3aab", "ima copilot-后台开发工程师", "一年以上工作经验"),
+  );
+
+  assert.equal(normalized.experience_min_years, 1);
+  assert.equal(normalized.experience_max_years, null);
+  assert.equal(normalized.student_friendly, "yes");
+});
+
+const SENIOR_LOW_EXPERIENCE_ROWS: readonly {
+  job_key: string;
+  title: string;
+  experience_raw: string | null;
+}[] = [
+  { job_key: "7dec1e39", title: "培训设计与教研专家", experience_raw: null },
+  {
+    job_key: "7d8ebd32",
+    title: "AI 产品专家（Agent 知识引擎方向）（J107146）",
+    experience_raw: null,
+  },
+  { job_key: "4938022216", title: "HRSSC智能运营优化专家", experience_raw: null },
+  { job_key: "d9a60bea", title: "产品营销专家（J104088）", experience_raw: "1-3年" },
+  { job_key: "4791236953", title: "高级安全运营工程师", experience_raw: null },
+];
+
+test("B1：经验缺失或 1-3 年但标题含资深类词的 5 行仍为 no", () => {
+  for (const row of SENIOR_LOW_EXPERIENCE_ROWS) {
+    const normalized = normalizeRawJob(
+      diagnosedRawJob(row.job_key, row.title, row.experience_raw),
+    );
+    assert.equal(normalized.student_friendly, "no", row.job_key);
+  }
+});
+
+test("B1：经验完全缺失且标题不含资深类词仍为 unknown，不补判 yes", () => {
+  const normalized = normalizeRawJob(diagnosedRawJob("missing-exp", "数据分析师", null));
+
+  assert.equal(normalized.student_friendly, "unknown");
+});

@@ -10,6 +10,7 @@ import { SqlCareerRepository } from "../backend/sql-repository.ts";
 
 import { SKILL_DICTIONARY_VERSION } from "../data/dictionaries.ts";
 import { METRIC_SPECS_V1 } from "../data/metrics.ts";
+import { NORMALIZER_VERSION } from "../data/normalize.ts";
 
 const EPOCH = "1970-01-01T00:00:00.000Z";
 const NOTICE = "当前状态以最近一次成功观测为准；单次未采集到不代表职位已下架。";
@@ -21,7 +22,7 @@ const digest = (seed: string) => createHash("sha256").update(seed).digest("hex")
 function job(overrides: Partial<NormalizedJobV1> = {}): NormalizedJobV1 {
   return {
     schema_version: "1.0",
-    normalizer_version: "normalizer/0.2.0",
+    normalizer_version: NORMALIZER_VERSION,
     source_key: "career-test",
     job_key: "job-1",
     company_name: "测试科技有限公司",
@@ -277,6 +278,20 @@ test("two observation snapshots count the jobs first seen in the newer one", asy
   assert.equal(observed.evidence[0]!.kind, "job");
 });
 
+test("同日两次观测不算新的快照日，跨日才算", async () => {
+  await seed(job({ fetched_at: "2026-01-01T01:00:00.000Z" }));
+  await seed(job({ fetched_at: "2026-01-01T11:00:00.000Z" }));
+
+  const sameDay = await repository.summary();
+  assert.equal(sameDay.has_multiple_snapshots, false, "同一天的两个观测点只算一个快照日");
+  assert.equal(metric(sameDay, "observed_new_jobs").status, "insufficient_data");
+
+  await seed(job({ fetched_at: "2026-01-02T01:00:00.000Z" }));
+  const nextDay = await repository.summary();
+  assert.equal(nextDay.has_multiple_snapshots, true);
+  assert.equal(metric(nextDay, "observed_new_jobs").value, 0, "该 job 不是新一天首次出现的");
+});
+
 test("listJobs filters by every supported dimension", async () => {
   await seed(
     job({ job_key: "job-1", fetched_at: "2026-01-01T00:00:00.000Z", company_name: "甲公司", locations: ["北京", "上海"] }),
@@ -396,7 +411,7 @@ test("jobDetail returns the current state with its recent observations and hides
   );
   const [newest, oldest] = detail!.observations;
   assert.equal(typeof newest!.id, "string");
-  assert.equal(newest!.observed_at, "2026-01-02T00:00:00.000Z");
+  assert.equal(newest!.observed_at, "2026-01-01T16:00:00.000Z", "观测按 Asia/Shanghai 日粒度对齐");
   assert.equal(newest!.collector_version, "test-collector-1");
   assert.equal(newest!.source_url, "https://careers.example/jobs/job-1-v2");
   assert.equal(newest!.evidence_excerpt, changedText.slice(0, 500));

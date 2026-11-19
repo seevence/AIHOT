@@ -18,6 +18,7 @@ function policyResponse(filters: PolicyFiltersV1): PolicyListResponseV1 {
     page_size: filters.page_size,
     total: 0,
     filters,
+    facets: { sources: [], themes: [] },
   };
 }
 

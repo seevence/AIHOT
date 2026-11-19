@@ -291,6 +291,7 @@ test("an empty policy table lists nothing with an explicit empty origin", async 
   assert.equal(listed.total, 0);
   assert.equal(listed.data_origin, "live");
   assert.equal(listed.as_of, "1970-01-01T00:00:00.000Z");
+  assert.deepEqual(listed.facets, { sources: [], themes: [] });
 });
 test("the repository refuses out-of-range paging instead of clamping it", async () => {
   for (const filters of [
@@ -300,4 +301,63 @@ test("the repository refuses out-of-range paging instead of clamping it", async 
   ]) {
     await assert.rejects(() => repository.listPolicies(filters), InvalidParameterError);
   }
+});
+test("policy facets match the real grouping and ignore paging and filters", async () => {
+  await writePolicyBatch(
+    sql,
+    batchOf([
+      policy({
+        source_key: "ndrc-policy",
+        policy_item_id: "facet-1",
+        published_at: "2026-11-01",
+        theme_ids: ["artificial_intelligence"],
+      }),
+      policy({
+        source_key: "ndrc-policy",
+        policy_item_id: "facet-2",
+        published_at: "2026-11-02",
+        theme_ids: ["artificial_intelligence", "talent_development"],
+        content_hash: "f".repeat(64),
+      }),
+    ]),
+  );
+  await writePolicyBatch(
+    sql,
+    batchOf([
+      policy({
+        source_key: "state-council-policy",
+        policy_item_id: "facet-3",
+        published_at: "2026-11-03",
+        theme_ids: ["employment_promotion"],
+        content_hash: "1".repeat(64),
+      }),
+    ]),
+  );
+
+  const page = await repository.listPolicies({ page: 1, page_size: 1 });
+  assert.deepEqual(page.facets.sources, [
+    { source_key: "ndrc-policy", count: 2 },
+    { source_key: "state-council-policy", count: 1 },
+  ]);
+  assert.deepEqual(page.facets.themes, [
+    { theme_id: "artificial_intelligence", count: 2 },
+    { theme_id: "employment_promotion", count: 1 },
+    { theme_id: "talent_development", count: 1 },
+  ]);
+  assert.equal(page.total, 3);
+  assert.equal(page.items.length, 1, "paging does not shrink the facets");
+  assert.equal(
+    page.facets.sources.some((source) => source.source_key === "moe-policy"),
+    false,
+    "a source with no rows never appears in the facets",
+  );
+
+  const filtered = await repository.listPolicies({
+    source_key: "ndrc-policy",
+    theme: "talent_development",
+    page: 2,
+    page_size: 1,
+  });
+  assert.equal(filtered.total, 1);
+  assert.deepEqual(filtered.facets, page.facets, "filters do not change the facets");
 });

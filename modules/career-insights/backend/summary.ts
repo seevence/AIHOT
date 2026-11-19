@@ -1,4 +1,5 @@
 import type { Db } from "@aihot/backend/db";
+import { BEIJING_TIMEZONE } from "@aihot/contracts/time";
 import type {
   CareerWarningV1,
   EvidenceLinkV1,
@@ -151,7 +152,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
              COUNT(*) FILTER (WHERE student_friendly = 'unknown')::int AS unknown_count
       FROM career_jobs`,
     db<{ observed_at: Date }[]>`
-      SELECT DISTINCT observed_at
+      SELECT DISTINCT date_trunc('day', observed_at AT TIME ZONE ${BEIJING_TIMEZONE}) AT TIME ZONE ${BEIJING_TIMEZONE} AS observed_at
       FROM career_job_observations
       ORDER BY observed_at DESC
       LIMIT 2`,
@@ -270,7 +271,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   });
 
   const observedNewJobsMetric = hasMultipleSnapshots
-    ? await newJobsMetric(db, snapshots[0].observed_at, snapshots[1].observed_at, sampleSize, asOf)
+    ? await newJobsMetric(db, snapshots[0].observed_at, sampleSize, asOf)
     : metric("observed_new_jobs", {
         status: "insufficient_data",
         value: null,
@@ -332,10 +333,13 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
   };
 }
 
+/**
+ * latestDay 是最新快照日的 Asia/Shanghai 零点，窗口取当日 24 小时：
+ * 观测时间按日归一时，同日稍后首次出现的 job 仍算在这一天里。
+ */
 async function newJobsMetric(
   db: Db,
-  latest: Date,
-  previous: Date,
+  latestDay: Date,
   sampleSize: number,
   asOf: string,
 ): Promise<MetricResultV1> {
@@ -343,11 +347,11 @@ async function newJobsMetric(
     db<{ new_jobs: number }[]>`
       SELECT COUNT(*)::int AS new_jobs
       FROM career_jobs
-      WHERE first_seen_at > ${previous} AND first_seen_at <= ${latest}`,
+      WHERE first_seen_at >= ${latestDay} AND first_seen_at < ${latestDay} + interval '1 day'`,
     db<EvidenceRow[]>`
       SELECT id, title, official_url
       FROM career_jobs
-      WHERE first_seen_at > ${previous} AND first_seen_at <= ${latest}
+      WHERE first_seen_at >= ${latestDay} AND first_seen_at < ${latestDay} + interval '1 day'
       ORDER BY last_seen_at DESC, id ASC
       LIMIT ${EVIDENCE_LIMIT}`,
   ]);

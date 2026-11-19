@@ -13,6 +13,7 @@ import {
   EMPLOYMENT_TYPE_KEYWORDS,
   EXPERIENCE_UNLIMITED_PHRASES,
   ROLE_FAMILY_KEYWORDS,
+  SENIOR_TITLE_KEYWORDS,
   SKILL_ALIASES,
   STUDENT_FRIENDLY_NO_PHRASES,
   STUDENT_FRIENDLY_YES_PHRASES,
@@ -20,7 +21,7 @@ import {
 import { computeContentHash, computeJobKey } from "./dedupe.ts";
 import { validateNormalizedJobV1, type ValidationIssueV1 } from "./validate.ts";
 
-export const NORMALIZER_VERSION = "normalizer/0.2.0";
+export const NORMALIZER_VERSION = "normalizer/0.3.0";
 
 const ROLE_FAMILIES: readonly RoleFamily[] = [
   "ai_algorithm",
@@ -258,6 +259,16 @@ export function resolveStudentFriendly(
   if (STUDENT_FRIENDLY_NO_PHRASES.some((phrase) => text.includes(phrase))) return "no";
   if (experience.min !== null && experience.min >= 2) return "no";
   if (/(资深|专家|高级)/.test(title)) return "no";
+
+  // 最小经验 ≤1 且无更高上界的初级岗：只有标题不含资深类词才补判 yes；经验完全缺失仍走 unknown。
+  if (
+    experience.min !== null &&
+    experience.min <= 1 &&
+    (experience.max === null || experience.max <= 1) &&
+    !SENIOR_TITLE_KEYWORDS.some((keyword) => title.toLowerCase().includes(keyword.toLowerCase()))
+  ) {
+    return "yes";
+  }
 
   return "unknown";
 }

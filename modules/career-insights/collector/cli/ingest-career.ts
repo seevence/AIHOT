@@ -3,7 +3,7 @@ import { policyContentHash } from "../adapters/policy-fingerprint.ts";
 import { HttpTransport } from "../fetch/http-transport.ts";
 import { createCareerAdapters } from "../registry.ts";
 import { runEnabledPolicySources, runEnabledSources, type RunContext } from "../orchestration/runner.ts";
-import { parsePageLimit } from "./args.ts";
+import { DEFAULT_PAGE_LIMIT, parsePageLimit } from "./args.ts";
 import { normalizeRawJobs } from "../../data/index.ts";
 import { ingestWithRun } from "../../backend/run-ingest.ts";
 import {
@@ -49,7 +49,7 @@ export function ingestRunContext(pageLimit: number): RunContext {
   return { collectEnabled: true, pageLimit };
 }
 
-async function ingestJobSources(pageLimit: number): Promise<JobRoundRecord[]> {
+export async function ingestJobSources(pageLimit: number): Promise<JobRoundRecord[]> {
   const { jobs: adapters } = createCareerAdapters(new HttpTransport());
   const records: JobRoundRecord[] = [];
   for (const adapter of adapters) {
@@ -112,7 +112,7 @@ function toPolicySourceTier(value: string, sourceKey: string): PolicySourceTier 
   return tier;
 }
 
-async function ingestPolicySources(): Promise<PolicyRoundRecord[]> {
+export async function ingestPolicySources(): Promise<PolicyRoundRecord[]> {
   const { policies: adapters } = createCareerAdapters(new HttpTransport());
   const results = await runEnabledPolicySources(adapters, { collectEnabled: true });
   const records: PolicyRoundRecord[] = [];
@@ -208,6 +208,38 @@ export function buildIngestReport(input: IngestReportInput) {
   };
 }
 
+export interface CareerIngestRunResult {
+  readonly report: ReturnType<typeof buildIngestReport>;
+  readonly rejected: number;
+  readonly failedSources: string[];
+}
+
+/** 采集记录里算作没失败的状态；其余（failed / rejected / config_error）计入 failedSources。 */
+const HEALTHY_STATUSES = new Set(["ok", "success", "partial", "skipped"]);
+
+function failedSourcesOf(records: readonly { source: string; status: string }[]): string[] {
+  return records.filter((record) => !HEALTHY_STATUSES.has(record.status)).map((record) => record.source);
+}
+
+/** 定时任务与 CLI 共用的入库入口：不读 process.argv、不写 --out 文件，也不结束共享连接池。 */
+export async function runCareerIngest(options: { pageLimit?: number } = {}): Promise<CareerIngestRunResult> {
+  const pageLimit = options.pageLimit ?? DEFAULT_PAGE_LIMIT;
+  const startedAt = new Date().toISOString();
+  const jobs = await ingestJobSources(pageLimit);
+  const policies = await ingestPolicySources();
+  const counts = await snapshotCounts();
+  const report = buildIngestReport({
+    startedAt,
+    finishedAt: new Date().toISOString(),
+    pageLimit,
+    jobs,
+    policies,
+    counts,
+  });
+  const rejected = [...jobs, ...policies].reduce((sum, item) => sum + item.rejected, 0);
+  return { report, rejected, failedSources: failedSourcesOf([...jobs, ...policies]) };
+}
+
 async function main(): Promise<void> {
   if (!process.argv.includes("--live")) {
     console.error("默认不入库。确认要采集公开招聘/政策页面并写入 live 数据时，显式加 --live。");
@@ -220,19 +252,8 @@ async function main(): Promise<void> {
     console.error(error instanceof Error ? error.message : String(error));
     process.exit(2);
   }
-  const startedAt = new Date().toISOString();
   try {
-    const jobs = await ingestJobSources(pageLimit);
-    const policies = await ingestPolicySources();
-    const counts = await snapshotCounts();
-    const report = buildIngestReport({
-      startedAt,
-      finishedAt: new Date().toISOString(),
-      pageLimit,
-      jobs,
-      policies,
-      counts,
-    });
+    const { report, rejected } = await runCareerIngest({ pageLimit });
     const body = `${JSON.stringify(report, null, 2)}\n`;
     const outIndex = process.argv.indexOf("--out");
     const target = outIndex === -1 ? undefined : process.argv[outIndex + 1];
@@ -242,7 +263,6 @@ async function main(): Promise<void> {
       writeFileSync(target, body, "utf8");
       process.stdout.write(`evidence written to ${target}\n`);
     }
-    const rejected = [...jobs, ...policies].reduce((sum, item) => sum + item.rejected, 0);
     process.exitCode = rejected === 0 ? 0 : 3;
   } finally {
     await sql.end({ timeout: 5 });

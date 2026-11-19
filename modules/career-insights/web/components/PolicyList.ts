@@ -1,7 +1,7 @@
 import { Fragment, createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
-import { POLICY_PAGE_SIZE, buildPoliciesHref, type PolicyListResponse, type PolicyPageFilters } from "../policy.ts";
-import { POLICY_SOURCE_OPTIONS, POLICY_SOURCE_TIER_LABELS, THEME_LABELS } from "../labels.ts";
+import { buildPoliciesHref, type PolicyListResponse, type PolicyPageFilters } from "../policy.ts";
+import { POLICY_SOURCE_OPTIONS, POLICY_SOURCE_TIER_LABELS, THEME_LABELS, policySourceLabel } from "../labels.ts";
 import { CareerDate } from "../time.ts";
 
 const CHIP_CLASS = "inline-flex h-8 items-center rounded-full border px-3 text-[12px] font-medium break-words";
@@ -12,7 +12,7 @@ const THEME_OPTIONS = Object.entries(THEME_LABELS).map(([value, label]) => ({ va
 
 function FilterChips({ label, options, active, hrefFor }: {
   label: string;
-  options: ReadonlyArray<{ value: string; label: string }>;
+  options: ReadonlyArray<{ value: string; label: string; count?: number }>;
   active?: string;
   hrefFor: (value?: string) => string;
 }): ReactElement {
@@ -34,7 +34,7 @@ function FilterChips({ label, options, active, hrefFor }: {
           "aria-current": active === option.value ? "page" : undefined,
           className: active === option.value ? CHIP_ACTIVE_CLASS : CHIP_IDLE_CLASS,
         },
-        option.label,
+        option.count === undefined ? option.label : `${option.label}（${option.count}）`,
       ),
     ),
   );
@@ -76,6 +76,24 @@ function PolicyRow({ policy }: { policy: PolicyListResponse["items"][number] }):
 
 export function PolicyList({ policies, filters }: { policies: PolicyListResponse; filters: PolicyPageFilters }): ReactElement {
   const hasFilters = filters.source_key !== undefined || filters.theme !== undefined;
+  // 来源/主题选项优先用 API facets（count 为全量，不随筛选变化）。
+  // facets 缺失时回退静态清单，兼容老 API/固件，避免筛选区空白。
+  const sourceOptions: ReadonlyArray<{ value: string; label: string; count?: number }> = policies.facets === undefined
+    ? POLICY_SOURCE_OPTIONS
+    : policies.facets.sources.map((facet) => ({
+        value: facet.source_key,
+        label: policySourceLabel(facet.source_key),
+        count: facet.count,
+      }));
+  const themeOptions: ReadonlyArray<{ value: string; label: string; count?: number }> = policies.facets === undefined
+    ? THEME_OPTIONS
+    : policies.facets.themes.map((facet) => ({
+        value: facet.theme_id,
+        label: THEME_LABELS[facet.theme_id] ?? facet.theme_id,
+        count: facet.count,
+      }));
+  const sourcesEmpty = policies.facets !== undefined && policies.facets.sources.length === 0;
+  const themesEmpty = policies.facets !== undefined && policies.facets.themes.length === 0;
   const outOfRange = policies.items.length === 0 && policies.total > 0;
   const hrefForPage = (target: number) => buildPoliciesHref({ ...filters, page: target, page_size: policies.page_size });
 
@@ -86,20 +104,24 @@ export function PolicyList({ policies, filters }: { policies: PolicyListResponse
       "section",
       { "aria-labelledby": "policy-filters", className: "space-y-3 rounded-card border border-line bg-surface p-4" },
       h("h2", { id: "policy-filters", className: "text-[16px] font-semibold text-ink" }, "筛选政策"),
-      h(FilterChips, {
-        label: "来源",
-        options: POLICY_SOURCE_OPTIONS,
-        active: filters.source_key,
-        hrefFor: (sourceKey?: string) =>
-          buildPoliciesHref({ page: 1, page_size: POLICY_PAGE_SIZE, theme: filters.theme, source_key: sourceKey }),
-      }),
-      h(FilterChips, {
-        label: "主题",
-        options: THEME_OPTIONS,
-        active: filters.theme,
-        hrefFor: (theme?: string) =>
-          buildPoliciesHref({ page: 1, page_size: POLICY_PAGE_SIZE, source_key: filters.source_key, theme }),
-      }),
+      sourcesEmpty
+        ? h("p", { "data-filter-empty": "source", className: "text-[12px] text-ink-4" }, "暂无来源筛选选项")
+        : h(FilterChips, {
+            label: "来源",
+            options: sourceOptions,
+            active: filters.source_key,
+            hrefFor: (sourceKey?: string) =>
+              buildPoliciesHref({ page: 1, page_size: filters.page_size, theme: filters.theme, source_key: sourceKey }),
+          }),
+      themesEmpty
+        ? h("p", { "data-filter-empty": "theme", className: "text-[12px] text-ink-4" }, "暂无主题筛选选项")
+        : h(FilterChips, {
+            label: "主题",
+            options: themeOptions,
+            active: filters.theme,
+            hrefFor: (theme?: string) =>
+              buildPoliciesHref({ page: 1, page_size: filters.page_size, source_key: filters.source_key, theme }),
+          }),
     ),
     h(
       "section",
@@ -139,7 +161,7 @@ export function PolicyList({ policies, filters }: { policies: PolicyListResponse
               ? h(
                   Link,
                   {
-                    to: buildPoliciesHref({ page: 1, page_size: POLICY_PAGE_SIZE }),
+                    to: buildPoliciesHref({ page: 1, page_size: filters.page_size }),
                     className: "mt-4 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2",
                   },
                   "清除筛选",

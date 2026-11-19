@@ -17,6 +17,15 @@ export const POLICY_SOURCE_OPTIONS: ReadonlyArray<{ value: string; label: string
   { value: "ndrc-policy", label: "国家发展改革委政策发布" },
 ];
 
+const POLICY_SOURCE_LABELS: Readonly<Record<string, string>> = Object.fromEntries(
+  POLICY_SOURCE_OPTIONS.map((option) => [option.value, option.label]),
+);
+
+/** facets.sources 可能包含静态清单之外的来源；未知来源回退显示 source_key，不丢筛选能力。 */
+export function policySourceLabel(sourceKey: string): string {
+  return POLICY_SOURCE_LABELS[sourceKey] ?? sourceKey;
+}
+
 export const POLICY_SOURCE_TIER_LABELS: Readonly<Record<string, string>> = {
   government_official: "政府官网",
   official_media: "官方媒体",

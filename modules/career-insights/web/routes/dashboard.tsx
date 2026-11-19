@@ -3,7 +3,7 @@ import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import type { JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
 import { careerApiPath, loadCareerApi, parseDashboardFilters, parseDirectionView, serializeJobFilters } from "../api";
 import { CareerDashboard } from "../components/CareerDashboard";
-import { CareerError, CareerLoading } from "../components/CareerStates";
+import { CareerError, CareerLoading, CareerPending } from "../components/CareerStates";
 
 export async function loader({ request }: LoaderArgs) {
   const search = new URL(request.url).searchParams;
@@ -50,6 +50,15 @@ export function ErrorBoundary() {
 export default function CareerDashboardRoute() {
   const data = useLoaderData<typeof loader>();
   const navigation = useNavigation();
-  if (navigation.state === "loading") return <CareerLoading />;
-  return <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} direction={data.direction} />;
+  const pending = navigation.state === "loading";
+  return (
+    <>
+      {pending && (
+        <div className="mb-3">
+          <CareerPending label="正在加载筛选结果…" />
+        </div>
+      )}
+      <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} direction={data.direction} />
+    </>
+  );
 }

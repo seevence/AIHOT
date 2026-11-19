@@ -67,6 +67,29 @@
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
+    },
+    "/api/site/career-insights/policies": {
+      "get": {
+        "operationId": "listCareerPolicies",
+        "summary": "政策文件列表",
+        "description": "facets 为全量分面：只统计 published_at 非空的全表，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
+        "parameters": [
+          { "name": "source_key", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "theme", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 10000, "default": 1 } },
+          { "name": "page_size", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "政策文件列表与筛选分面",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/PolicyListResponseV1" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
     }
   },
   "components": {
@@ -137,6 +160,55 @@
           "source_tier": { "type": "string" },
           "theme_ids": { "type": "array", "items": { "type": "string" } },
           "evidence_excerpt": { "type": "string" }
+        }
+      },
+      "PolicySourceFacetV1": {
+        "type": "object",
+        "required": ["source_key", "count"],
+        "properties": {
+          "source_key": { "type": "string" },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "PolicyThemeFacetV1": {
+        "type": "object",
+        "required": ["theme_id", "count"],
+        "properties": {
+          "theme_id": { "type": "string" },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "PolicyFacetsV1": {
+        "description": "全量分面：只统计 published_at 非空的全表，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
+        "type": "object",
+        "required": ["sources", "themes"],
+        "properties": {
+          "sources": { "type": "array", "items": { "$ref": "#/components/schemas/PolicySourceFacetV1" } },
+          "themes": { "type": "array", "items": { "$ref": "#/components/schemas/PolicyThemeFacetV1" } }
+        }
+      },
+      "PolicyListResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "as_of", "items", "page", "page_size", "total", "filters", "facets"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "as_of": { "type": "string", "format": "date-time" },
+          "items": { "type": "array", "items": { "$ref": "#/components/schemas/PolicyEvidenceRefV1" } },
+          "page": { "type": "integer", "minimum": 1 },
+          "page_size": { "type": "integer", "minimum": 1, "maximum": 100 },
+          "total": { "type": "integer", "minimum": 0 },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "source_key": { "type": "string" },
+              "theme": { "type": "string" },
+              "page": { "type": "integer", "minimum": 1 },
+              "page_size": { "type": "integer", "minimum": 1, "maximum": 100 }
+            },
+            "required": ["page", "page_size"]
+          },
+          "facets": { "$ref": "#/components/schemas/PolicyFacetsV1" }
         }
       },
       "MetricResultV1": {
