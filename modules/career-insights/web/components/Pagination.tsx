@@ -15,20 +15,27 @@ function pageNumbers(current: number, totalPages: number): Array<number | "gap">
   return out;
 }
 
-export function Pagination({ page, pageSize, total }: { page: number; pageSize: number; total: number }) {
+export function Pagination({ page, pageSize, total, hrefFor, ariaLabel = "职位分页" }: {
+  page: number;
+  pageSize: number;
+  total: number;
+  /** 政策等其他列表换页时的地址；缺省按职位筛选生成。 */
+  hrefFor?: (target: number) => string;
+  ariaLabel?: string;
+}) {
   const [searchParams] = useSearchParams();
   const filters = parseDashboardFilters(searchParams);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), totalPages);
 
-  const hrefFor = (target: number) => buildJobsHref({ ...filters, page: target, page_size: pageSize });
+  const hrefForPage = hrefFor ?? ((target: number) => buildJobsHref({ ...filters, page: target, page_size: pageSize }));
 
   return (
-    <nav aria-label="职位分页" className="mt-4 flex flex-wrap items-center justify-between gap-3">
+    <nav aria-label={ariaLabel} className="mt-4 flex flex-wrap items-center justify-between gap-3">
       <span aria-current="page" className="num whitespace-nowrap text-[12px] text-ink-4">第 {current} / {totalPages} 页 · 共 {total} 条</span>
       <div className="flex flex-wrap items-center gap-1">
         {current > 1 ? (
-          <Link to={hrefFor(current - 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
+          <Link to={hrefForPage(current - 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
             上一页
           </Link>
         ) : (
@@ -44,7 +51,7 @@ export function Pagination({ page, pageSize, total }: { page: number; pageSize: 
                 {item}
               </span>
             ) : (
-              <Link key={item} to={hrefFor(item)} className={`${ITEM_CLASS} border border-line text-ink-2 hover:bg-bg-sunk`}>
+              <Link key={item} to={hrefForPage(item)} className={`${ITEM_CLASS} border border-line text-ink-2 hover:bg-bg-sunk`}>
                 {item}
               </Link>
             ),
@@ -52,7 +59,7 @@ export function Pagination({ page, pageSize, total }: { page: number; pageSize: 
         </div>
 
         {current < totalPages ? (
-          <Link to={hrefFor(current + 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
+          <Link to={hrefForPage(current + 1)} className={`${ITEM_CLASS} whitespace-nowrap border border-line text-ink-2 hover:bg-bg-sunk`}>
             下一页
           </Link>
         ) : (

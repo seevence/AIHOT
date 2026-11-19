@@ -3,7 +3,8 @@ import type {
   JobListItemV1,
   JobListResponseV1,
   SummaryResponseV1,
-} from "../contracts/api";
+} from "../contracts/api.ts";
+import type { PolicyEvidenceRefV1 } from "../contracts/index.ts";
 
 const FIXTURE_AS_OF = "2026-01-01T00:00:00.000Z";
 const FIXTURE_JOB_ID = "00000000-0000-4000-8000-000000000001";
@@ -193,4 +194,77 @@ export const FIXTURE_JOB_DETAIL_V1: JobDetailResponseV1 = {
     },
   ],
   notice: "联调样例（非真实数据）；公司、职位、观测与指标均为虚构。",
+};
+const FIXTURE_POLICY_ITEMS: PolicyEvidenceRefV1[] = [
+  {
+    policy_item_id: "synthetic-policy-001",
+    title: "示例政策：推动人工智能人才培养（虚构）",
+    issuer: "示例国家部门",
+    published_at: "2026-11-18",
+    official_url: "https://example.com/policies/sample-001",
+    source_tier: "government_official",
+    theme_ids: ["artificial_intelligence", "talent_development"],
+    evidence_excerpt: "支持高校与企业联合培养人工智能人才。",
+  },
+  {
+    policy_item_id: "synthetic-policy-002",
+    title: "示例政策：数据基础设施建设（虚构）",
+    issuer: "示例发展部门",
+    published_at: "2026-11-16",
+    official_url: "https://example.com/policies/sample-002",
+    source_tier: "government_official",
+    theme_ids: ["digital_economy", "data_infrastructure"],
+    evidence_excerpt: "推进算力与数据要素流通。",
+  },
+  {
+    policy_item_id: "synthetic-policy-003",
+    title: "示例政策：高校毕业生就业促进（虚构）",
+    issuer: "示例教育部门",
+    published_at: "2026-11-14",
+    official_url: "https://example.com/policies/sample-003",
+    source_tier: "government_official",
+    theme_ids: ["talent_development", "employment_promotion"],
+    evidence_excerpt: "拓展高校毕业生就业渠道。",
+  },
+  {
+    policy_item_id: "synthetic-policy-004",
+    title: "示例政策：人工智能技术创新（虚构）",
+    issuer: "示例国家部门",
+    published_at: "2026-11-12",
+    official_url: "https://example.com/policies/sample-004",
+    source_tier: "government_official",
+    theme_ids: ["ai_innovation"],
+    evidence_excerpt: "鼓励大模型与智能体技术研发。",
+  },
+  {
+    policy_item_id: "synthetic-policy-005",
+    title: "示例政策：产业数字化升级（虚构）",
+    issuer: "示例发展部门",
+    published_at: "2026-11-10",
+    official_url: "https://example.com/policies/sample-005",
+    source_tier: "government_official",
+    theme_ids: ["industrial_digitalization"],
+    evidence_excerpt: "推动制造业数智化改造。",
+  },
+  {
+    policy_item_id: "synthetic-policy-006",
+    title: "示例政策：稳就业专项行动（虚构）",
+    issuer: "示例教育部门",
+    published_at: "2026-11-08",
+    official_url: "https://example.com/policies/sample-006",
+    source_tier: "government_official",
+    theme_ids: ["employment_promotion"],
+    evidence_excerpt: "开展稳就业与就业创业服务。",
+  },
+];
+
+export const FIXTURE_POLICY_LIST_V1 = {
+  contract_version: "0.1" as const,
+  data_origin: "synthetic_fixture" as const,
+  as_of: FIXTURE_AS_OF,
+  items: FIXTURE_POLICY_ITEMS,
+  page: 1,
+  page_size: 20,
+  total: 26,
+  filters: { page: 1, page_size: 20 },
 };
