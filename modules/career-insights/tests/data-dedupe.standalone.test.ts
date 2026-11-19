@@ -17,13 +17,8 @@ function contentHashInput(overrides: Partial<ContentHashInputV1> = {}): ContentH
     company_name: "示例公司",
     title: "AI 应用后端开发工程师",
     locations: ["深圳"],
-    degree: "bachelor",
     degree_raw: "本科及以上",
-    experience_min_years: 1,
-    experience_max_years: 3,
     experience_raw: "1-3 年经验",
-    employment_type: "unknown",
-    skills: ["python", "java"],
     raw_text: "负责 AI 应用后端开发。",
     ...overrides,
   };
@@ -58,16 +53,24 @@ test("URL 规范化只移除明确的跟踪参数和片段", () => {
   );
 });
 
-test("内容哈希对字段顺序和空白稳定，不受采集时间影响", () => {
+test("内容哈希只覆盖来源内容，不受派生字段与归一化版本影响", () => {
   const base = contentHashInput();
   const reordered = contentHashInput({
-    skills: ["java", "python"],
+    locations: ["深圳", "北京"],
     raw_text: "  负责   AI 应用后端开发。 ",
   });
-  assert.equal(computeContentHash(base), computeContentHash(reordered));
+  const sameLocations = contentHashInput({ locations: ["北京", "深圳"] });
+  assert.equal(computeContentHash(reordered), computeContentHash(sameLocations));
 
   const changed = contentHashInput({ title: "AI 算法工程师" });
   assert.notEqual(computeContentHash(base), computeContentHash(changed));
+
+  // 解析后的学历枚举、经验年数、技能、职族与 normalizer_version 都不在哈希输入类型内；
+  // 原始 degree_raw / experience_raw 文本属于源内容，仍参与哈希。
+  assert.notEqual(
+    computeContentHash(base),
+    computeContentHash(contentHashInput({ experience_raw: "三年以上" })),
+  );
 });
 
 test("同一来源同一 job_key 只保留首条，跨来源不互相去重", () => {

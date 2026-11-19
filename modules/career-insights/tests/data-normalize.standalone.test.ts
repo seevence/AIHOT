@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RawCollectedJobV1 } from "../contracts/index.ts";
-import { normalizeRawJob, normalizeRawJobs } from "../data/normalize.ts";
+import { NORMALIZER_VERSION, normalizeRawJob, normalizeRawJobs, resolveRoleFamily } from "../data/normalize.ts";
 
 function rawJob(overrides: Partial<RawCollectedJobV1> = {}): RawCollectedJobV1 {
   return {
@@ -25,6 +25,7 @@ test("归一化映射职族、地点、学历、经验与技能证据", () => {
   const job = normalizeRawJob(rawJob());
 
   assert.equal(job.schema_version, "1.0");
+  assert.equal(job.normalizer_version, NORMALIZER_VERSION);
   assert.equal(job.role_family, "ai_application_development");
   assert.deepEqual(job.locations, ["深圳"]);
   assert.equal(job.degree, "bachelor");
@@ -136,4 +137,52 @@ test("批量归一化把非法样本放入 rejected，不阻断合法样本", ()
   assert.equal(result.normalized.length, 1);
   assert.equal(result.rejected.length, 2);
   assert.equal(result.normalized[0]?.job_key, "job-001");
+});
+// C-ROLE-KEYWORDS@2 负例：裸「运营」「大模型」「架构师」不再单独决定职族。
+test("负例 1：安全运营岗位不被算作 AI 产品运营", () => {
+  assert.equal(resolveRoleFamily("unknown", "高级安全运营工程师"), "unknown");
+});
+
+test("负例 2：游戏运营不被算作 AI 产品运营", () => {
+  assert.equal(resolveRoleFamily("unknown", "游戏运营"), "unknown");
+  assert.equal(resolveRoleFamily("unknown", "K6合作部-游戏运营-社区及用户运营"), "unknown");
+});
+
+test("负例 3：大模型销售不被算作算法岗", () => {
+  assert.equal(
+    resolveRoleFamily("unknown", "大模型即云计算大客户销售-华南游戏方向（J107254）"),
+    "unknown",
+  );
+});
+
+test("负例 4：大客户技术支持不被算作算法岗", () => {
+  assert.notEqual(
+    resolveRoleFamily("unknown", "大客户技术支持-大模型方向（J107350）"),
+    "ai_algorithm",
+  );
+});
+
+test("负例 5：售前架构师不被算作开发岗", () => {
+  assert.equal(
+    resolveRoleFamily("unknown", "腾讯云-云和AI售前架构师（物流方向）-北/上/深"),
+    "unknown",
+  );
+});
+
+test("负例 6：运营商、渠道与接待类岗位保持 unknown", () => {
+  for (const title of [
+    "通讯-商务拓展专家-运营商方向",
+    "渠道经理（J107385）",
+    "客工部接待经理（J101012）",
+    "海外服务顾问（J107080）",
+  ]) {
+    assert.equal(resolveRoleFamily("unknown", title), "unknown", title);
+  }
+});
+
+test("明确的 AI 产品/工程标题仍然被识别，不受负例收窄影响", () => {
+  assert.equal(resolveRoleFamily("unknown", "AI产品运营岗"), "ai_product_operations");
+  assert.equal(resolveRoleFamily("unknown", "ima-高级产品经理（基础框架）"), "ai_product_operations");
+  assert.equal(resolveRoleFamily("unknown", "全栈开发工程师（J107271）"), "ai_application_development");
+  assert.equal(resolveRoleFamily("data", "AI后端开发工程师"), "data", "已知提示仍然优先于标题");
 });

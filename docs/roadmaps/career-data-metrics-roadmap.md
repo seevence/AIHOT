@@ -147,3 +147,59 @@
 - `node --import ./tests/standalone.ts --test modules/career-insights/tests/data-metrics.standalone.test.ts`：15 tests / 15 pass / 0 fail。
 - `data-metrics.standalone.test.ts` 覆盖：中文经验解析、`unknown` 提示回落、checked-in 腾讯列表样本（示例数据，非 DB 快照）10 行的职族/经验/学生友好、真实 DB 30 行 cutoff 快照（`2026-11-19T08:12:40.123Z`）复现本报告数字、`1-3年` 不入 `zero_to_one` 的桶边界、九桶分布与入门占比、技能命中率、空样本口径、非 live 排除与重复行去重。
 - 本报告数字来自只读查询 + 修复后函数重算，未写库、未重跑采集、未改迁移与 B/D/E 文件。
+## 0.2.0 归一化版本刷新（C-NORMALIZER-REFRESH@1 / C-ROLE-KEYWORDS@2）
+
+### 变更
+
+- `NORMALIZER_VERSION = "normalizer/0.2.0"`；`NormalizedJobV1.normalizer_version` 为必填字段，归一化与入库都写入当前版本。
+- 迁移 `modules/career-insights/migrations/0163_career_jobs_normalizer_version.sql`：`normalizer_version text NOT NULL DEFAULT 'normalizer/0.1.0'`，历史行回填 `normalizer/0.1.0`。
+- `content_hash` 输入收窄为源内容：`schema_version`、`source_key`、`job_key`、`company_name`、`title`、`locations`、`degree_raw`、`experience_raw`、`raw_text`。`role_family`、`student_friendly`、`skills`、`skill_evidence`、解析后的 degree/experience 与 `normalizer_version` 不参与。
+- `writeJob` 结果：新建 → `accepted`（写版本 + 1 条观测）；同源内容 + 版本/派生相同 → 只推进 `last_seen_at`，`duplicates`；同源内容 + 版本不同或派生不同 → 刷新派生字段与版本，`duplicates`，**不写新观测**；源内容变化 → 全量更新 + 新观测，`updated`。0.1.0 旧哈希与新算法不可比时，按源内容字段整体比较判定“源内容未变”，避免重入库把 34 行误判为内容变化。
+- 词表（`C-ROLE-KEYWORDS@2`）：移除裸 `运营`，并移除 `大模型`、`架构师`、`解决方案`；`ai_product_operations` 仅保留 `ai产品`、`产品运营`、`产品经理`、`产品策划`、`产品营销`、`增长运营`、`用户增长`。`unknown` 提示继续回落标题扫描，已知提示仍优先。
+
+### 六条负例（`data-normalize.standalone.test.ts`）
+
+| # | 标题 | 期望 |
+|---|---|---|
+| 1 | 高级安全运营工程师 | `unknown`（裸 `运营` 已移除） |
+| 2 | 游戏运营 / K6合作部-游戏运营-社区及用户运营 | `unknown` |
+| 3 | 大模型即云计算大客户销售-华南游戏方向（J107254） | `unknown`（裸 `大模型` 已移除） |
+| 4 | 大客户技术支持-大模型方向（J107350） | 非 `ai_algorithm` |
+| 5 | 腾讯云-云和AI售前架构师（物流方向）-北/上/深 | `unknown`（`架构师` 已移除） |
+| 6 | 通讯-商务拓展专家-运营商方向 / 渠道经理 / 客工部接待经理 / 海外服务顾问 | `unknown` |
+
+同时断言收窄不伤明确岗位：`AI产品运营岗`、`ima-高级产品经理（基础框架）` → `ai_product_operations`；`全栈开发工程师` → `ai_application_development`；已知 `data` 提示仍优先于标题。
+
+### 真实 34 行离线对比（as_of 2026-11-19，只读 15432，全表 34 行）
+
+这是**诊断性重算**：用当前库的 `title` / `experience_raw` / `employment_type` / `skills` 走 0.2.0 实现重算，并与库中存储的 0.1.0 结果对比；**不是数据库刷新**，B 将重新 ingest 后由 0.2.0 写入。
+
+| 指标 | 存储值（0.1.0） | 0.2.0 重算 |
+|---|---|---|
+| `role_family=unknown` | 28/34 | 18/34 |
+| `ai_application_development` | 2 | 7 |
+| `ai_product_operations` | 3 | 7 |
+| `ai_algorithm` | 1 | 1 |
+| `data` | 0 | 1 |
+| 经验 `missing` | 11 | 11 |
+| 经验 `zero` / `zero_to_one` | 0 / 0 | 0 / 0 |
+| 经验 `two_to_three` | 13 | 13 |
+| 经验 `four_to_five` | 7 | 8 |
+| 经验 `six_to_nine` | 1 | 1 |
+| 经验 `ten_plus` / `unlimited` | 0 / 1 | 0 / 1 |
+| 经验 `unparsed` | 1 | 0 |
+| 经验缺失或 0–1 年占比 | 11/34 = 32.4% | 11/34 = 32.4% |
+| 技能命中率 | 24/34 = 70.6%，unknown 29.4%，词典 0.1 | 24/34 = 70.6%，unknown 29.4%，词典 0.1 |
+| `student_friendly` yes / no / unknown | 0 / 23 / 11 | 0 / 24 / 10 |
+
+- 职族变化 14 条：12 条 `unknown` 变得有证据（2 条无人车后端 → 开发族；AI 全栈/后端/全栈开发 → 开发族；AI 产品经理/运营/营销、产品营销专家、差旅产品经理、社区产品经理 → 产品运营族；智能商业分析师 → 数据族），2 条由误判回到 `unknown`（`WorkBuddy-生态合作运营`、`通讯-商务拓展专家-运营商方向`）。0.1.0 阶段的「大模型 → 算法」「运营 → 产品运营」「架构师 → 开发」误判在本版本消失。
+- 经验变化 1 条：`腾讯云-云和AI售前架构师` 的 `五年以上工作经验` 从 `unparsed` 解析为 min 5 → `four_to_five`，其余 33 行不变（库中其余中文经验此前已由 B 重入库解析）。
+- `student_friendly` 变化 1 条：同一岗位因经验解析为 5 年而由 `unknown` 变为 `no`；未写经验的 11 行仍为 `unknown`，`student_friendly_share` 定义未变。
+- 技能命中率不变：0.2.0 未改技能词典；34 行中 10 行没有任何已识别技能，`unknown_ratio` 如实披露。
+
+### 验证
+
+- `npx tsc -p modules/tsconfig.json`：通过（exit 0）。
+- `node --import ./tests/standalone.ts --test .../data-dedupe + data-normalize + data-metrics`：33 tests / 33 pass / 0 fail。
+- 5433 `aihot_test`：`ingest.test.ts` + `repository.test.ts` 共 16 tests / 16 pass / 0 fail（含 3 条刷新场景：版本升级刷新、旧哈希跨版本刷新、同版本派生变化刷新，均不新增 observation）。
+- 未写 15432：生产库仅执行 `SELECT`。worktree 下 `scripts/migrate.ts` 的 `REPO_ROOT` 解析到主仓库，global setup 不会应用本 worktree 的新迁移；本次在 5433 模板库直接调用 `runMigrations(process.cwd())` 应用 0163 后再跑 DB 测试。

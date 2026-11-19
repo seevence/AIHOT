@@ -15,6 +15,7 @@ const at = (value: Date | string) => new Date(value).toISOString();
 function job(overrides: Partial<NormalizedJobV1> = {}): NormalizedJobV1 {
   return {
     schema_version: "1.0",
+    normalizer_version: "normalizer/0.2.0",
     source_key: "career-test",
     job_key: "job-1",
     company_name: "测试科技有限公司",
@@ -51,8 +52,23 @@ async function count(table: "career_jobs" | "career_job_observations"): Promise<
 }
 
 async function storedJob(jobKey = "job-1") {
-  const [row] = await sql<{ title: string; content_hash: string; first_seen_at: Date; last_seen_at: Date }[]>`
-    SELECT title, content_hash, first_seen_at, last_seen_at FROM career_jobs
+  const [row] = await sql<
+    {
+      title: string;
+      content_hash: string;
+      normalizer_version: string;
+      role_family: string;
+      student_friendly: string;
+      experience_min_years: number | null;
+      experience_raw: string | null;
+      skills: string[];
+      first_seen_at: Date;
+      last_seen_at: Date;
+    }[]
+  >`
+    SELECT title, content_hash, normalizer_version, role_family, student_friendly,
+           experience_min_years, experience_raw, skills, first_seen_at, last_seen_at
+    FROM career_jobs
     WHERE source_key = 'career-test' AND job_key = ${jobKey}`;
   return row!;
 }
@@ -107,7 +123,8 @@ test("first_seen_at stays put while last_seen_at runs forward and never backward
   const backdated = await storedJob();
   assert.equal(at(backdated.last_seen_at), "2026-01-05T08:00:00.000Z", "an older fetch never pulls last_seen_at back");
   assert.equal(at(backdated.first_seen_at), "2026-01-01T00:00:00.000Z");
-  assert.equal(await count("career_job_observations"), 3);
+  // 同源内容（同哈希）的重复观测只推进 last_seen_at，不追加 observation（C-NORMALIZER-REFRESH@1）。
+  assert.equal(await count("career_job_observations"), 1);
 });
 
 test("a changed content hash updates the current state without touching first_seen_at", async () => {
@@ -153,4 +170,103 @@ test("a batch over one hundred jobs is refused before anything is written", asyn
   await assert.rejects(() => ingestBatch(sql, batchOf(many)), InvalidParameterError);
   assert.equal(await count("career_jobs"), 0);
   assert.equal(await count("career_job_observations"), 0);
+});
+test("a newer normalizer version refreshes derived fields without a new observation", async () => {
+  await ingestBatch(
+    sql,
+    batchOf([
+      job({
+        fetched_at: "2026-01-01T00:00:00.000Z",
+        normalizer_version: "normalizer/0.1.0",
+        role_family: "unknown",
+        student_friendly: "unknown",
+        experience_min_years: null,
+        experience_max_years: null,
+        experience_raw: null,
+        degree: "unknown",
+        degree_raw: null,
+        employment_type: "unknown",
+        skills: [],
+        skill_evidence: [],
+      }),
+    ]),
+  );
+
+  const refreshed = await ingestBatch(
+    sql,
+    batchOf([
+      job({
+        fetched_at: "2026-01-02T00:00:00.000Z",
+        normalizer_version: "normalizer/0.2.0",
+        role_family: "ai_application_development",
+        student_friendly: "no",
+        experience_min_years: 3,
+        experience_max_years: null,
+        experience_raw: "三年以上",
+        degree: "bachelor",
+        degree_raw: "本科",
+        employment_type: "experienced",
+        skills: ["python", "sql"],
+        skill_evidence: [
+          { skill_id: "python", evidence_text: "Python" },
+          { skill_id: "sql", evidence_text: "SQL" },
+        ],
+      }),
+    ]),
+  );
+
+  assert.deepEqual(refreshed, { accepted: 0, updated: 0, duplicates: 1, rejected: 0, errors: [] });
+  const row = await storedJob();
+  assert.equal(row.normalizer_version, "normalizer/0.2.0");
+  assert.equal(row.role_family, "ai_application_development");
+  assert.equal(row.student_friendly, "no");
+  assert.equal(row.experience_min_years, 3);
+  assert.deepEqual(row.skills, ["python", "sql"]);
+  assert.equal(at(row.first_seen_at), "2026-01-01T00:00:00.000Z");
+  assert.equal(at(row.last_seen_at), "2026-01-02T00:00:00.000Z");
+  assert.equal(await count("career_jobs"), 1);
+  assert.equal(await count("career_job_observations"), 1, "a normalization refresh never appends an observation");
+});
+
+test("a legacy hash from an older normalizer refreshes derivations without a new observation", async () => {
+  await ingestBatch(
+    sql,
+    batchOf([
+      job({ normalizer_version: "normalizer/0.1.0", content_hash: digest("legacy"), role_family: "unknown" }),
+    ]),
+  );
+
+  const result = await ingestBatch(
+    sql,
+    batchOf([
+      job({
+        fetched_at: "2026-01-02T00:00:00.000Z",
+        normalizer_version: "normalizer/0.2.0",
+        content_hash: digest("new-algorithm"),
+        role_family: "ai_application_development",
+      }),
+    ]),
+  );
+
+  assert.deepEqual(result, { accepted: 0, updated: 0, duplicates: 1, rejected: 0, errors: [] });
+  const row = await storedJob();
+  assert.equal(row.content_hash, digest("new-algorithm"), "the row adopts the source-content hash");
+  assert.equal(row.normalizer_version, "normalizer/0.2.0");
+  assert.equal(await count("career_jobs"), 1);
+  assert.equal(await count("career_job_observations"), 1);
+});
+
+test("changed derived fields under the same version still refresh without a new observation", async () => {
+  await ingestBatch(sql, batchOf([job({ role_family: "unknown", skills: [], skill_evidence: [] })]));
+
+  const result = await ingestBatch(
+    sql,
+    batchOf([job({ fetched_at: "2026-01-02T00:00:00.000Z", role_family: "ai_application_development", skills: ["python"] })]),
+  );
+
+  assert.deepEqual(result, { accepted: 0, updated: 0, duplicates: 1, rejected: 0, errors: [] });
+  const row = await storedJob();
+  assert.equal(row.role_family, "ai_application_development");
+  assert.deepEqual(row.skills, ["python"]);
+  assert.equal(await count("career_job_observations"), 1);
 });

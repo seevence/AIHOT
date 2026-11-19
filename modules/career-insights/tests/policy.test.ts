@@ -50,6 +50,7 @@ function batchOf(policies: PolicyItemInputV1[], overrides: Partial<PolicyBatchIn
 function job(overrides: Partial<NormalizedJobV1> = {}): NormalizedJobV1 {
   return {
     schema_version: "1.0",
+    normalizer_version: "normalizer/0.2.0",
     source_key: "career-test",
     job_key: "job-1",
     company_name: "测试科技有限公司",

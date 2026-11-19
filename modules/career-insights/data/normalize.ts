@@ -20,7 +20,7 @@ import {
 import { computeContentHash, computeJobKey } from "./dedupe.ts";
 import { validateNormalizedJobV1, type ValidationIssueV1 } from "./validate.ts";
 
-export const NORMALIZER_VERSION = "normalizer/0.1.0";
+export const NORMALIZER_VERSION = "normalizer/0.2.0";
 
 const ROLE_FAMILIES: readonly RoleFamily[] = [
   "ai_algorithm",
@@ -59,6 +59,7 @@ export function normalizeRawJob(raw: RawCollectedJobV1): NormalizedJobV1 {
 
   const normalized: NormalizedJobV1 = {
     schema_version: "1.0",
+    normalizer_version: NORMALIZER_VERSION,
     source_key: raw.source_key,
     job_key: computeJobKey({ source_job_id: raw.source_job_id, official_url: raw.official_url }),
     company_name: cleanText(raw.company_name),

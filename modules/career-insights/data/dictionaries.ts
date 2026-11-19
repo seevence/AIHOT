@@ -174,7 +174,6 @@ export const ROLE_FAMILY_KEYWORDS: Readonly<
     "视觉算法",
     "推荐算法",
     "搜索算法",
-    "大模型",
     "llm",
     "ai算法",
   ],
@@ -195,7 +194,6 @@ export const ROLE_FAMILY_KEYWORDS: Readonly<
     "客户端",
     "移动端",
     "桌面端",
-    "架构师",
     "electron",
     "测试开发",
   ],
@@ -216,9 +214,8 @@ export const ROLE_FAMILY_KEYWORDS: Readonly<
     "产品运营",
     "产品策划",
     "产品营销",
-    "解决方案",
     "增长运营",
-    "运营",
+    "用户增长",
   ],
 };
 
