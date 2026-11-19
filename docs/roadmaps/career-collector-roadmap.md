@@ -41,6 +41,15 @@
 - 只启用该来源时，policy 注册表只含它，网络调用集合只含该来源。
 - PR + A 独立 review PASS 后再提交下一源。
 
+### 国务院（state-council-policy）门禁预审
+
+- 样本必须覆盖两种详情 URL：`https://www.gov.cn/zhengce/<yyyymm>/content_<id>.htm` 和 `https://www.gov.cn/zhengce/content/<yyyymm>/content_<id>.htm`；`request_url` 与 `final_url` 必须同为 HTTPS。
+- list 1 份 + detail 3 份；列表只接受 `/zhengce/` 正式政策，解读/图解不计入；3/3 详情必须有标题、正文、发布时间、issuer。
+- issuer 允许集合：`中共中央`、`国务院办公厅`、`国务院`；按标题/文首判定，3/3 非空；任一无法判定或日期缺失必须整批 `ParseFailedError`，不得跳过或返回部分成功。
+- 每条必须有 HTTPS official_url、唯一 policy_item_id、正文 evidence_excerpt、theme_ids ≤3。
+- 验证必须包含两种 URL 形态的解析、issuer 缺失、日期缺失、空列表失败，以及仅启用该 policy 源时的 registry 断言。
+- live 证据写 `live-runs/<timestamp>-with-state-council.json`，记录 4 份样本哈希与 3 条 PolicyEvidenceRefV1；A 独立 review PASS 后才把 `enabled` 改为 true。
+
 ## B3 待办（等 D2 合入集成）
 
 - 用 `ingestWithRun(db, batch, "live")` 写入真实批次；`observed_at` 取每条 `fetched_at`，`batch_id` 由 DB 侧 `start_ingest_run` 生成。

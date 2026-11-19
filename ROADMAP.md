@@ -96,7 +96,18 @@
 - B2b-1 **PASS**：`ndrc-policy` 启用，live 1 列表 + 3 详情 success、5.8s，3 条 `PolicyEvidenceRefV1`，全部 HTTPS；独立复跑 collector `88/88`、modules tsc；PR #7 合并 `fa18e9b`。
 - 政策顺序裁定：**发改委 → 国务院**。教育部所有 HTTPS 请求被源站跳到 HTTP，不为单源打开 HTTPS→HTTP 例外；工信部/人社部栏目为 JS 空壳，零依赖不可抓取。两源满足最低政策源要求。
 - D2 PR #6 **PASS 并合入** `8004c8a`：`ingestWithRun`、run/observation batch、政策写入与证据读取、migrations 0156–0162、真实数据来源字段已进入集成；CI check/docker 通过，迁移门禁和 modules tsc 通过。B3 真实入库可开工。
-- 本地 Docker 数据库尚未应用 0156–0162，B3 前需重建/运行 setup。
+- 本地 Docker 数据库已应用 0156–0162，`db/api/worker/web` 正常运行。
+
+**今日真实数据集成顺序（2026-11-18）：**
+
+1. **B3 真实入库**：B 先跑 3 个 job 源 + 发改委的政策批次；断言 `career_jobs`/`career_job_observations` 有新增、`data_origin=live`、重复批次不重复；再做第二个观测时点。
+2. **C 真实样本复验**：C 从当前集成拉 `feat/c-real-sample-verify`，只取 `data_origin=live`、去重后的真实职位，排除政策和 fixture。产出：
+   - 经验门槛分布：`missing`、`0`、`0-1`、`2-3`、`4-5`、`6-9`、`10+`、`unparsed` 的 count 与占比，分桶合计必须等于样本量；
+   - **“经验缺失或 0-1 年”诊断占比**：numerator/denominator 明确，作为新诊断字段/报告，**不得改名替换现有的 `student_friendly_share`**；空经验不能自动判为 `yes`；
+   - 技能词典命中率：`skills` 至少命中 1 个词典技能的去重职位数 / 全部去重真实职位数，附 `dictionary_version` 和 unknown 比例。
+   C 的复验报告/测试必须独立 review 后才能合入。
+3. **E 真实数据复验**：E 在 C 合入后用真实数据核对总览、筛选、详情、证据、时间可读化和移动端；仅修实际缺陷并单独 review。
+4. **A `--require-data` 最终门禁**：C/E 合入后执行，要求 summary `data_origin=live`、`sample_size>0`、`company_count>0`、metrics 非空且无 synthetic，jobs/详情 observation 非空，页面真实渲染；不得把空样本或 fixture 当通过。
 
 **跨角色未解决任务（云端标记，2026-11-17）：**
 
@@ -105,7 +116,7 @@
 
 | B-01 | 真实招聘与政策采集样本未完成 | B | B2a 三 job 源已启用；发改委已启用 PASS；国务院政策源未启用；教育部不启用 | 3 家公司 + 至少 2 个官方政策源，各至少 1 条原始样本，来源与时间可追溯 |
 | B-02 | 自动来源不足时的替换/人工核验流程未执行 | B | 来源可达性 | D2 结束仍不足 3 家时，保留真实岗位快照并明确标为“导入” |
-| C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | B-01 | 用真实样本跑通词典、去重与五项指标，不把 fixture 当真实数据 |
+| C-01 | 真实样本的归一化、去重、质量与指标未复验 | C | 等 B3 真实批次 | 给出经验分桶分布、经验缺失或 0-1 年诊断占比、技能词典命中率；保留 `student_friendly_share` 原语义，不把空经验自动判 yes |
 | D-01 | 真实 SQL/API 到页面的 D2 闭环 | D | D2 已合入 `8004c8a`；待 B3 真实批次与 C-01 复验 | 真实职位经数据库/API/页面，字段、证据和 `--require-data` 验收通过 |
 | D-02 | 政策 `shared_themes` 真实证据、来源覆盖变化、未识别技能比例 | D / C | 政策真实样本 | 政策可跳原文，空数据/未知值不误导，真实样本后冻结契约 `1.0` |
 | CD-01 | 后端时间统一 UTC `Z`；政策 `published_at` 日期格式确认 | C / D | 真实数据格式 | `as_of`/`observed_at`/`published_at` 格式一致，前端 `CareerTime` 可读化复验 |
