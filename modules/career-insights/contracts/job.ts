@@ -36,6 +36,7 @@ export interface RawCollectedJobV1 {
 
 export interface NormalizedJobV1 {
   schema_version: "1.0";
+  normalizer_version: string;
   source_key: string;
   job_key: string;
   company_name: string;

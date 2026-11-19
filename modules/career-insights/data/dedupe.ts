@@ -46,38 +46,42 @@ export type ContentHashInputV1 = Pick<
   | "company_name"
   | "title"
   | "locations"
-  | "degree"
   | "degree_raw"
-  | "experience_min_years"
-  | "experience_max_years"
   | "experience_raw"
-  | "employment_type"
-  | "skills"
   | "raw_text"
 >;
 
 /**
- * 稳定顺序计算内容哈希。包含职位身份、标题、公司、地点、学历、经验、雇佣类型、
- * 归一化技能与正文；不包含 fetched_at、发布时间和易变展示数据。
+ * 稳定顺序计算内容哈希。只覆盖来源内容：职位身份、标题、公司、地点、原始学历/经验文本与正文。
+ * 派生分析（role_family、student_friendly、归一化 skills/skill_evidence、解析后的学历/经验）
+ * 与 normalizer_version 不参与，保证同源内容在不同归一化版本下共享同一个源内容哈希。
  */
 export function computeContentHash(job: ContentHashInputV1): string {
-  const payload = {
+  return sha256Hex(JSON.stringify(sourceContentPayload(job)));
+}
+
+/** 跨归一化版本判断源内容是否未变：旧版本哈希已不可比时，按来源内容字段整体比较。 */
+export function sourceContentEquals(
+  left: ContentHashInputV1,
+  right: ContentHashInputV1,
+): boolean {
+  return (
+    JSON.stringify(sourceContentPayload(left)) === JSON.stringify(sourceContentPayload(right))
+  );
+}
+
+function sourceContentPayload(job: ContentHashInputV1): Record<string, unknown> {
+  return {
     schema_version: job.schema_version,
     source_key: job.source_key,
     job_key: job.job_key,
     company_name: normalizeText(job.company_name),
     title: normalizeText(job.title),
     locations: [...new Set(job.locations.map(normalizeText))].filter((item) => item !== "").sort(),
-    degree: job.degree,
     degree_raw: normalizeNullableText(job.degree_raw),
-    experience_min_years: job.experience_min_years,
-    experience_max_years: job.experience_max_years,
     experience_raw: normalizeNullableText(job.experience_raw),
-    employment_type: job.employment_type,
-    skills: [...new Set(job.skills)].sort(),
     raw_text: normalizeText(job.raw_text),
   };
-  return sha256Hex(JSON.stringify(payload));
 }
 
 export interface DedupeableJobV1 {

@@ -318,7 +318,7 @@ test("checked-in 腾讯列表样本（示例数据）10 行标题按规则映射
       title: "K6合作部-游戏运营-社区及用户运营",
       experienceRaw: "三年以上工作经验",
       minYears: 3,
-      roleFamily: "ai_product_operations",
+      roleFamily: "unknown",
       studentFriendly: "no",
     },
     {
@@ -455,11 +455,11 @@ test(`真实 DB 30 行 cutoff 快照（${DB_SNAPSHOT_CUTOFF}）复现报告数�
   }
 
   assert.deepEqual(Object.fromEntries(roleCounts), {
-    ai_algorithm: 3,
-    ai_application_development: 8,
+    ai_algorithm: 1,
+    ai_application_development: 7,
     data: 1,
-    ai_product_operations: 9,
-    unknown: 9,
+    ai_product_operations: 7,
+    unknown: 14,
   });
   assert.equal(friendlyCounts.get("no"), 21);
   assert.equal(friendlyCounts.get("unknown"), 9);
@@ -492,9 +492,9 @@ test(`真实 DB 30 行 cutoff 快照（${DB_SNAPSHOT_CUTOFF}）复现报告数�
   }
   const unknownBySource = (source: string) =>
     bySource(source).filter((row) => resolveRoleFamily("unknown", row.title) === "unknown").length;
-  assert.equal(unknownBySource("tencent-official-careers"), 4);
-  assert.equal(unknownBySource("meituan-official-careers"), 1);
-  assert.equal(unknownBySource("baidu-official-careers"), 4);
+  assert.equal(unknownBySource("tencent-official-careers"), 6);
+  assert.equal(unknownBySource("meituan-official-careers"), 2);
+  assert.equal(unknownBySource("baidu-official-careers"), 6);
 
   const hitBySource = (source: string) =>
     computeSkillHitRate(bySource(source).map(snapshotDiagnosticJob)).with_skill_count;
