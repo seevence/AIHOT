@@ -16,6 +16,15 @@ export function CareerLoading() {
   );
 }
 
+/** 导航中的行内 pending 提示：保留已渲染内容，只提示正在加载新结果。 */
+export function CareerPending({ label }: { label: string }) {
+  return (
+    <div role="status" aria-live="polite" className="rounded-card border border-line bg-bg-sunk px-4 py-2 text-[13px] text-ink-3">
+      {label}
+    </div>
+  );
+}
+
 export function CareerEmpty() {
   return (
     <section role="status" className="rounded-card border border-line bg-surface px-5 py-8 text-center">
