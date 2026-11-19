@@ -147,6 +147,20 @@
 - `node --import ./tests/standalone.ts --test modules/career-insights/tests/data-metrics.standalone.test.ts`：15 tests / 15 pass / 0 fail。
 - `data-metrics.standalone.test.ts` 覆盖：中文经验解析、`unknown` 提示回落、checked-in 腾讯列表样本（示例数据，非 DB 快照）10 行的职族/经验/学生友好、真实 DB 30 行 cutoff 快照（`2026-11-19T08:12:40.123Z`）复现本报告数字、`1-3年` 不入 `zero_to_one` 的桶边界、九桶分布与入门占比、技能命中率、空样本口径、非 live 排除与重复行去重。
 - 本报告数字来自只读查询 + 修复后函数重算，未写库、未重跑采集、未改迁移与 B/D/E 文件。
+## 样本演进与口径分层（2026-11-19）
+
+三个样本层级并存，**禁止互相替代或混用**：
+
+| 层级 | 行数 | 口径 | 用途 |
+|---|---|---|---|
+| 历史快照 | 30 | 首轮 B3 ingest，`first_seen_at <= 2026-11-19T08:12:40.123Z`，1 页/源 | 上文 C1–C3 复验报告与快照测试的固定输入；属历史快照，不随库增长 |
+| 权威全表 | 40 | 1 页/源；normalizer 0.2.0 经 backfill 覆盖 40/40 | 归一化覆盖率与职族/经验分布的权威口径（baidu 11 / meituan 18 / tencent 11） |
+| 扩采窗口基线 | 74 | 2 页/源（3 源 × 2 页） | `--pages 2` 扩采后的窗口基线，不是全量岗位库 |
+
+- 40 行 → 74 行：`career_jobs` 40 → 74，`career_job_observations` 196 → 230，`career_policies` 6，`career_ingest_runs` 33 → 38；按源 baidu 20 / meituan 33 / tencent 21。
+- 74 行分布：`role_family` unknown 47 / ai_product_operations 13 / ai_application_development 10 / data 2 / ai_algorithm 2；`student_friendly` no 57 / unknown 17（`yes` = 0）；`skills` 非空 55/74。
+- `current_metrics` 的 30 行快照属上表第一层的历史输入，**不得与 40 行或 74 行全表数字混用**；引用 74 行时必须同时标注 3 源 / 2 页窗口 / `as_of` / unknown 单列（A 的裁定见 B 路线图）。
+
 ## 0.2.0 归一化版本刷新（C-NORMALIZER-REFRESH@1 / C-ROLE-KEYWORDS@2）
 
 ### 变更
@@ -203,3 +217,8 @@
 - `node --import ./tests/standalone.ts --test .../data-dedupe + data-normalize + data-metrics`：33 tests / 33 pass / 0 fail。
 - 5433 `aihot_test`：`ingest.test.ts` + `repository.test.ts` 共 16 tests / 16 pass / 0 fail（含 3 条刷新场景：版本升级刷新、旧哈希跨版本刷新、同版本派生变化刷新，均不新增 observation）。
 - 未写 15432：生产库仅执行 `SELECT`。worktree 下 `scripts/migrate.ts` 的 `REPO_ROOT` 解析到主仓库，global setup 不会应用本 worktree 的新迁移；本次在 5433 模板库直接调用 `runMigrations(process.cwd())` 应用 0163 后再跑 DB 测试。
+
+## 最近更新
+
+- **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`。
+- 本次同步：新增「样本演进与口径分层」——30 行历史快照、40 行权威全表（1 页/源）、74 行扩采窗口基线（2 页/源）三层交叉说明；`current_metrics` 30 行快照属历史，不得与全表混用。既有 C1–C3 与 0.2.0 的历史结论保持不变。

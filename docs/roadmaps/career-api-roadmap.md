@@ -40,8 +40,8 @@
 | 阶段 | 对应 ROADMAP | 范围 | 状态 | Review |
 |---|---|---|---|---|
 | D1 | D2 后端部分 | SQL repository（summary/listJobs/jobDetail）、幂等观测写入、`career-insights.ingest` 队列、后端数据库测试 | 已完成 | PASS（2026-11-17） |
-| D2 | S0–S5（tasks.md） | 云端基线、迁移、批次事实、两时点、政策真实样本、门禁复跑 | 完成，待独立 review | 本机补强事务/日期/测试后待审 |
-| D3 | D3 | SQL 指标冻结 + 政策读取接口（`/policies`）、真实数据三接口验收清单 | 进行中 | 待独立 review |
+| D2 | S0–S5（tasks.md） | 云端基线、迁移、批次事实、两时点、政策真实样本、门禁复跑 | 已完成，已合入集成分支（原「待独立 review」已更新） | PASS（2026-11-19）；本机补强事务/日期/测试经独立 review PASS |
+| D3 | D3 | SQL 指标冻结 + 政策读取接口（`/policies`）、真实数据三接口验收清单 | 已完成，已合入集成分支（原「进行中 / 待独立 review」已更新） | PASS（2026-11-19，仅 minor）：`e9dddd5`（minor 复核 PASS）、`e0bc809` 指纹统一、`9c6c83a` 原型链与 page_size clamp 已合入；I-1 `5df5856` PASS |
 | D4 | D4–D5 | 后端只修缺陷：第二次采集观测验证、性能与错误处理、联调期问题 | 未开始 | - |
 | S0 | tasks.md S0 | 云端基线 worktree、路线图登记、基线门禁、写集隔离模板 | 完成，待独立 review | 门禁部分通过（环境缺陷 2 例） |
 
@@ -629,3 +629,19 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 4. `synthetic_fixture` 行在 summary、list、detail 三条读路径都拒绝发布。
 
 验证：`npx tsc -p modules/tsconfig.json` 通过；D 线 6 个测试文件 **36/36 通过**（本地 PostgreSQL 5433）。
+## D2/D3 收口与 stage 合并（2026-11-19）
+
+- D2 独立 review：**PASS**（无 blocker / major）。本机补强的事务原子性、政策日期日历校验与回归测试经复跑确认；阶段表原「待独立 review」已被取代。
+- D3 独立 review：**PASS**（仅 minor）；复核项已闭：
+  - `e9dddd5 fix(api): bound policy paging and validate source and theme filters` —— review PASS（minor），收口政策分页边界与 source/theme 过滤校验；
+  - `e0bc809 fix(career): share one policy content fingerprint across write paths` —— 政策内容指纹在各写路径统一；
+  - `9c6c83a fix(api): reject prototype-chain themes and out-of-range paging` —— 拒绝原型链主题与越界分页（page_size clamp）；
+  - I-1：`5df5856 fix(career): reuse the collector's policy identity when importing drafts` —— 独立 review PASS。
+- stage 合并与推送：`origin/feat/integration` = `a5191f7`（stage 已合并并推送）。
+- 本地后续提交：`254c7dc`（merge：按 A 裁定修正 unknown 与应届友好文案，源提交 `04f7cc4`）。
+- 历史结论保留：D2/D3 各节的实测记录与「待独立 review」原文不删除，以本节为最终状态。
+
+## 最近更新
+
+- **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`。
+- 本次同步：D2/D3 阶段状态与 review 列由「待独立 review」更新为已合入 + PASS，并登记 `e9dddd5` / `e0bc809` / `9c6c83a` / `5df5856` 四项收敛提交。
