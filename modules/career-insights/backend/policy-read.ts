@@ -14,6 +14,21 @@ export interface PolicyFiltersV1 {
   page_size: number;
 }
 
+export interface PolicySourceFacetV1 {
+  source_key: string;
+  count: number;
+}
+
+export interface PolicyThemeFacetV1 {
+  theme_id: string;
+  count: number;
+}
+
+export interface PolicyFacetsV1 {
+  sources: PolicySourceFacetV1[];
+  themes: PolicyThemeFacetV1[];
+}
+
 export interface PolicyListResponseV1 {
   contract_version: "0.1";
   data_origin: DataOrigin;
@@ -23,6 +38,7 @@ export interface PolicyListResponseV1 {
   page_size: number;
   total: number;
   filters: PolicyFiltersV1;
+  facets: PolicyFacetsV1;
 }
 
 interface PolicyRow {
@@ -74,7 +90,7 @@ export async function listPolicies(db: Db, filters: PolicyFiltersV1): Promise<Po
     ${filters.theme === undefined ? sql`` : sql`AND theme_ids @> to_jsonb(ARRAY[${filters.theme}::text])`}
   `;
 
-  const [rows, totals, latest, origins] = await Promise.all([
+  const [rows, totals, latest, origins, sourceFacets, themeFacets] = await Promise.all([
     db<PolicyRow[]>`
       SELECT policy_item_id, title, issuer, published_at, official_url, source_tier, theme_ids, evidence_excerpt
       FROM career_policies
@@ -92,6 +108,19 @@ export async function listPolicies(db: Db, filters: PolicyFiltersV1): Promise<Po
       SELECT data_origin, COUNT(*)::int AS n
       FROM career_policies
       GROUP BY data_origin`,
+    db<PolicySourceFacetV1[]>`
+      SELECT source_key, COUNT(*)::int AS count
+      FROM career_policies
+      WHERE published_at IS NOT NULL
+      GROUP BY source_key
+      ORDER BY source_key ASC`,
+    db<PolicyThemeFacetV1[]>`
+      SELECT theme AS theme_id, COUNT(*)::int AS count
+      FROM career_policies policy
+      CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(policy.theme_ids, '[]'::jsonb)) AS theme
+      WHERE policy.published_at IS NOT NULL
+      GROUP BY theme
+      ORDER BY count DESC, theme ASC`,
   ]);
 
   const counts = { live: 0, verified_import: 0, synthetic_fixture: 0 };
@@ -110,5 +139,9 @@ export async function listPolicies(db: Db, filters: PolicyFiltersV1): Promise<Po
     page_size: pageSize,
     total: totals[0]?.total ?? 0,
     filters: { ...filters, page, page_size: pageSize },
+    facets: {
+      sources: sourceFacets.map((row) => ({ source_key: row.source_key, count: row.count })),
+      themes: themeFacets.map((row) => ({ theme_id: row.theme_id, count: row.count })),
+    },
   };
 }
