@@ -488,7 +488,8 @@ function makeMetricResult(input: MetricResultInputV1): MetricResultV1 {
 }
 /**
  * 诊断输入只依赖经验与技能字段，不要求完整 MetricJobInputV1。
- * data_origin 非 live 的行由诊断函数自身排除；fixture/策略排除仍由调用方负责。
+ * data_origin 必填：缺省视为调用方漏传来源，不允许静默当作 live 计入；
+ * 非 live 的行由诊断函数自身排除，fixture/策略排除仍由调用方负责。
  */
 export interface DiagnosticJobInputV1 {
   source_key: string;
@@ -497,7 +498,7 @@ export interface DiagnosticJobInputV1 {
   experience_min_years: number | null;
   experience_max_years: number | null;
   skills: readonly string[];
-  data_origin?: DataOrigin;
+  data_origin: DataOrigin;
 }
 
 export type ExperienceBucketV1 =
@@ -661,7 +662,7 @@ function liveDedupedSample(jobs: readonly DiagnosticJobInputV1[]): DiagnosticSam
   let duplicateCount = 0;
 
   for (const job of jobs) {
-    if (job.data_origin !== undefined && job.data_origin !== "live") {
+    if (job.data_origin !== "live") {
       excludedCount += 1;
       continue;
     }
@@ -682,6 +683,11 @@ function liveDedupedSample(jobs: readonly DiagnosticJobInputV1[]): DiagnosticSam
   };
 }
 
+/**
+ * 桶按“岗位要求的最高年限”划分：开放上界（max=null）取其下限。
+ * 因此 `1-3年`（min=1,max=3）落 two_to_three，只有上限 ≤1 年（如 `0-1年`）才算 zero_to_one，
+ * 避免把「要求 1–3 年」误算进入门分子。
+ */
 function experienceBucketOf(job: DiagnosticJobInputV1): ExperienceBucketV1 {
   const raw = (job.experience_raw ?? "").trim();
   const min = job.experience_min_years;
@@ -692,15 +698,13 @@ function experienceBucketOf(job: DiagnosticJobInputV1): ExperienceBucketV1 {
     return isUnlimitedExperienceRaw(raw) ? "unlimited" : "unparsed";
   }
 
-  if (min === 0 && (max === null || max === 0)) return "zero";
-  if (min === 0) return "zero_to_one";
-
-  const years = min ?? max;
-  if (years === null) return "unparsed";
-  if (years <= 1) return "zero_to_one";
-  if (years <= 3) return "two_to_three";
-  if (years <= 5) return "four_to_five";
-  if (years <= 9) return "six_to_nine";
+  const upper = max ?? min;
+  if (upper === null) return "unparsed";
+  if (upper === 0) return "zero";
+  if (upper <= 1) return "zero_to_one";
+  if (upper <= 3) return "two_to_three";
+  if (upper <= 5) return "four_to_five";
+  if (upper <= 9) return "six_to_nine";
   return "ten_plus";
 }
 
