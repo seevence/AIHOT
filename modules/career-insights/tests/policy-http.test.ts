@@ -69,6 +69,19 @@ test("the policy route rejects unsupported and malformed parameters", async () =
   const empty = await app.inject({ url: "/api/site/career-insights/policies?theme=" });
   assert.equal(empty.statusCode, 400);
 
+  const unknownSource = await app.inject({ url: "/api/site/career-insights/policies?source_key=not-a-source" });
+  assert.equal(unknownSource.statusCode, 400);
+  assert.equal(unknownSource.json().error.code, "invalid_parameter");
+
+  const unknownTheme = await app.inject({ url: "/api/site/career-insights/policies?theme=not-a-theme" });
+  assert.equal(unknownTheme.statusCode, 400);
+
+  const pageTooLarge = await app.inject({ url: "/api/site/career-insights/policies?page=10001" });
+  assert.equal(pageTooLarge.statusCode, 400);
+
+  const pageOverflow = await app.inject({ url: "/api/site/career-insights/policies?page=9007199254740991" });
+  assert.equal(pageOverflow.statusCode, 400);
+
   await app.close();
 });
 

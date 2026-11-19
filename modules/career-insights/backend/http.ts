@@ -1,6 +1,8 @@
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ApiErrorResponseV1, JobFiltersV1 } from "../contracts/api.ts";
 import type { EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
+import { CAREER_SOURCE_DEFINITIONS } from "../collector/sources.ts";
+import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import { CareerApiError, InvalidParameterError, NotFoundError } from "./errors.ts";
 import type { PolicyFiltersV1 } from "./policy-read.ts";
 import type { CareerRepository } from "./repository.ts";
@@ -91,12 +93,18 @@ function parsePolicyFilters(query: unknown): PolicyFiltersV1 {
   if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
 
   const sourceKey = optionalText(input, "source_key");
+  if (sourceKey !== undefined && !CAREER_SOURCE_DEFINITIONS.some((definition) => definition.source_key === sourceKey)) {
+    throw invalidParameter("source_key", `Unknown source: ${sourceKey}.`);
+  }
   const theme = optionalText(input, "theme");
+  if (theme !== undefined && !(theme in THEME_KEYWORDS)) {
+    throw invalidParameter("theme", `Unknown theme: ${theme}.`);
+  }
 
   return {
     ...(sourceKey === undefined ? {} : { source_key: sourceKey }),
     ...(theme === undefined ? {} : { theme }),
-    page: pageNumber(input, "page", 1),
+    page: pageNumber(input, "page", 1, 10_000),
     page_size: pageNumber(input, "page_size", 20, 100),
   };
 }
