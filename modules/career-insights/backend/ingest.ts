@@ -140,10 +140,13 @@ async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): P
         ${job.fetched_at}::timestamptz, ${job.fetched_at}::timestamptz
       )
       RETURNING id`;
+    // 观测时间归一为 Asia/Shanghai 日粒度：每个 job 每个采集日恰好一个观测点（历史观测仍是精确时间）。
     await tx`
       INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
       VALUES (
-        ${inserted[0]!.id}, ${job.fetched_at}::timestamptz, ${job.content_hash}, ${job.collector_version},
+        ${inserted[0]!.id},
+        date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai',
+        ${job.content_hash}, ${job.collector_version},
         ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
       )
       ON CONFLICT (job_id, observed_at, content_hash) DO NOTHING`;
@@ -183,6 +186,16 @@ async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): P
           updated_at = now()
         WHERE id = ${existing.id}`;
     }
+    // 内容没变的日子同样留下观测点：同一采集日已有该内容哈希的观测时按唯一约束跳过。
+    await tx`
+      INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
+      VALUES (
+        ${existing.id},
+        date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai',
+        ${job.content_hash}, ${job.collector_version},
+        ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
+      )
+      ON CONFLICT (job_id, observed_at, content_hash) DO NOTHING`;
     return "duplicates";
   }
 
@@ -217,7 +230,9 @@ async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): P
   await tx`
     INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
     VALUES (
-      ${existing.id}, ${job.fetched_at}::timestamptz, ${job.content_hash}, ${job.collector_version},
+      ${existing.id},
+      date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai',
+      ${job.content_hash}, ${job.collector_version},
       ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
     )
     ON CONFLICT (job_id, observed_at, content_hash) DO NOTHING`;

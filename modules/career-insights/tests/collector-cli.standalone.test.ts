@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
 import { CliArgumentError, DEFAULT_PAGE_LIMIT, parsePageLimit } from "../collector/cli/args.ts";
 import {
   buildIngestReport,
   ingestRunContext,
   resolveIngestPageLimit,
+  runCareerIngest,
 } from "../collector/cli/ingest-career.ts";
 import { runEnabledSources } from "../collector/orchestration/runner.ts";
 import type { CareerSourceAdapter } from "../collector/index.ts";
@@ -125,4 +127,22 @@ test("ingest 的 --pages 非法取值抛错，不回退默认值", () => {
   assert.throws(() => resolveIngestPageLimit(["--live", "--pages", "0"]), CliArgumentError);
   assert.throws(() => resolveIngestPageLimit(["--live", "--pages=abc"]), isCliArgumentErrorMatching(/只接受整数/));
   assert.throws(() => resolveIngestPageLimit(["--live", "--pages="]), isCliArgumentErrorMatching(/未提供取值/));
+});
+// 真调用会联网采集并写库，standalone 测试不跑它；这里守入口形状与它不做的事（任务允许的降级断言）。
+test("runCareerIngest 供定时任务直接调用，不读 argv、不写文件、不结束连接池", () => {
+  assert.equal(typeof runCareerIngest, "function");
+  assert.equal(runCareerIngest.length, 0, "options 有默认值，可直接无参调用");
+
+  const source = readFileSync(new URL("../collector/cli/ingest-career.ts", import.meta.url), "utf8");
+  const start = source.indexOf("export async function runCareerIngest");
+  const end = source.indexOf("async function main()", start);
+  assert.ok(start >= 0 && end > start, "runCareerIngest 的函数体存在");
+
+  const body = source.slice(start, end);
+  for (const forbidden of ["process.argv", "writeFileSync", "sql.end"]) {
+    assert.equal(body.includes(forbidden), false, `runCareerIngest 不包含 ${forbidden}`);
+  }
+  for (const step of ["ingestJobSources", "ingestPolicySources", "buildIngestReport"]) {
+    assert.ok(body.includes(step), `runCareerIngest 走 ${step}`);
+  }
 });

@@ -277,6 +277,20 @@ test("two observation snapshots count the jobs first seen in the newer one", asy
   assert.equal(observed.evidence[0]!.kind, "job");
 });
 
+test("同日两次观测不算新的快照日，跨日才算", async () => {
+  await seed(job({ fetched_at: "2026-01-01T01:00:00.000Z" }));
+  await seed(job({ fetched_at: "2026-01-01T11:00:00.000Z" }));
+
+  const sameDay = await repository.summary();
+  assert.equal(sameDay.has_multiple_snapshots, false, "同一天的两个观测点只算一个快照日");
+  assert.equal(metric(sameDay, "observed_new_jobs").status, "insufficient_data");
+
+  await seed(job({ fetched_at: "2026-01-02T01:00:00.000Z" }));
+  const nextDay = await repository.summary();
+  assert.equal(nextDay.has_multiple_snapshots, true);
+  assert.equal(metric(nextDay, "observed_new_jobs").value, 0, "该 job 不是新一天首次出现的");
+});
+
 test("listJobs filters by every supported dimension", async () => {
   await seed(
     job({ job_key: "job-1", fetched_at: "2026-01-01T00:00:00.000Z", company_name: "甲公司", locations: ["北京", "上海"] }),

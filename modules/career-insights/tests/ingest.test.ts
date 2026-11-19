@@ -123,8 +123,8 @@ test("first_seen_at stays put while last_seen_at runs forward and never backward
   const backdated = await storedJob();
   assert.equal(at(backdated.last_seen_at), "2026-01-05T08:00:00.000Z", "an older fetch never pulls last_seen_at back");
   assert.equal(at(backdated.first_seen_at), "2026-01-01T00:00:00.000Z");
-  // 同源内容（同哈希）的重复观测只推进 last_seen_at，不追加 observation（C-NORMALIZER-REFRESH@1）。
-  assert.equal(await count("career_job_observations"), 1);
+  // 内容不变也会在采集日留下观测点：三次采集分属三个 Asia/Shanghai 日，各一条。
+  assert.equal(await count("career_job_observations"), 3);
 });
 
 test("a changed content hash updates the current state without touching first_seen_at", async () => {
@@ -171,7 +171,7 @@ test("a batch over one hundred jobs is refused before anything is written", asyn
   assert.equal(await count("career_jobs"), 0);
   assert.equal(await count("career_job_observations"), 0);
 });
-test("a newer normalizer version refreshes derived fields without a new observation", async () => {
+test("a newer normalizer version refreshes derived fields and keeps one observation per day", async () => {
   await ingestBatch(
     sql,
     batchOf([
@@ -225,10 +225,10 @@ test("a newer normalizer version refreshes derived fields without a new observat
   assert.equal(at(row.first_seen_at), "2026-01-01T00:00:00.000Z");
   assert.equal(at(row.last_seen_at), "2026-01-02T00:00:00.000Z");
   assert.equal(await count("career_jobs"), 1);
-  assert.equal(await count("career_job_observations"), 1, "a normalization refresh never appends an observation");
+  assert.equal(await count("career_job_observations"), 2, "两天各一条日粒度观测");
 });
 
-test("a legacy hash from an older normalizer refreshes derivations without a new observation", async () => {
+test("a legacy hash from an older normalizer refreshes derivations and keeps one observation per day", async () => {
   await ingestBatch(
     sql,
     batchOf([
@@ -253,10 +253,10 @@ test("a legacy hash from an older normalizer refreshes derivations without a new
   assert.equal(row.content_hash, digest("new-algorithm"), "the row adopts the source-content hash");
   assert.equal(row.normalizer_version, "normalizer/0.2.0");
   assert.equal(await count("career_jobs"), 1);
-  assert.equal(await count("career_job_observations"), 1);
+  assert.equal(await count("career_job_observations"), 2, "两天各一条日粒度观测");
 });
 
-test("changed derived fields under the same version still refresh without a new observation", async () => {
+test("changed derived fields under the same version still refresh and keep one observation per day", async () => {
   await ingestBatch(sql, batchOf([job({ role_family: "unknown", skills: [], skill_evidence: [] })]));
 
   const result = await ingestBatch(
@@ -268,5 +268,30 @@ test("changed derived fields under the same version still refresh without a new 
   const row = await storedJob();
   assert.equal(row.role_family, "ai_application_development");
   assert.deepEqual(row.skills, ["python"]);
-  assert.equal(await count("career_job_observations"), 1);
+  assert.equal(await count("career_job_observations"), 2, "两天各一条日粒度观测");
+});
+
+test("同一天两次采集同一内容只留下一个观测点", async () => {
+  await ingestBatch(sql, batchOf([job({ fetched_at: "2026-01-01T01:00:00.000Z" })]));
+  const second = await ingestBatch(sql, batchOf([job({ fetched_at: "2026-01-01T13:00:00.000Z" })]));
+
+  assert.deepEqual(second, { accepted: 0, updated: 0, duplicates: 1, rejected: 0, errors: [] });
+  assert.equal(await count("career_job_observations"), 1, "同一天的重复观测不追加");
+
+  const [row] = await sql<{ observed_at: Date }[]>`SELECT observed_at FROM career_job_observations`;
+  assert.equal(at(row!.observed_at), "2025-12-31T16:00:00.000Z", "observed_at 归一到 Asia/Shanghai 当日零点");
+});
+
+test("跨两个采集日累积两个观测日，同日内容变化仍只算一个快照日", async () => {
+  const changed = { content_hash: digest("v2"), title: "AI 应用开发高级工程师" };
+  await ingestBatch(sql, batchOf([job({ fetched_at: "2026-01-01T01:00:00.000Z" })]));
+  await ingestBatch(sql, batchOf([job({ fetched_at: "2026-01-01T09:00:00.000Z", ...changed })]));
+  await ingestBatch(sql, batchOf([job({ fetched_at: "2026-01-02T01:00:00.000Z", ...changed })]));
+
+  const [row] = await sql<{ observations: number; days: number }[]>`
+    SELECT COUNT(*)::int AS observations,
+           COUNT(DISTINCT date_trunc('day', observed_at AT TIME ZONE 'Asia/Shanghai'))::int AS days
+    FROM career_job_observations`;
+  assert.equal(row!.observations, 3, "同一天内容变化两次各留一条观测");
+  assert.equal(row!.days, 2, "快照日按 Asia/Shanghai 日去重");
 });
