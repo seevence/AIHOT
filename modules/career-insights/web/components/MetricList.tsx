@@ -29,14 +29,23 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
     : metric.dimension.skill_id
       ? skillLabel(metric.dimension.skill_id)
       : metric.dimension.theme_id;
+  const isUnknownFamily = metric.metric_id === "job_family_share" && roleFamily === "unknown";
+  const isStudentFriendly = metric.metric_id === "student_friendly_share";
+  const studentYes = metric.numerator_count ?? 0;
+  const studentUnknown = metric.unknown_count ?? 0;
+  const studentNo = Math.max(metric.sample_size - studentYes - studentUnknown, 0);
+  const studentNoPercent = metric.sample_size > 0 ? `${((studentNo / metric.sample_size) * 100).toFixed(1)}%` : "—";
+  const title = isUnknownFamily ? "未分类职位占比" : metric.label;
+  const titleSuffix = isUnknownFamily ? "" : dimensionSuffix ? ` · ${dimensionSuffix}` : "";
+  const valueText = isStudentFriendly ? `${studentYes} 个` : formatValue(metric);
 
   return (
     <article data-metric-id={metric.metric_id} className="rounded-card border border-line bg-surface p-5">
       <h3 className="text-[13px] font-medium text-ink-3">
-        {metric.label}
-        {dimensionSuffix ? ` · ${dimensionSuffix}` : ""}
+        {title}
+        {titleSuffix}
       </h3>
-      <p className="mt-2 text-[26px] font-bold leading-none text-ink">{formatValue(metric)}</p>
+      <p className="mt-2 text-[26px] font-bold leading-none text-ink">{valueText}</p>
 
       <dl className="mt-4 space-y-1 text-[12px] text-ink-4">
         <div className="flex gap-2">
@@ -48,7 +57,7 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
           <dd className="mono text-ink-2"><CareerTime value={metric.as_of} /></dd>
         </div>
 
-        {roleFamilyLabel !== undefined && (
+        {roleFamilyLabel !== undefined && !isUnknownFamily && (
           <div className="flex gap-2">
             <dt>方向</dt>
             <dd className="text-ink-2">{roleFamilyLabel}</dd>
@@ -63,7 +72,19 @@ function MetricCard({ metric }: { metric: MetricResultV1 }) {
         )}
       </dl>
 
-      {unknownText !== undefined && <p className="mt-1 text-[12px] text-ink-4">{unknownText}</p>}
+      {isStudentFriendly ? (
+        <div className="mt-1 space-y-1 text-[12px] text-ink-4">
+          <p>明确标注学生友好的职位：{studentYes} 个（{metric.sample_size} 条中 {studentUnknown} 条未标注）</p>
+          {studentYes === 0 && <p>当前窗口暂无明确标注学生友好的样本。</p>}
+          <p>明确非学生友好 {studentNo}（{studentNoPercent}）</p>
+        </div>
+      ) : (
+        unknownText !== undefined && <p className="mt-1 text-[12px] text-ink-4">{unknownText}</p>
+      )}
+
+      {isUnknownFamily && (
+        <p className="mt-1 text-[12px] text-ink-4">unknown 表示未归入四个方向，不代表存在该职族。</p>
+      )}
 
       <p className="mt-4 text-[12px] leading-relaxed text-ink-3">{metric.disclaimer}</p>
 
