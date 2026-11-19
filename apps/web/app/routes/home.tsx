@@ -1,4 +1,4 @@
-import { redirect, useLoaderData } from "react-router";
+import { Link, redirect, useLoaderData } from "react-router";
 import { SITE } from "@aihot/site";
 import type { Route } from "./+types/home";
 import type { TimelineResponse } from "@aihot/contracts/site";
@@ -41,6 +41,25 @@ export default function Home() {
   const title = filters.tag ? `#${filters.tag}` : "精选";
   return (
     <div className="pb-6">
+      <section aria-labelledby="career-insights-entry" className="mb-4 rounded-card border border-line bg-surface p-4">
+        <h2 id="career-insights-entry" className="text-[16px] font-semibold text-ink">就业趋势洞察</h2>
+        <p className="mt-1 text-[12px] text-ink-3 break-words">基于真实招聘岗位与政府公开政策数据，查看 AI 相关岗位的职族分布、经验门槛与政策动向。</p>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Link
+            to="/career-insights"
+            className="inline-flex h-9 items-center rounded-full border border-line-strong px-4 text-[13px] font-medium text-ink-2"
+          >
+            查看就业趋势
+          </Link>
+          <Link
+            to="/career-insights/policies"
+            className="inline-flex h-9 items-center rounded-full border border-line-strong px-4 text-[13px] font-medium text-ink-2"
+          >
+            政策文件
+          </Link>
+        </div>
+        {data.cards.length === 0 && <p className="mt-3 text-[12px] text-ink-3">本站动态内容暂未接入，可先查看就业趋势洞察。</p>}
+      </section>
       {/* Phones: the bar (精选 | 全部, filter, search), the filter in use, today's hot topics, the feed. */}
       <FeedBar base="/" category={filters.category} channel={filters.channel} />
       <ActiveFilters base="/" category={filters.category} channel={filters.channel} tag={filters.tag} />
