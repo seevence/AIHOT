@@ -1,4 +1,5 @@
 import { sql as postgresSql, type Db } from "@aihot/backend/db";
+import { BEIJING_TIMEZONE } from "@aihot/contracts/time";
 import type { JSONValue, Parameter } from "postgres";
 import type { CareerObservationBatchV1, IngestResultV1 } from "../contracts/api.ts";
 import type {
@@ -145,7 +146,7 @@ async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): P
       INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
       VALUES (
         ${inserted[0]!.id},
-        date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai',
+        date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE ${BEIJING_TIMEZONE}) AT TIME ZONE ${BEIJING_TIMEZONE},
         ${job.content_hash}, ${job.collector_version},
         ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
       )
@@ -191,7 +192,7 @@ async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): P
       INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
       VALUES (
         ${existing.id},
-        date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai',
+        date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE ${BEIJING_TIMEZONE}) AT TIME ZONE ${BEIJING_TIMEZONE},
         ${job.content_hash}, ${job.collector_version},
         ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
       )
@@ -231,7 +232,7 @@ async function writeJob(tx: Db, job: NormalizedJobV1, context: IngestContext): P
     INSERT INTO career_job_observations (job_id, observed_at, content_hash, collector_version, source_url, raw_excerpt, batch_id)
     VALUES (
       ${existing.id},
-      date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai',
+      date_trunc('day', ${job.fetched_at}::timestamptz AT TIME ZONE ${BEIJING_TIMEZONE}) AT TIME ZONE ${BEIJING_TIMEZONE},
       ${job.content_hash}, ${job.collector_version},
       ${job.official_url}, ${job.raw_text.slice(0, EXCERPT_LIMIT)}, ${context.batch_id ?? null}
     )

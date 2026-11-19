@@ -1,4 +1,5 @@
 import type { Db } from "@aihot/backend/db";
+import { BEIJING_TIMEZONE } from "@aihot/contracts/time";
 import type {
   CareerWarningV1,
   EvidenceLinkV1,
@@ -151,7 +152,7 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
              COUNT(*) FILTER (WHERE student_friendly = 'unknown')::int AS unknown_count
       FROM career_jobs`,
     db<{ observed_at: Date }[]>`
-      SELECT DISTINCT date_trunc('day', observed_at AT TIME ZONE 'Asia/Shanghai') AT TIME ZONE 'Asia/Shanghai' AS observed_at
+      SELECT DISTINCT date_trunc('day', observed_at AT TIME ZONE ${BEIJING_TIMEZONE}) AT TIME ZONE ${BEIJING_TIMEZONE} AS observed_at
       FROM career_job_observations
       ORDER BY observed_at DESC
       LIMIT 2`,
