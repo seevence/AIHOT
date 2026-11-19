@@ -77,7 +77,7 @@ test("国务院政策适配器复用 PolicyEvidenceRefV1，产出 3 条", async 
     assert.ok(policy.title.length > 3);
     assert.ok(policy.issuer.length > 0);
     assert.match(policy.published_at, /^\d{4}-\d{2}-\d{2}$/);
-    assert.equal(policy.source_tier, "national");
+    assert.equal(policy.source_tier, "government_official");
     assert.match(policy.official_url, /^https:\/\/www\.gov\.cn\//);
     assert.ok(Array.isArray(policy.theme_ids));
     assert.ok(policy.evidence_excerpt.length > 0);
