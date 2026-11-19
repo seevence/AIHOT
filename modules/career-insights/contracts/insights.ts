@@ -52,3 +52,69 @@ export interface CareerDailyResponseV1 {
   sample_size: number;
   generated_at: string;
 }
+/**
+ * 异常信号规则：
+ * - cross_industry：算法/AI 族占多数的公司出现机械/硬件等非 AI 岗位；
+ * - new_family：公司在近 window_days 天内首次出现某职族（此前无该族）；
+ * - surge：最近 24h 新岗位 ≥5 且达到历史日均 3 倍；
+ * - skill_mismatch：算法/大模型类标题的岗位要求机械/硬件类技能。
+ */
+export type CareerSignalRule = "cross_industry" | "new_family" | "surge" | "skill_mismatch";
+
+export type CareerSignalConfidence = "high" | "medium";
+
+/** 每条信号都带可复算的数字依据；未用于该规则的字段不出现。 */
+export interface CareerSignalEvidenceV1 {
+  /** cross_industry：公司总岗位数、算法/AI 族岗位数与占比。 */
+  company_job_count?: number;
+  ai_family_job_count?: number;
+  ai_family_ratio?: number;
+  /** cross_industry / skill_mismatch：命中的跨界词、标题词、技能词。 */
+  matched_terms?: string[];
+  matched_title_terms?: string[];
+  matched_skill_terms?: string[];
+  /** new_family：新职族、该族岗位数、窗口天数、该族最早出现时间。 */
+  role_family?: RoleFamily;
+  family_job_count?: number;
+  window_days?: number;
+  earliest_first_seen_at?: string;
+  /** surge：24h 内新岗位数、历史天数、历史日均、倍数；历史日均 0 时倍数为 null。 */
+  last_24h_jobs?: number;
+  history_days?: number;
+  history_daily_average?: number;
+  surge_ratio?: number | null;
+}
+
+export interface CareerSignalV1 {
+  rule: CareerSignalRule;
+  company: string;
+  job_id: string;
+  job_title: string;
+  evidence: CareerSignalEvidenceV1;
+  reason_text: string;
+  source_key: string;
+  official_url: string;
+  first_seen_at: string;
+  confidence: CareerSignalConfidence;
+}
+
+/** 因历史不足而未判定的规则项（当前只有 surge 会跳过）。 */
+export interface CareerSignalSkippedV1 {
+  rule: "surge";
+  company: string;
+  reason: "insufficient_history";
+  history_days: number;
+}
+
+/**
+ * 就业异常信号：按 confidence（high 优先）、first_seen_at DESC 排序，
+ * 同 company+rule+family 只保留最新一条。空表时 signals 与 skipped 均为空数组。
+ */
+export interface CareerSignalsResponseV1 {
+  contract_version: "0.1";
+  data_origin: DataOrigin;
+  window_days: number;
+  signals: CareerSignalV1[];
+  skipped: CareerSignalSkippedV1[];
+  generated_at: string;
+}

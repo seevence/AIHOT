@@ -11,6 +11,13 @@ import {
   MAX_HOT_WINDOW_DAYS,
   type HotCompanyOptions,
 } from "./career-analytics.ts";
+import {
+  DEFAULT_SIGNAL_LIMIT,
+  DEFAULT_SIGNAL_WINDOW_DAYS,
+  MAX_SIGNAL_LIMIT,
+  MAX_SIGNAL_WINDOW_DAYS,
+  type CareerSignalsOptions,
+} from "./career-signals.ts";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
 import type { PolicyFiltersV1 } from "./policy-read.ts";
 import type { CareerRepository } from "./repository.ts";
@@ -21,6 +28,7 @@ const STUDENT_FRIENDLY_VALUES = ["yes", "no", "unknown"] as const;
 const FILTER_KEYS = new Set(["role_family", "company", "city", "employment_type", "student_friendly", "skill", "page", "page_size"]);
 const POLICY_FILTER_KEYS = new Set(["source_key", "theme", "page", "page_size"]);
 const HOT_FILTER_KEYS = new Set(["limit", "window_days"]);
+const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidParameter(parameter: string, message: string): InvalidParameterError {
@@ -129,6 +137,17 @@ function parseHotOptions(query: unknown): HotCompanyOptions {
   };
 }
 
+function parseSignalOptions(query: unknown): CareerSignalsOptions {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !SIGNAL_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+
+  return {
+    limit: pageNumber(input, "limit", DEFAULT_SIGNAL_LIMIT, MAX_SIGNAL_LIMIT),
+    window_days: pageNumber(input, "window_days", DEFAULT_SIGNAL_WINDOW_DAYS, MAX_SIGNAL_WINDOW_DAYS),
+  };
+}
+
 async function respond(reply: FastifyReply, read: () => Promise<unknown>): Promise<FastifyReply> {
   reply.header("Cache-Control", "no-store");
   try {
@@ -177,5 +196,9 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
   app.get("/api/site/career-insights/daily", async (request, reply) => respond(reply, async () => {
     assertNoQuery(request.query);
     return repository.dailySummary();
+  }));
+
+  app.get("/api/site/career-insights/signals", async (request, reply) => respond(reply, async () => {
+    return repository.careerSignals(parseSignalOptions(request.query));
   }));
 }
