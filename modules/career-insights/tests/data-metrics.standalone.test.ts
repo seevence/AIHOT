@@ -1,16 +1,27 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { PolicyEvidenceRefV1 } from "../contracts/index.ts";
+import type { PolicyEvidenceRefV1, RawCollectedJobV1 } from "../contracts/index.ts";
 import {
   computeCareerMetrics,
+  computeEntryLevelShare,
+  computeExperienceDistribution,
   computeJobFamilyShareMetrics,
   computeObservedNewJobsMetric,
   computeSharedThemes,
   computeSkillDemandShareMetrics,
+  computeSkillHitRate,
   computeStudentFriendlyShareMetric,
+  EXPERIENCE_BUCKETS_V1,
+  type DiagnosticJobInputV1,
   type MetricJobInputV1,
   type ObservationSnapshotV1,
 } from "../data/metrics.ts";
+import {
+  normalizeRawJob,
+  resolveExperience,
+  resolveRoleFamily,
+  resolveStudentFriendly,
+} from "../data/normalize.ts";
 
 const AS_OF = "2026-11-16T12:00:00.000Z";
 
@@ -225,3 +236,344 @@ test("computeCareerMetrics 返回五项指标且顺序固定", () => {
   assert.ok(ids.includes("policy_job_shared_themes"));
   assert.equal(ids.at(-1), "policy_job_shared_themes");
 });
+function tencentRaw(
+  title: string,
+  experienceRaw: string | null,
+  skillTerms: string[] = [],
+): RawCollectedJobV1 {
+  return {
+    schema_version: "1.0",
+    source_key: "tencent-official-careers",
+    source_job_id: title,
+    company_name: "腾讯",
+    title,
+    official_url: "https://careers.tencent.com/jobdesc.html?postId=2095412225996140544",
+    raw_text: "",
+    published_at: "2026-11-18",
+    fetched_at: "2026-11-18T00:00:00.000Z",
+    collector_version: "test/1.0",
+    hints: {
+      role_family: "unknown",
+      ...(experienceRaw === null ? {} : { experience_raw: experienceRaw }),
+      skill_terms: skillTerms,
+    },
+  };
+}
+
+test("中文经验短语解析为年份，未写经验不回填 0 或经验不限", () => {
+  assert.deepEqual(resolveExperience("两年以上工作经验", ""), {
+    min: 2,
+    max: null,
+    raw: "两年以上工作经验",
+  });
+  assert.deepEqual(resolveExperience("五年以上", ""), { min: 5, max: null, raw: "五年以上" });
+  assert.deepEqual(resolveExperience("三年以内", ""), { min: null, max: 3, raw: "三年以内" });
+  assert.deepEqual(resolveExperience("一年以上工作经验", ""), {
+    min: 1,
+    max: null,
+    raw: "一年以上工作经验",
+  });
+  assert.deepEqual(resolveExperience("十年以上", ""), { min: 10, max: null, raw: "十年以上" });
+  assert.deepEqual(resolveExperience("0-1年", ""), { min: 0, max: 1, raw: "0-1年" });
+  assert.deepEqual(resolveExperience("不限", ""), { min: null, max: null, raw: "不限" });
+  assert.deepEqual(resolveExperience("", ""), { min: null, max: null, raw: null });
+  assert.deepEqual(resolveExperience(null, ""), { min: null, max: null, raw: null });
+});
+
+test("unknown 职族提示按标题重算，已知提示不被覆盖", () => {
+  assert.equal(resolveRoleFamily("unknown", "AI后端开发工程师"), "ai_application_development");
+  assert.equal(
+    resolveRoleFamily(undefined, "混元大语言模型后训练算法工程师-Memory方向"),
+    "ai_algorithm",
+  );
+  assert.equal(resolveRoleFamily("data", "AI后端开发工程师"), "data");
+  assert.equal(resolveRoleFamily("unknown", "客工部接待经理（J101012）"), "unknown");
+});
+
+// 这 10 条标题来自 checked-in 采集样本 `collector/evidence/samples/tencent-official-careers/samples/list.json`，
+// 是稳定的示例数据，不是当前 DB 快照；DB 口径与报告数字见下方 30 行 cutoff 快照测试。
+test("checked-in 腾讯列表样本（示例数据）10 行标题按规则映射职族与经验", () => {
+  const rows: Array<{
+    title: string;
+    experienceRaw: string;
+    minYears: number | null;
+    roleFamily: ReturnType<typeof resolveRoleFamily>;
+    studentFriendly: string;
+  }> = [
+    {
+      title: "《三角洲行动》3D动作设计师-演绎方向",
+      experienceRaw: "三年以上工作经验",
+      minYears: 3,
+      roleFamily: "unknown",
+      studentFriendly: "no",
+    },
+    {
+      title: "ima copilot-后台开发工程师",
+      experienceRaw: "一年以上工作经验",
+      minYears: 1,
+      roleFamily: "ai_application_development",
+      studentFriendly: "unknown",
+    },
+    {
+      title: "K6合作部-游戏运营-社区及用户运营",
+      experienceRaw: "三年以上工作经验",
+      minYears: 3,
+      roleFamily: "ai_product_operations",
+      studentFriendly: "no",
+    },
+    {
+      title: "WorkBuddy-桌面端技术专家-Electron（深圳/北京/上海）",
+      experienceRaw: "五年以上工作经验",
+      minYears: 5,
+      roleFamily: "ai_application_development",
+      studentFriendly: "no",
+    },
+    {
+      title: "《异人之下》游戏系统策划",
+      experienceRaw: "三年以上工作经验",
+      minYears: 3,
+      roleFamily: "unknown",
+      studentFriendly: "no",
+    },
+    {
+      title: "《异人之下》游戏数值策划",
+      experienceRaw: "三年以上工作经验",
+      minYears: 3,
+      roleFamily: "unknown",
+      studentFriendly: "no",
+    },
+    {
+      title: "腾讯云-AgentRuntime高级技术产品经理(国际化方向)(深圳/北京)",
+      experienceRaw: "三年以上工作经验",
+      minYears: 3,
+      roleFamily: "ai_product_operations",
+      studentFriendly: "no",
+    },
+    {
+      title: "在研小游戏-玩法策划",
+      experienceRaw: "两年以上工作经验",
+      minYears: 2,
+      roleFamily: "unknown",
+      studentFriendly: "no",
+    },
+    {
+      title: "ima-高级产品经理（基础框架）",
+      experienceRaw: "两年以上工作经验",
+      minYears: 2,
+      roleFamily: "ai_product_operations",
+      studentFriendly: "no",
+    },
+    {
+      title: "芯片设计工程师",
+      experienceRaw: "三年以上工作经验",
+      minYears: 3,
+      roleFamily: "unknown",
+      studentFriendly: "no",
+    },
+  ];
+
+  for (const row of rows) {
+    const job = normalizeRawJob(tencentRaw(row.title, row.experienceRaw));
+    assert.equal(job.role_family, row.roleFamily, row.title);
+    assert.equal(job.experience_min_years, row.minYears, row.title);
+    assert.equal(job.experience_max_years, null, row.title);
+    assert.equal(job.experience_raw, row.experienceRaw, row.title);
+    assert.equal(job.student_friendly, row.studentFriendly, row.title);
+  }
+});
+
+// B3 首次 ingest 的 30 行 live 快照：first_seen_at 2026-11-19T08:08:37.234Z ~ 2026-11-19T08:12:40.123Z（UTC）。
+// cutoff 之后新增的行不纳入，保证报告数字可复现且不随 DB 继续采集而漂移。
+const DB_SNAPSHOT_CUTOFF = "2026-11-19T08:12:40.123Z";
+
+interface DbSnapshotRowV1 {
+  source_key: string;
+  job_key: string;
+  title: string;
+  experience_raw: string;
+  skills: string[];
+}
+
+const DB_SNAPSHOT_30: readonly DbSnapshotRowV1[] = [
+  { source_key: "baidu-official-careers", job_key: "dd58c0d0", title: "AI产品营销经理（J104122）", experience_raw: "", skills: ["growth_operations", "ai_agents"] },
+  { source_key: "baidu-official-careers", job_key: "d9a60bea", title: "产品营销专家（J104088）", experience_raw: "1-3年", skills: ["ai_agents", "large_language_models"] },
+  { source_key: "baidu-official-careers", job_key: "59814615", title: "伙伴FDE培训设计与教研专家（J107259）", experience_raw: "", skills: ["ai_agents", "large_language_models", "retrieval_augmented_generation"] },
+  { source_key: "baidu-official-careers", job_key: "0a125468", title: "全栈开发工程师（J107271）", experience_raw: "", skills: ["prompt_engineering", "react", "typescript", "javascript", "nodejs", "git"] },
+  { source_key: "baidu-official-careers", job_key: "d021eee4", title: "大客户技术支持-大模型方向（J107350）", experience_raw: "3年以上", skills: ["large_language_models", "ai_agents", "retrieval_augmented_generation", "prompt_engineering", "python", "go"] },
+  { source_key: "baidu-official-careers", job_key: "75a66775", title: "大模型即云计算大客户销售-华南游戏方向（J107254）", experience_raw: "3年以上", skills: ["large_language_models"] },
+  { source_key: "baidu-official-careers", job_key: "2cf4685b", title: "客工部接待经理（J101012）", experience_raw: "3年以上", skills: ["english"] },
+  { source_key: "baidu-official-careers", job_key: "2f3eed75", title: "海外服务顾问（J107080）", experience_raw: "", skills: ["english", "data_analysis"] },
+  { source_key: "baidu-official-careers", job_key: "36db4f18", title: "渠道经理（J107385）", experience_raw: "3年以上", skills: ["large_language_models", "ai_agents", "data_analysis"] },
+  { source_key: "baidu-official-careers", job_key: "68519555", title: "社区产品经理（J107248）", experience_raw: "", skills: ["product_design"] },
+  { source_key: "meituan-official-careers", job_key: "4697309845", title: "AI产品经理岗", experience_raw: "", skills: ["large_language_models", "ai_agents", "product_design"] },
+  { source_key: "meituan-official-careers", job_key: "4697324893", title: "AI产品运营岗", experience_raw: "", skills: ["data_analysis", "large_language_models", "sql", "python", "ai_agents"] },
+  { source_key: "meituan-official-careers", job_key: "4697320043", title: "AI全栈工程师", experience_raw: "", skills: ["large_language_models", "prompt_engineering", "retrieval_augmented_generation", "ai_agents", "python", "java", "typescript", "go", "react"] },
+  { source_key: "meituan-official-careers", job_key: "4697280304", title: "AI后端开发工程师", experience_raw: "", skills: ["large_language_models", "retrieval_augmented_generation", "ai_agents", "java", "cpp", "python", "go", "mysql", "sql", "algorithms"] },
+  { source_key: "meituan-official-careers", job_key: "4791110825", title: "小象超市-自有商品品质治理专家", experience_raw: "5年以上", skills: [] },
+  { source_key: "meituan-official-careers", job_key: "4826532250", title: "差旅场景组-产品经理", experience_raw: "3年以上", skills: ["data_analysis"] },
+  { source_key: "meituan-official-careers", job_key: "4862040547", title: "无人车资深后端研发工程师", experience_raw: "5年以上", skills: ["algorithms", "distributed_systems"] },
+  { source_key: "meituan-official-careers", job_key: "4875184969", title: "无人车资深后端研发工程师", experience_raw: "5年以上", skills: ["algorithms", "distributed_systems"] },
+  { source_key: "meituan-official-careers", job_key: "4694982338", title: "智能商业分析师（BA/DS）", experience_raw: "", skills: ["data_analysis", "data_science", "large_language_models", "data_visualization", "user_research", "sql", "ai_agents"] },
+  { source_key: "meituan-official-careers", job_key: "4791236953", title: "高级安全运营工程师", experience_raw: "3 年以上", skills: ["data_analysis", "sql"] },
+  { source_key: "tencent-official-careers", job_key: "2088458663969865728", title: "UE5自研IP跨平台射击游戏-服务器开发工程师-UE5 DS Gameplay", experience_raw: "三年以上工作经验", skills: ["cpp", "linux"] },
+  { source_key: "tencent-official-careers", job_key: "2090609370772713472", title: "UE微恐轻动作项目-手游美术项目管理", experience_raw: "两年以上工作经验", skills: [] },
+  { source_key: "tencent-official-careers", job_key: "2077641738788454400", title: "WorkBuddy-生态合作运营(北上深)", experience_raw: "三年以上工作经验", skills: ["data_analysis"] },
+  { source_key: "tencent-official-careers", job_key: "2098253188510695424", title: "WorkBuddy-移动端高级开发工程师-深圳/北京", experience_raw: "三年以上工作经验", skills: ["ai_agents", "cpp", "java", "linux"] },
+  { source_key: "tencent-official-careers", job_key: "2038879291764277248", title: "微信小店-产品策划-b 端产品方向", experience_raw: "两年以上工作经验", skills: [] },
+  { source_key: "tencent-official-careers", job_key: "2046923451989651456", title: "混元大语言模型后训练算法工程师-Memory方向（北京/深圳/上海）", experience_raw: "两年以上工作经验", skills: ["large_language_models", "ai_agents", "retrieval_augmented_generation", "python", "pytorch", "tensorflow"] },
+  { source_key: "tencent-official-careers", job_key: "2122282935016144896", title: "腾讯云-KA大客户销售经理(物流方向) -北/上/深", experience_raw: "五年以上工作经验", skills: [] },
+  { source_key: "tencent-official-careers", job_key: "2122282936190550016", title: "腾讯云-云和AI售前架构师（物流方向）-北/上/深", experience_raw: "五年以上工作经验", skills: [] },
+  { source_key: "tencent-official-careers", job_key: "1963884175547322368", title: "腾讯云-南区云原生销售-广州/深圳", experience_raw: "五年以上工作经验", skills: [] },
+  { source_key: "tencent-official-careers", job_key: "2079574255586160640", title: "腾讯游戏高级品牌经理", experience_raw: "不限", skills: [] },
+];
+
+function snapshotDiagnosticJob(row: DbSnapshotRowV1): DiagnosticJobInputV1 {
+  const experience = resolveExperience(row.experience_raw === "" ? null : row.experience_raw, "");
+  return {
+    source_key: row.source_key,
+    job_key: row.job_key,
+    experience_raw: experience.raw,
+    experience_min_years: experience.min,
+    experience_max_years: experience.max,
+    skills: row.skills,
+    data_origin: "live",
+  };
+}
+
+test(`真实 DB 30 行 cutoff 快照（${DB_SNAPSHOT_CUTOFF}）复现报告数字`, () => {
+  assert.equal(DB_SNAPSHOT_30.length, 30);
+  const jobs = DB_SNAPSHOT_30.map(snapshotDiagnosticJob);
+
+  const roleCounts = new Map<string, number>();
+  const friendlyCounts = new Map<string, number>();
+  for (const row of DB_SNAPSHOT_30) {
+    const role = resolveRoleFamily("unknown", row.title);
+    roleCounts.set(role, (roleCounts.get(role) ?? 0) + 1);
+    const experience = resolveExperience(row.experience_raw === "" ? null : row.experience_raw, "");
+    const friendly = resolveStudentFriendly("unknown", experience, row.title, row.title);
+    friendlyCounts.set(friendly, (friendlyCounts.get(friendly) ?? 0) + 1);
+  }
+
+  assert.deepEqual(Object.fromEntries(roleCounts), {
+    ai_algorithm: 3,
+    ai_application_development: 8,
+    data: 1,
+    ai_product_operations: 9,
+    unknown: 9,
+  });
+  assert.equal(friendlyCounts.get("no"), 21);
+  assert.equal(friendlyCounts.get("unknown"), 9);
+  assert.equal(friendlyCounts.get("yes"), undefined);
+
+  const distribution = computeExperienceDistribution(jobs);
+  assert.equal(distribution.sample_size, 30);
+  assert.deepEqual(
+    EXPERIENCE_BUCKETS_V1.map((bucket) => distribution.buckets[bucket].count),
+    [10, 0, 0, 13, 6, 0, 0, 1, 0],
+  );
+
+  const entry = computeEntryLevelShare(jobs);
+  assert.equal(entry.numerator_count, 10);
+  assert.equal(entry.denominator_count, 30);
+  assert.equal(entry.value, 1 / 3);
+
+  const hitRate = computeSkillHitRate(jobs);
+  assert.equal(hitRate.with_skill_count, 23);
+  assert.equal(hitRate.unknown_count, 7);
+  assert.equal(hitRate.value, 23 / 30);
+
+  const bySource = (source: string) => DB_SNAPSHOT_30.filter((row) => row.source_key === source);
+  for (const source of [
+    "tencent-official-careers",
+    "meituan-official-careers",
+    "baidu-official-careers",
+  ]) {
+    assert.equal(bySource(source).length, 10, source);
+  }
+  const unknownBySource = (source: string) =>
+    bySource(source).filter((row) => resolveRoleFamily("unknown", row.title) === "unknown").length;
+  assert.equal(unknownBySource("tencent-official-careers"), 4);
+  assert.equal(unknownBySource("meituan-official-careers"), 1);
+  assert.equal(unknownBySource("baidu-official-careers"), 4);
+
+  const hitBySource = (source: string) =>
+    computeSkillHitRate(bySource(source).map(snapshotDiagnosticJob)).with_skill_count;
+  assert.equal(hitBySource("tencent-official-careers"), 4);
+  assert.equal(hitBySource("meituan-official-careers"), 9);
+  assert.equal(hitBySource("baidu-official-careers"), 10);
+});
+
+test("经验分布返回九桶且计数合计等于去重后的 live 样本量", () => {
+  const jobs: DiagnosticJobInputV1[] = [
+    diagnosticJob({ job_key: "a" }),
+    diagnosticJob({ job_key: "b", experience_raw: "1-3年", experience_min_years: 1, experience_max_years: 3, skills: [] }),
+    diagnosticJob({ job_key: "c", experience_raw: "三年以上", experience_min_years: 3, skills: ["unknown_skill"] }),
+    diagnosticJob({ job_key: "d", experience_raw: "不限", skills: ["sql"] }),
+    diagnosticJob({ job_key: "e", experience_raw: "面议", skills: [] }),
+    diagnosticJob({ job_key: "f", experience_min_years: 0, experience_max_years: 0, skills: [] }),
+    diagnosticJob({ job_key: "a" }),
+    diagnosticJob({ job_key: "g", data_origin: "synthetic_fixture" }),
+  ];
+
+  const distribution = computeExperienceDistribution(jobs);
+
+  assert.equal(distribution.sample_size, 6);
+  assert.equal(distribution.input_count, 8);
+  assert.equal(distribution.excluded_count, 1);
+  assert.equal(distribution.duplicate_count, 1);
+  assert.deepEqual(
+    EXPERIENCE_BUCKETS_V1.map((bucket) => distribution.buckets[bucket].count),
+    [1, 1, 0, 2, 0, 0, 0, 1, 1],
+  );
+  assert.equal(distribution.buckets.two_to_three.count, 2, "1-3年 按上限 3 年落 two_to_three");
+  assert.equal(distribution.buckets.zero_to_one.count, 0, "min=1,max=3 不算 0–1 年");
+  const shareSum = EXPERIENCE_BUCKETS_V1.reduce(
+    (sum, bucket) => sum + (distribution.buckets[bucket].share ?? 0),
+    0,
+  );
+  assert.ok(Math.abs(shareSum - 1) < 1e-12, `shares should sum to 1, got ${shareSum}`);
+
+  const entry = computeEntryLevelShare(jobs);
+  assert.equal(entry.status, "ok");
+  assert.equal(entry.numerator_count, 2);
+  assert.equal(entry.denominator_count, 6);
+  assert.equal(entry.value, 1 / 3);
+
+  const hitRate = computeSkillHitRate(jobs);
+  assert.equal(hitRate.sample_size, 6);
+  assert.equal(hitRate.with_skill_count, 2);
+  assert.equal(hitRate.value, 1 / 3);
+  assert.equal(hitRate.status, "ok");
+  assert.equal(hitRate.unknown_count, 4);
+  assert.equal(hitRate.unknown_ratio, 2 / 3);
+  assert.equal(hitRate.dictionary_version, "0.1");
+});
+
+test("空样本时诊断指标为 insufficient_data，不返回 0 占比", () => {
+  const distribution = computeExperienceDistribution([]);
+  assert.equal(distribution.sample_size, 0);
+  for (const bucket of EXPERIENCE_BUCKETS_V1) {
+    assert.equal(distribution.buckets[bucket].count, 0);
+    assert.equal(distribution.buckets[bucket].share, null);
+  }
+
+  const entry = computeEntryLevelShare([]);
+  assert.equal(entry.status, "insufficient_data");
+  assert.equal(entry.value, null);
+
+  const hitRate = computeSkillHitRate([]);
+  assert.equal(hitRate.status, "insufficient_data");
+  assert.equal(hitRate.value, null);
+});
+
+function diagnosticJob(overrides: Partial<DiagnosticJobInputV1> = {}): DiagnosticJobInputV1 {
+  return {
+    source_key: "tencent-official-careers",
+    job_key: overrides.job_key ?? "job-001",
+    experience_raw: overrides.experience_raw ?? null,
+    experience_min_years: overrides.experience_min_years ?? null,
+    experience_max_years: overrides.experience_max_years ?? null,
+    skills: overrides.skills ?? ["python"],
+    data_origin: overrides.data_origin ?? "live",
+  };
+}
