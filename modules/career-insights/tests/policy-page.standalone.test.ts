@@ -20,6 +20,7 @@ import {
   type PolicyPageFilters,
 } from "../web/policy.ts";
 import { PolicyList } from "../web/components/PolicyList.ts";
+import { POLICY_SOURCE_OPTIONS } from "../web/labels.ts";
 import { fixtureServer, policyRequests } from "../web/fixture-server.ts";
 
 const FIXTURE_ORIGIN = "http://127.0.0.1:3101";
@@ -144,7 +145,12 @@ test("valid filters are kept and absent filters stay absent", () => {
 
 test("unknown, malformed and prototype-chain filters answer 400 instead of being dropped", () => {
   assertLoaderRejects400("source_key=__bad__", "source_key");
-  assertLoaderRejects400("source_key=moe-policy", "source_key");
+  assertLoaderRejects400("source_key=UPPER", "source_key");
+  // 来源选项改由 facets 驱动：形态合法的新源不应被 400 拒绝。
+  assert.deepEqual(parsePolicyFilters(new URLSearchParams("source_key=moe-policy")), {
+    ok: true,
+    filters: { source_key: "moe-policy", page: 1, page_size: POLICY_PAGE_SIZE },
+  });
   assertLoaderRejects400("theme=__bad__", "theme");
   assertLoaderRejects400("theme=constructor", "theme");
   assertLoaderRejects400("theme=__proto__", "theme");
@@ -187,4 +193,60 @@ test("the fixture API rejects parameters the backend rejects", async () => {
   assert.equal(badSource.status, 400);
   const badTheme = await fetch(`${FIXTURE_ORIGIN}/api/site/career-insights/policies?theme=constructor`);
   assert.equal(badTheme.status, 400);
+});
+const FACETS = {
+  sources: [
+    { source_key: "state-council-policy", count: 3 },
+    { source_key: "ndrc-policy", count: 3 },
+    { source_key: "moe-policy", count: 2 },
+  ],
+  themes: [
+    { theme_id: "talent_development", count: 1 },
+    { theme_id: "employment_promotion", count: 1 },
+  ],
+};
+
+test("source chips come from facets with counts and keep page_size", () => {
+  const html = render({ ...FIXTURE_POLICY_LIST_V1, facets: FACETS }, { ...FILTERS, page_size: 50 });
+  const ndrc = hrefOf(html, "国家发展改革委政策发布（3）");
+  assert.equal(ndrc.searchParams.get("source_key"), "ndrc-policy");
+  assert.equal(ndrc.searchParams.get("page_size"), "50");
+
+  // facets 中的新源不在静态清单里，也应渲染为 chip（label 回退 key）。
+  const moe = hrefOf(html, "moe-policy（2）");
+  assert.equal(moe.searchParams.get("source_key"), "moe-policy");
+  assert.equal(moe.searchParams.get("page_size"), "50");
+});
+
+test("chips keep full facet counts after filtering by one source", () => {
+  const html = render(
+    { ...FIXTURE_POLICY_LIST_V1, facets: FACETS },
+    { ...FILTERS, source_key: "ndrc-policy", page_size: 50 },
+  );
+  const active = html("a").filter((_, element) => html(element).text() === "国家发展改革委政策发布（3）").first();
+  assert.equal(active.attr("aria-current"), "page");
+  assert.equal(hrefOf(html, "中国政府网政策文件库（3）").searchParams.get("page_size"), "50");
+  assert.equal(hrefOf(html, "moe-policy（2）").searchParams.get("source_key"), "moe-policy");
+});
+
+test("missing facets fall back to the static source list", () => {
+  const html = render(FIXTURE_POLICY_LIST_V1, FILTERS);
+  assert.equal(html('[data-filter-group="来源"] a').length, POLICY_SOURCE_OPTIONS.length + 1);
+  assert.match(html('[data-filter-group="来源"]').text(), /中国政府网政策文件库/);
+  assert.match(html('[data-filter-group="来源"]').text(), /国家发展改革委政策发布/);
+  assert.equal(html('[data-filter-empty="source"]').length, 0);
+});
+
+test("empty facets show no filter options instead of stale chips", () => {
+  const html = render({ ...FIXTURE_POLICY_LIST_V1, facets: { sources: [], themes: [] } }, FILTERS);
+  assert.match(html('[data-filter-empty="source"]').text(), /暂无来源筛选选项/);
+  assert.match(html('[data-filter-empty="theme"]').text(), /暂无主题筛选选项/);
+  assert.equal(html('[data-filter-group="来源"]').length, 0);
+});
+test("theme chips come from facets and drop options without policies", () => {
+  const html = render({ ...FIXTURE_POLICY_LIST_V1, facets: FACETS }, FILTERS);
+  const themes = html('[data-filter-group="主题"]').text();
+  assert.match(themes, /人才培养（1）/);
+  assert.match(themes, /就业促进（1）/);
+  assert.doesNotMatch(themes, /数字经济/);
 });

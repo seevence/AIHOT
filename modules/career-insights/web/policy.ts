@@ -1,6 +1,6 @@
 import { data } from "react-router";
 import type { DataOrigin, PolicyEvidenceRefV1 } from "@aihot/career-insights/contracts";
-import { POLICY_SOURCE_OPTIONS, THEME_LABELS } from "./labels.ts";
+import { THEME_LABELS } from "./labels.ts";
 
 /** 政策列表按 API 的默认页大小取数。 */
 export const POLICY_PAGE_SIZE = 20;
@@ -14,6 +14,21 @@ export interface PolicyPageFilters {
   page_size: number;
 }
 
+export interface PolicySourceFacetV1 {
+  source_key: string;
+  count: number;
+}
+
+export interface PolicyThemeFacetV1 {
+  theme_id: string;
+  count: number;
+}
+
+export interface PolicyFacetsV1 {
+  sources: PolicySourceFacetV1[];
+  themes: PolicyThemeFacetV1[];
+}
+
 export interface PolicyListResponse {
   contract_version: "0.1";
   data_origin: DataOrigin;
@@ -23,6 +38,8 @@ export interface PolicyListResponse {
   page_size: number;
   total: number;
   filters: PolicyPageFilters;
+  /** 老 API 或固件没有 facets；缺失时前端回退到静态来源清单，避免白屏。 */
+  facets?: PolicyFacetsV1;
 }
 
 export type PolicyFilterParameter = "source_key" | "theme" | "page" | "page_size";
@@ -53,7 +70,8 @@ export function parsePolicyFilters(search: URLSearchParams): PolicyFiltersResult
 
   const sourceKey = search.get("source_key");
   if (sourceKey !== null) {
-    if (!POLICY_SOURCE_OPTIONS.some((option) => option.value === sourceKey)) return invalid("source_key");
+    // 来源选项由 API facets.sources 提供，静态清单只用于 fallback 与标签；这里仅做形态校验，避免 400 拒绝新源。
+    if (!/^[a-z0-9][a-z0-9-]{0,63}$/.test(sourceKey)) return invalid("source_key");
     filters.source_key = sourceKey;
   }
 
