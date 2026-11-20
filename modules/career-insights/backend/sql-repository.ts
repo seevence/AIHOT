@@ -11,8 +11,14 @@ import type {
   SummaryResponseV1,
 } from "../contracts/api.ts";
 import type { DataOrigin, DegreeLevel, EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
-import type { CareerDailyResponseV1, CareerHotResponseV1, CareerSignalsResponseV1 } from "../contracts/insights.ts";
+import type {
+  CareerCatalogResponseV1,
+  CareerDailyResponseV1,
+  CareerHotResponseV1,
+  CareerSignalsResponseV1,
+} from "../contracts/insights.ts";
 import { loadCareerDaily, loadCareerHot, type HotCompanyOptions } from "./career-analytics.ts";
+import { loadCareerCatalog, type CareerCatalogOptions } from "./career-catalog.ts";
 import { loadCareerSignals, type CareerSignalsOptions } from "./career-signals.ts";
 import { DataUnavailableError } from "./errors.ts";
 import { ingestBatch } from "./ingest.ts";
@@ -235,6 +241,10 @@ export class SqlCareerRepository implements CareerRepository {
 
   async careerSignals(options: CareerSignalsOptions): Promise<CareerSignalsResponseV1> {
     return this.run(() => loadCareerSignals(this.db, options));
+  }
+
+  async careerCatalog(options: CareerCatalogOptions): Promise<CareerCatalogResponseV1> {
+    return this.run(() => loadCareerCatalog(this.db, options));
   }
 
   async writeBatch(batch: CareerObservationBatchV1): Promise<IngestResultV1> {

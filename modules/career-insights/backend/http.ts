@@ -18,6 +18,13 @@ import {
   MAX_SIGNAL_WINDOW_DAYS,
   type CareerSignalsOptions,
 } from "./career-signals.ts";
+import {
+  DEFAULT_CATALOG_LIMIT,
+  DEFAULT_CATALOG_WINDOW_DAYS,
+  MAX_CATALOG_LIMIT,
+  MAX_CATALOG_WINDOW_DAYS,
+  type CareerCatalogOptions,
+} from "./career-catalog.ts";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
 import type { PolicyFiltersV1 } from "./policy-read.ts";
 import type { CareerRepository } from "./repository.ts";
@@ -29,6 +36,7 @@ const FILTER_KEYS = new Set(["role_family", "company", "city", "employment_type"
 const POLICY_FILTER_KEYS = new Set(["source_key", "theme", "page", "page_size"]);
 const HOT_FILTER_KEYS = new Set(["limit", "window_days"]);
 const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
+const CATALOG_FILTER_KEYS = new Set(["limit", "window_days"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidParameter(parameter: string, message: string): InvalidParameterError {
@@ -148,6 +156,17 @@ function parseSignalOptions(query: unknown): CareerSignalsOptions {
   };
 }
 
+function parseCatalogOptions(query: unknown): CareerCatalogOptions {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !CATALOG_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+
+  return {
+    limit: pageNumber(input, "limit", DEFAULT_CATALOG_LIMIT, MAX_CATALOG_LIMIT),
+    window_days: pageNumber(input, "window_days", DEFAULT_CATALOG_WINDOW_DAYS, MAX_CATALOG_WINDOW_DAYS),
+  };
+}
+
 async function respond(reply: FastifyReply, read: () => Promise<unknown>): Promise<FastifyReply> {
   reply.header("Cache-Control", "no-store");
   try {
@@ -200,5 +219,9 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
 
   app.get("/api/site/career-insights/signals", async (request, reply) => respond(reply, async () => {
     return repository.careerSignals(parseSignalOptions(request.query));
+  }));
+
+  app.get("/api/site/career-insights/catalog", async (request, reply) => respond(reply, async () => {
+    return repository.careerCatalog(parseCatalogOptions(request.query));
   }));
 }

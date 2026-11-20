@@ -118,3 +118,46 @@ export interface CareerSignalsResponseV1 {
   skipped: CareerSignalSkippedV1[];
   generated_at: string;
 }
+/** 方向榜：按 role_family 聚合，unknown 单列在 summary，不进入榜单。 */
+export interface CareerDirectionV1 {
+  role_family: RoleFamily;
+  job_count: number;
+  company_count: number;
+  new_in_window: number;
+  student_friendly_count: number;
+  top_skills: Array<{ skill: string; count: number }>;
+}
+
+/** 职位榜：同一 title_key 的岗位跨城市只计一次，cities 与 top_skills 各取前 3。 */
+export interface CareerTitleV1 {
+  title_key: string;
+  title_display: string;
+  job_count: number;
+  company_count: number;
+  cities: string[];
+  top_skills: Array<{ skill: string; count: number }>;
+  student_friendly_count: number;
+  latest_published_at: string | null;
+}
+
+/** 技能榜：share = job_count / 有技能岗位数，未识别技能的岗位不进分母。 */
+export interface CareerSkillV1 {
+  skill: string;
+  job_count: number;
+  share: number;
+}
+
+/**
+ * 岗位目录：方向榜、职位榜、技能榜共用一次全库快照。
+ * directions 与 titles 各受 limit 限制；skills 固定取前 10。空表时三个数组都为空。
+ */
+export interface CareerCatalogResponseV1 {
+  contract_version: "0.1";
+  data_origin: DataOrigin;
+  as_of: string;
+  window_days: number;
+  sample_size: number;
+  directions: CareerDirectionV1[];
+  titles: CareerTitleV1[];
+  skills: CareerSkillV1[];
+}
