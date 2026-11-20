@@ -1,12 +1,27 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1–D4、B1–B3、C、E1–E6；真实数据窗口 74 行已跑通；A 独立验收项已闭环；等待最终验收与演示收口  
+> 状态：集成分支已包含 A、D1–D4、B1–B3、C、E1–E6；就业化文案、三个只读 API、LLM 归一化兜底与日粒度观测已落地；等待 PR #13 收口与最终验收  
 > 启动日期：2026-11-16  
-> 最近更新：2026-11-19（3 次 merge + a5191f7 + 5 个收口提交）  
+> 最近更新：2026-11-20（11-19～11-20 收尾；main `b3375cc`；PR #13）  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
 > 私有仓库：`https://github.com/seevence/AIHOT`  
 > 交付目标：下周评审  
 > 开发节奏：**5 天完成真实闭环 + 2 天联调、补证据和排练**  
+
+**2026-11-19～11-20 收尾记录：**
+
+- 全站文案就业化：`993a68d`（`SITE.subject="就业"`、首页入口卡、空态引导）。
+- 三个只读 API + 前端：后端 `0833650`（hot/daily）、`9f01746`（signals），前端 `c573c91`（dashboard 信号卡、`/hot` 企业热度榜、`/daily` 就业日报）；`/weekly`、`/monthly` 保持原样。
+- LLM 归一化兜底：`8005da4` + `eb4e111`，真实库 188 行，role unknown **139→68（73.9%→36.2%）**；20 条抽检幻觉 **0**；observations 440 与时间/哈希未变，二次执行幂等；`aipo` 收紧待合入。
+- 趋势可积累：观测改 CST 日粒度（含 duplicates），summary 按日去重，每日 `06:10` cron（`cron.career.ingest` 已注册）。
+- 告警：采集失败/进程中断/停摆 26h 覆盖（`ecce052` + `f58b9ca`）。
+- stale 修复：`llm-*` 视为有效版本，真实库 `stale_data=0`（`3b12577`）。
+- 当前基线：`main = b3375cc`；PR **#13**。本地 staging `a33daba` 含 PR #13 全部内容；旧 Web 断言已修，CI 待重跑。  
+
+**两项 C 口径（2026-11-20）：**
+
+1. **cron 与 LLM**：采用 **（b）词典优先 + cron 后追加 unknown/空技能兜底**。06:10 词典 0.3.0 采集仍为主路径；cron 结束后只对新增的 `role_family=unknown` 或空 skills 行执行有预算上限的 `llm` 兜底，已知分类不重复调用；这样不会让 unknown 每日回升，也不把 2–5 万 token 的 LLM 成本每天固定化。
+2. **student_friendly 回填**：接受 LLM 造成的 3 行 yes→no、7 行 unknown→已知；当前基线 `yes 5 / no 162 / unknown 21`。LLM 判定只在有正文/经验证据时优先于 B1 规则；无证据仍保留 B1/unknown，需保留逐行审计并可回滚。
 
 **2026-11-19 集成收口记录：**
 
