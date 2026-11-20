@@ -1,79 +1,108 @@
-import { Link, redirect, useLoaderData } from "react-router";
+import { redirect, useLoaderData } from "react-router";
 import { SITE } from "@aihot/site";
 import type { Route } from "./+types/home";
-import type { TimelineResponse } from "@aihot/contracts/site";
-import { cachedPage, loadOr404 } from "../lib/api.server";
+import type {
+  CareerBriefV1,
+  CareerCatalogResponseV1,
+  CareerDailyResponseV1,
+  CareerSignalsResponseV1,
+  JobListResponseV1,
+  SummaryResponseV1,
+} from "@aihot/career-insights/contracts";
+import { cachedPage } from "../lib/api.server";
+import { logError } from "../lib/errors.server";
 import { pageReuse } from "../lib/page-reuse";
-import { filterParams, hasFeedFilters, itemListLd, listPath, pageMeta, readFilters, siteLd } from "../lib/seo";
-import { inNav } from "../components/shell/nav";
+import { pageMeta, siteLd } from "../lib/seo";
 import type { Screen } from "../components/shell/screens";
-import { Timeline } from "../features/feed/Timeline";
-import { HotTopics } from "../features/feed/HotTopics";
-import { ActiveFilters, CategoryTabs, FeedBar, SearchField } from "../features/feed/Filters";
+import type { HomeBriefState } from "../features/home/contracts.ts";
+import { HOME_CATALOG_LIMIT } from "../features/home/contracts.ts";
+import { HomeWorkbench } from "../features/home/HomeWorkbench.tsx";
+import {
+  careerBriefPath,
+  careerCatalogPath,
+  careerDailyPath,
+  careerLatestJobsPath,
+  careerSignalsPath,
+  careerSummaryPath,
+  loadCareerBrief,
+  loadCareerCatalog,
+  loadCareerDaily,
+  loadCareerLatestJobs,
+  loadCareerSignals,
+  loadCareerSummary,
+} from "../../../../modules/career-insights/web/feeds.server.ts";
 
-export const handle: Screen = { tab: "featured", name: "精选" };
+export const handle: Screen = { tab: "featured", name: "首页" };
 export { pageHeaders as headers } from "../lib/api.server";
 export const { clientLoader, shouldRevalidate } = pageReuse<typeof loader>();
+
+/** 单区块失败只降级该区块：记一条请求日志，返回 null 由页面显示「本区块暂时不可用」。 */
+async function settled<T>(path: string, promise: Promise<T>, signal: AbortSignal): Promise<T | null> {
+  try {
+    return await promise;
+  } catch (error) {
+    if (!signal.aborted) logError(error, { msg: "home block failed", method: "GET", path });
+    return null;
+  }
+}
+
+/** 研判区块要区分「无缓存(204)」与请求失败，单独收敛。 */
+async function settledBrief(signal: AbortSignal): Promise<HomeBriefState> {
+  try {
+    const data = await loadCareerBrief<CareerBriefV1>(signal);
+    return data === null ? { status: "empty" } : { status: "ok", data };
+  } catch (error) {
+    if (!signal.aborted) logError(error, { msg: "home block failed", method: "GET", path: careerBriefPath() });
+    return { status: "failed" };
+  }
+}
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
   const q = url.searchParams.get("q");
   // Search lives on /all; keep the parameters so old links still land on results.
   if (q && q.trim()) throw redirect(`/all${url.search}`);
-  const filters = readFilters(url.searchParams);
-  const upstream = new Headers();
-  const data = await loadOr404<TimelineResponse>(listPath("/api/site/timeline", filterParams(filters)), { responseHeaders: upstream, signal: request.signal });
-  // A minute at most, here and on /all: new selections must not wait longer at the edge or in a browser.
-  return cachedPage(60, { data, filters }, upstream);
+
+  const signal = request.signal;
+  const [summary, catalog, signals, daily, latestJobs, brief] = await Promise.all([
+    settled<SummaryResponseV1>(careerSummaryPath(), loadCareerSummary(signal), signal),
+    settled<CareerCatalogResponseV1>(
+      careerCatalogPath(HOME_CATALOG_LIMIT),
+      loadCareerCatalog<CareerCatalogResponseV1>(HOME_CATALOG_LIMIT, signal),
+      signal,
+    ),
+    settled<CareerSignalsResponseV1>(careerSignalsPath(), loadCareerSignals(signal), signal),
+    settled<CareerDailyResponseV1>(careerDailyPath(), loadCareerDaily(signal), signal),
+    settled<JobListResponseV1>(careerLatestJobsPath(), loadCareerLatestJobs<JobListResponseV1>(signal), signal),
+    settledBrief(signal),
+  ]);
+
+  // 工作台数据变化慢：共享缓存一分钟，浏览器在同一个 deadline 内复用。
+  return cachedPage(60, { summary, catalog, signals, daily, latestJobs, brief });
 }
 
-export function meta({ loaderData }: Route.MetaArgs) {
-  const path = listPath("/", loaderData ? filterParams(loaderData.filters) : {});
-  const titles = loaderData?.data.cards.map((c) => c.item.title) ?? [];
-  const tags = pageMeta({ path, noindex: hasFeedFilters(loaderData?.filters), jsonLd: path === "/" ? [...siteLd(), itemListLd("/", "精选", titles)] : undefined });
-  // Webmaster platforms look for their verification tag on the home page only.
-  if (path !== "/") return tags;
-  return [...tags, ...Object.entries(SITE.siteVerification).map(([name, content]) => ({ name, content }))];
+export function meta() {
+  return [
+    ...pageMeta({
+      path: "/",
+      description: "已有什么岗位、需求在怎么变、我该怎么准备：同一屏看完的就业数据工作台。",
+      jsonLd: siteLd(),
+    }),
+    // Webmaster platforms look for their verification tag on the home page only.
+    ...Object.entries(SITE.siteVerification).map(([name, content]) => ({ name, content })),
+  ];
 }
 
 export default function Home() {
-  const { data, filters } = useLoaderData<typeof loader>();
-  const title = filters.tag ? `#${filters.tag}` : "精选";
+  const { summary, catalog, signals, daily, latestJobs, brief } = useLoaderData<typeof loader>();
   return (
-    <div className="pb-6">
-      <section aria-labelledby="career-insights-entry" className="mb-4 rounded-card border border-line bg-surface p-4">
-        <h2 id="career-insights-entry" className="text-[16px] font-semibold text-ink">就业趋势洞察</h2>
-        <p className="mt-1 text-[12px] text-ink-3 break-words">基于真实招聘岗位与政府公开政策数据，查看 AI 相关岗位的职族分布、经验门槛与政策动向。</p>
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Link
-            to="/career-insights"
-            className="inline-flex h-9 items-center rounded-full border border-line-strong px-4 text-[13px] font-medium text-ink-2"
-          >
-            查看就业趋势
-          </Link>
-          <Link
-            to="/career-insights/policies"
-            className="inline-flex h-9 items-center rounded-full border border-line-strong px-4 text-[13px] font-medium text-ink-2"
-          >
-            政策文件
-          </Link>
-        </div>
-        {data.cards.length === 0 && <p className="mt-3 text-[12px] text-ink-3">本站动态内容暂未接入，可先查看就业趋势洞察。</p>}
-      </section>
-      {/* Phones: the bar (精选 | 全部, filter, search), the filter in use, today's hot topics, the feed. */}
-      <FeedBar base="/" category={filters.category} channel={filters.channel} />
-      <ActiveFilters base="/" category={filters.category} channel={filters.channel} tag={filters.tag} />
-      <div className="hidden lg:block">
-        <h1 className="text-[24px] font-semibold leading-[1.3] text-ink">{title}</h1>
-        <div className="mb-5 mt-4 flex items-center justify-between gap-4">
-          <CategoryTabs base="/" category={filters.category} channel={filters.channel} layoutId="home-cat-desk" className="min-w-0" />
-          <SearchField keep={{ category: filters.category }} />
-        </div>
-      </div>
-
-      {data.hot && inNav("/hot") && <HotTopics entries={data.hot} />}
-
-      <Timeline initial={data} filters={data.filters} />
-    </div>
+    <HomeWorkbench
+      summary={summary}
+      catalog={catalog}
+      signals={signals}
+      daily={daily}
+      latestJobs={latestJobs}
+      brief={brief}
+    />
   );
 }

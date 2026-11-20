@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { NAV, subjectAfter, withSubject } from "@aihot/site";
 import { webModules } from "../../site-modules";
 import {
-  IconBolt, IconBookmark, IconDoc, IconFlame, IconGrid, IconHeart, IconHistory, IconList, IconMessage, IconPlug, IconUser,
+  IconBolt, IconBookmark, IconChart, IconDoc, IconFlame, IconGrid, IconHeart, IconHistory, IconList, IconMessage, IconPlug,
 } from "../icons";
 
 export interface NavItem {
@@ -19,16 +19,22 @@ export interface NavItem {
   changelog?: boolean;
 }
 
+/**
+ * The main navigation: 首页, 热门岗位, 职业洞察, 就业日报 and 收藏. 全部, 就业热点 and 主题 are listed too, but
+ * NAV.hidden keeps them out of the way in unless the site puts them back; a hidden entry still opens.
+ */
 const SECTIONS: Array<{ title: string; items: NavItem[] }> = [
   {
     title: "内容",
     items: [
-      { to: "/", label: "精选", icon: IconBolt, end: true },
+      { to: "/", label: "首页", icon: IconBolt, end: true },
+      { to: "/career-insights/jobs", label: "热门岗位", icon: IconList },
+      { to: "/career-insights", label: "职业洞察", icon: IconChart },
+      { to: "/daily", label: withSubject("日报"), icon: IconDoc, covers: ["/weekly", "/monthly"] },
+      { to: "/starred", label: "收藏", icon: IconBookmark },
       { to: "/all", label: subjectAfter("全部", "动态"), icon: IconList },
       { to: "/hot", label: "就业热点", icon: IconFlame },
-      { to: "/daily", label: withSubject("日报"), icon: IconDoc, covers: ["/weekly", "/monthly"] },
       { to: "/topics", label: "主题", icon: IconGrid },
-      { to: "/starred", label: "收藏", icon: IconBookmark },
     ],
   },
   {
@@ -51,12 +57,12 @@ const UP = {
 } as const;
 
 /**
- * Where pages under a navigation entry lead back up to: the entry, or 精选 in its place while the site hides
+ * Where pages under a navigation entry lead back up to: the entry, or 首页 in its place while the site hides
  * it. `name` is for breadcrumbs and desktop back links (热点榜), `back` for the phone bar (热点), `tab` the
  * phone tab it sits under, `crumbs` its breadcrumb after the site's home.
  */
 export function navUp(entry: keyof typeof UP): { to: string; name: string; back: string; tab: TabKey; crumbs: Array<{ name: string; path: string }> } {
-  if (!inNav(entry)) return { to: "/", name: "精选", back: "精选", tab: "featured", crumbs: [] };
+  if (!inNav(entry)) return { to: "/", name: "首页", back: "首页", tab: "featured", crumbs: [] };
   return { to: entry, ...UP[entry], crumbs: [{ name: UP[entry].name, path: entry }] };
 }
 
@@ -96,12 +102,15 @@ export function activeSidebarItem(items: readonly NavItem[], pathname: string): 
 }
 
 /**
- * The phone tab bar: 全部 lives beside 精选 as a switch, 热点 and 日报 are tabs, and "我的" at /more holds
- * 收藏, 外观, the tools and the site's own pages. Which tab a page sits under is declared by the page
- * itself (components/shell/screens.ts).
+ * The phone tab bar: the main navigation's five entries leave four tabs (首页, 岗位, 洞察, 收藏) with 我的's
+ * pages opening from 收藏, and 日报 (a desktop entry) is reached from elsewhere; 热点 joins only when the site
+ * puts it back in the navigation. Which tab a page sits under is declared by the page itself
+ * (components/shell/screens.ts).
  */
 export type TabKey =
   | "featured"
+  | "jobs"
+  | "insights"
   | "hot"
   | "daily"
   | "me"
@@ -119,20 +128,22 @@ export interface Tab {
 }
 
 const ENGINE_TABS: Tab[] = [
-  { key: "featured", to: "/", label: "精选", icon: IconBolt },
+  { key: "featured", to: "/", label: "首页", icon: IconBolt },
+  { key: "jobs", to: "/career-insights/jobs", label: "岗位", icon: IconList },
+  { key: "insights", to: "/career-insights", label: "洞察", icon: IconChart },
   { key: "hot", to: "/hot", label: "热点", icon: IconFlame },
-  { key: "daily", to: "/daily", label: "日报", icon: IconDoc, covers: ["/weekly", "/monthly"] },
-  { key: "me", to: "/more", label: "我的", icon: IconUser, changelog: true },
+
+  { key: "me", to: "/starred", label: "收藏", icon: IconBookmark, changelog: true },
 ];
 
-/** The tab bar: the engine's, the modules' before 我的. */
+/** The tab bar: the engine's, the modules' before 收藏. */
 export function tabs(): Tab[] {
   return [...ENGINE_TABS.slice(0, -1).filter((t) => inNav(t.to)), ...webModules().flatMap((m) => m.tabs ?? []), ENGINE_TABS.at(-1)!];
 }
 
 /**
  * The rail that stands in for the sidebar on narrow desktops (unfolded foldables, tablets upright): the
- * tabs, with 全部 after 精选 since desktop pages have no 精选 | 全部 switch.
+ * tabs, with 全部 after 首页 since desktop pages have no 首页 | 全部 switch.
  */
 export function rail(): Tab[] {
   const all = tabs();
@@ -141,7 +152,7 @@ export function rail(): Tab[] {
   return [...all.slice(0, at), { key: "all", to: "/all", label: "全部", icon: IconList }, ...all.slice(at)];
 }
 
-/** A rail entry is lit on its pages; 我的 also on the pages that sit under it on phones. */
+/** A rail entry is lit on its pages; 收藏 also on the pages that sit under it on phones. */
 export function railIsActive(tab: Tab, pathname: string, screenTab: TabKey | undefined): boolean {
   if (tab.key === "me") return pathname === tab.to || screenTab === "me";
   return sidebarIsActive({ to: tab.to, end: tab.to === "/", covers: tab.covers }, pathname);
