@@ -1,12 +1,20 @@
 # AI+ 就业趋势观察平台：一周 MVP 路线图
 
-> 状态：集成分支已包含 A、D1–D4、B1–B3、C、E1–E6；就业化文案、三个只读 API、LLM 归一化兜底与日粒度观测已落地；等待 PR #13 收口与最终验收  
+> 状态：PR #15 已合入 main；就业数据工作台、就业化文案、三个只读 API、LLM 归一化兜底与日粒度观测已落地；等待 CI 收口、brief 生成与最终验收  
 > 启动日期：2026-11-16  
-> 最近更新：2026-11-20（11-19～11-20 收尾；main `b3375cc`；PR #13）  
+> 最近更新：2026-11-20（PR #15 合并 main `0bf12b7`；PR #13 已在链路中；CI timeline 收口）  
 > 并行基线：`42bf4cf feat: establish career-insights collaboration baseline`  
 > 私有仓库：`https://github.com/seevence/AIHOT`  
 > 交付目标：下周评审  
 > 开发节奏：**5 天完成真实闭环 + 2 天联调、补证据和排练**  
+
+**2026-11-20 PR #15 / CI 收尾记录：**
+
+- main 当前 SHA：`0bf12b7`（PR **#15**）；PR #13 已在前序链路中合并。PR #15 包含导航 5+4、首页就业数据工作台、`/career-insights/jobs` 岗位目录、brief/timeline 相关测试收口与 SEO 更新。
+- CI `check/Web tests` 失败在 `apps/web/tests/timeline-unread.test.ts`：首页已改为 HomeWorkbench，`/all` 使用 DayList，完整 Timeline 的「只看未读」没有可达页面入口。
+- D 的结论按 `apps/web` 收口执行：删除过期的 unread Timeline 测试，并在 dashboard roadmap 记录「未读时间线功能停用」；不删除读状态数据/API，不把停用误记为数据丢失。
+- A 复核：**接受停用结论**。这是产品功能退役，不是普通测试过期：当前用户不可达，但确有一项读者功能下线；若未来恢复，必须重新设计入口与 UX，不能只恢复旧测试。
+- 本轮仍不实现 cron 后的 LLM 兜底；排期见下方。`/brief` 仍为 204，待生成首版。
 
 **2026-11-19～11-20 收尾记录：**
 
@@ -375,5 +383,13 @@ B/C/D/E 统一从 `@aihot/career-insights/contracts` 导入类型，不再另写
 - [ ] 评审准确日期、演示时长、现场是否允许联网。
 - [ ] 团队成员姓名/GitHub 账号、仓库邀请和模型预算上限。
 - [ ] C/D 使用真实样本验收契约后，将 `contract_version` 升级为 `1.0`。
+
+## 10. 已知问题（2026-11-20）
+
+- **CI/Web tests：** `apps/web/tests/timeline-unread.test.ts` 失败。根因是首页已改为 HomeWorkbench，`/all` 使用 DayList，完整 Timeline 的「只看未读」没有可达页面入口。D 结论按删除过期测试处理，并在 dashboard roadmap 记录功能停用；A 复核接受该结论。  
+  - 产品影响：未读时间线是**已退役功能**，当前无路由/导航/用户可达入口，不是普通的口径或测试过期；不删除读状态数据、local-state 或 API，避免把停用误记为数据丢失。  
+  - 后续若恢复，必须新增入口并重新做产品/UX review，不能只恢复旧测试。
+- **cron 后 LLM 兜底：** 已选定方案 (b)（06:10 词典采集后，只对新增 unknown/空 skills 行做有预算上限的 LLM 兜底），但**尚未实现**；排在 PR #15/CI 收口后的独立任务，日成本上限按 1–3 万 token 级控制，并受 `MODEL_CALLS_ENABLED` 与预算熔断约束。  
+- **`/brief` 204：** `career_briefs` 当前为空，首页与洞察页显示「继续积累观测」。允许在 PR #15 CI 与数据快照稳定后，执行一次 `scripts/build-career-brief.ts --apply` 生成首版；必须 `confidence=low`，观测日=1 时禁止走势/因果断言，并记录 `as_of`、样本量和数据局限。
 
 完成以上确认后，不再扩大一周 MVP 范围；新增想法统一进入评审后的迭代清单。
