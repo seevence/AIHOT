@@ -25,8 +25,17 @@ function SignalItem({ signal }: { signal: CareerSignalV1 }): ReactElement {
   );
 }
 
+function skippedNotice(skipped: readonly CareerSignalSkippedV1[]): string {
+  const counts = new Map<CareerSignalSkippedV1["rule"], number>();
+  for (const entry of skipped) counts.set(entry.rule, (counts.get(entry.rule) ?? 0) + 1);
+  return [...counts.entries()].map(([rule, count]) => (
+    rule === "surge"
+      ? skippedSurgeNotice(count)
+      : `另有 ${count} 家公司因历史不足 2 天暂无法判定${SIGNAL_RULE_LABELS[rule]}`
+  )).join("；");
+}
+
 export function CareerSignals({ signals, skipped }: { signals: readonly CareerSignalV1[]; skipped: readonly CareerSignalSkippedV1[] }): ReactElement {
-  const surgeSkipped = skipped.filter((entry) => entry.rule === "surge").length;
   return h(
     "section",
     { "aria-labelledby": "career-signals", className: CARD_CLASS },
@@ -43,8 +52,8 @@ export function CareerSignals({ signals, skipped }: { signals: readonly CareerSi
           { className: "mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line-soft" },
           ...signals.map((signal) => h(SignalItem, { key: `${signal.rule}:${signal.job_id}:${signal.company}`, signal })),
         ),
-    surgeSkipped > 0
-      ? h("p", { "data-signals-skipped": String(surgeSkipped), className: "mt-3 text-[12px] text-ink-4 break-words" }, skippedSurgeNotice(surgeSkipped))
+    skipped.length > 0
+      ? h("p", { "data-signals-skipped": String(skipped.length), className: "mt-3 text-[12px] text-ink-4 break-words" }, skippedNotice(skipped))
       : null,
   );
 }

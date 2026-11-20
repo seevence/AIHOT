@@ -78,6 +78,25 @@ test("the signal card renders rule, company, title and the backend's reason with
   );
 });
 
+test("the signal card groups every skipped rule and omits the notice for an empty skip list", () => {
+  const skipped = [
+    { ...FIXTURE_SIGNALS_V1.skipped[0]!, rule: "new_family" },
+    FIXTURE_SIGNALS_V1.skipped[0]!,
+    { ...FIXTURE_SIGNALS_V1.skipped[0]!, company: "虚构样例科技有限公司" },
+  ] as unknown as typeof FIXTURE_SIGNALS_V1.skipped;
+  const html = render(createElement(CareerSignals, { signals: FIXTURE_SIGNALS_V1.signals, skipped }));
+  assert.equal(html("[data-signal-item]").length, 3);
+  assert.equal(html("[data-signals-skipped]").attr("data-signals-skipped"), "3");
+  assert.equal(
+    html("[data-signals-skipped]").text(),
+    "另有 1 家公司因历史不足 2 天暂无法判定新职族首现；另有 2 家公司因历史不足 2 天暂无法判定突增",
+  );
+
+  const withoutSkipped = render(createElement(CareerSignals, { signals: FIXTURE_SIGNALS_V1.signals, skipped: [] }));
+  assert.equal(withoutSkipped("[data-signal-item]").length, 3);
+  assert.equal(withoutSkipped("[data-signals-skipped]").length, 0);
+});
+
 test("the signal card explains an empty result instead of inventing one", () => {
   const html = render(createElement(CareerSignals, { signals: [], skipped: [] }));
   assert.equal(html("[data-signal-item]").length, 0);
