@@ -64,9 +64,15 @@ class MemoryStore implements CandidateStore {
       .map((item) => ({ ...item }));
   }
 
-  async updateLlmFields(id: string, fields: LlmNormalizedFields): Promise<number> {
+  async listByIds(ids: readonly string[]): Promise<CareerJobRow[]> {
+    const wanted = new Set(ids);
+    return this.jobs.filter((item) => wanted.has(item.id)).map((item) => ({ ...item }));
+  }
+
+  async updateLlmFields(id: string, fields: LlmNormalizedFields, force = false): Promise<number> {
     const target = this.jobs.find((item) => item.id === id);
     if (target === undefined) return 0;
+    if (!force && target.normalizer_version === LLM_NORMALIZER_VERSION) return 0;
     this.updates.push({ id, fields });
     target.role_family = fields.role_family;
     target.student_friendly = fields.student_friendly;
@@ -463,23 +469,174 @@ test("标题含 AI 主体词的产品/架构岗不被降级", () => {
   }
 });
 
-test("正文以 AI 产品/大模型应用为主体时，同款传统标题不降级（红线）", () => {
-  const fixtures = [
-    { title: "B端产品经理", raw_text: "主导信息采集AI能力建设，涵盖智能语音外呼、商家端Agent自助采集等核心AI产品功能。" },
-    { title: "产品经理（联盟 C 端产品方向）", raw_text: "对 AI 产品形态有真实的实践或深度思考，能将 AI 能力转化为可衡量的业务价值。" },
-    { title: "金融解决方案架构师（J107444）", raw_text: "挖掘可落地的AI应用机会，推动从场景验证到平台建设及规模化应用。" },
-    {
-      title: "伙伴FDE培训设计与教研专家（J107259）",
-      raw_text: "熟悉大模型应用（RAG、Workflow、Agent）与常见模型工具，负责 Agent 搭建与评测上线等课程开发。",
-    },
-  ];
-  for (const fixture of fixtures) {
+/** 生产库里两条真实误判行的原文节选：AI 主体短语只出现在任职要求行，不能据此豁免降级。 */
+const financeArchitectRawText =
+  "-重点客户需求洞察与经营：面向金融机构业务机构，识别云与人工智能领域的建设需求，协同销售制定重点客户技术经营策略。" +
+  "\n-保险行业AI场景拓展：围绕保险营销、客户服务、合规风控等场景，挖掘可落地的AI应用机会，推动从场景验证到平台建设及规模化应用。" +
+  "\n-计算机、软件工程、人工智能或相关专业本科及以上学历" +
+  "\n-具备扎实的云与AI技术基础，熟悉大模型服务（MaaS）与智能体应用。" +
+  "\n-优先项：主导过金融行业AI算力、云平台、大模型平台或智能体应用项目。";
+const partnerFdeRawText =
+  "-伙伴FDE课程全局设计：围绕伙伴FDE培训，开发需求发现、方案设计、Agent搭建、系统集成、评测上线等专业课程。" +
+  "\n-业务理解与AI应用复合能力：理解FDE或技术交付的业务链路，熟悉大模型应用（RAG、Workflow、Agent）、常见模型工具及行业动态。";
+
+const subjectPhraseFixtures = [
+  {
+    id: "a909889e-f429-43b4-ad27-de8a928137f4",
+    title: "B端产品经理",
+    raw_text:
+      "1负责到餐商家信息采集产品的AI化规划和全链路产品设计，将信息采集从人工推进到L2级Agent协同阶段。" +
+      "\n2.主导信息采集AI能力建设，涵盖图像识别、智能语音外呼、商家端Agent自助采集等核心AI产品功能。" +
+      "\n1. 大学本科及以上学历，计算机相关专业优先。" +
+      "\n2. 3年以上B端产品经理工作经验。",
+    expectedRoleFamily: "ai_product_operations",
+  },
+  {
+    id: "5caff3f3-35a6-4053-bee0-abad981f7a3d",
+    title: "产品经理（联盟 C 端产品方向）",
+    raw_text:
+      "1. 负责联盟 C 端产品链路建设，覆盖用户从触达、浏览、交易到核销的全交易链路。" +
+      "\n3. 在 AI 背景下探索联盟业务的新产品形态，如智能导购与商品推荐Agent，定义产品形态与衡量标准。" +
+      "\n1. 本科及以上学历，5年以上互联网产品经验。" +
+      "\n2. 对 AI 产品形态有真实的实践或深度思考。",
+    expectedRoleFamily: "unknown",
+  },
+  {
+    id: "365f9ba0-514d-45c9-b3d1-43d8fcdbb9c9",
+    title: "金融解决方案架构师（J107444）",
+    raw_text: financeArchitectRawText,
+    expectedRoleFamily: "unknown",
+  },
+  {
+    id: "a1f03c68-f271-482c-8734-c3cf91d382db",
+    title: "AI产品运营岗",
+    raw_text: "参与美团的各类运营岗位：用户运营、商家及供给运营、内容运营、工具系统运营。",
+    expectedRoleFamily: "ai_product_operations",
+  },
+  {
+    id: "7dec1e39-4bd0-4545-9a09-4672d2a3b39c",
+    title: "伙伴FDE培训设计与教研专家（J107259）",
+    raw_text: partnerFdeRawText,
+    expectedRoleFamily: "ai_product_operations",
+  },
+] as const;
+
+test("AI 主体短语豁免排除机会/形态语境，明确产品功能与 AI 标题仍保留 aipo", () => {
+  for (const fixture of subjectPhraseFixtures) {
+    const decision = downgradeNonAiOperations(fixture, { role_family: "ai_product_operations" });
+    assert.equal(decision.role_family, fixture.expectedRoleFamily, `${fixture.title} 职族判定`);
     assert.equal(
-      downgradeNonAiOperations(fixture, { role_family: "ai_product_operations" }).downgraded,
-      false,
-      `${fixture.title} 正文含 AI 主体职责，不应降级`,
+      decision.downgraded,
+      fixture.expectedRoleFamily === "unknown",
+      `${fixture.title} 后置校验降级标记`,
     );
   }
+});
+
+test("职责行才构成 AI 主体豁免，只有任职要求行命中时仍降级", () => {
+  const title = "金融解决方案架构师（J107444）";
+  assert.equal(
+    downgradeNonAiOperations(
+      { title, raw_text: "负责大模型平台的产品规划与建设。" },
+      { role_family: "ai_product_operations" },
+    ).downgraded,
+    false,
+    "职责行命中 AI 主体短语应保留 aipo",
+  );
+  const requirementOnly = downgradeNonAiOperations(
+    { title, raw_text: "熟悉大模型平台与智能体应用；优先具备大模型项目经验。" },
+    { role_family: "ai_product_operations" },
+  );
+  assert.equal(requirementOnly.downgraded, true, "只有任职要求行命中时仍应降级");
+  assert.equal(requirementOnly.role_family, "unknown");
+});
+
+test("--force-ids 定向修复已是当前版本的行，之后默认回填不再重复调用", async () => {
+  const id = "365f9ba0-514d-45c9-b3d1-43d8fcdbb9c9";
+  const store = new MemoryStore([
+    job({
+      id,
+      title: "金融解决方案架构师（J107444）",
+      raw_text: financeArchitectRawText,
+      role_family: "ai_product_operations",
+      normalizer_version: LLM_NORMALIZER_VERSION,
+    }),
+  ]);
+  const llm = fakeLlm([aipoOutput]);
+
+  const first = await runBackfill({
+    apply: true,
+    limit: null,
+    rerunAipo: true,
+    onlyIds: [id],
+    force: true,
+    callLlm: llm.callLlm,
+    store,
+  });
+  assert.equal(first.candidates, 1);
+  assert.equal(first.calls, 1);
+  assert.equal(first.downgraded, 1);
+  assert.equal(store.jobs[0]!.role_family, "unknown");
+  assert.equal(store.updates.length, 1);
+
+  const second = await runBackfill({ apply: true, limit: null, callLlm: llm.callLlm, store });
+  assert.equal(second.candidates, 0);
+  assert.equal(second.calls, 0);
+  assert.equal(llm.calls(), 1);
+});
+
+test("--rerun-aipo --only-ids 只重判指定 2 行", async () => {
+  const targets = subjectPhraseFixtures.filter((fixture) => fixture.expectedRoleFamily === "unknown");
+  const onlyIds = targets.map((fixture) => fixture.id);
+  const store = new MemoryStore(
+    subjectPhraseFixtures.map((fixture) =>
+      job({
+        id: fixture.id,
+        title: fixture.title,
+        raw_text: fixture.raw_text,
+        role_family: "ai_product_operations",
+        normalizer_version: "normalizer/llm-0.2",
+      }),
+    ),
+  );
+  const llm = fakeLlm([aipoOutput]);
+
+  const first = await runBackfill({
+    apply: true,
+    limit: null,
+    rerunAipo: true,
+    onlyIds,
+    callLlm: llm.callLlm,
+    store,
+  });
+
+  assert.equal(first.candidates, 2);
+  assert.equal(first.calls, 2);
+  assert.equal(first.changed, 2);
+  assert.equal(first.downgraded, 2);
+  assert.deepEqual(store.updates.map((update) => update.id).sort(), [...onlyIds].sort());
+  for (const fixture of subjectPhraseFixtures) {
+    const row = store.jobs.find((item) => item.id === fixture.id)!;
+    assert.equal(row.role_family, fixture.expectedRoleFamily, `${fixture.title} 定向重跑后的职族`);
+    assert.equal(
+      row.normalizer_version,
+      fixture.expectedRoleFamily === "unknown" ? LLM_NORMALIZER_VERSION : "normalizer/llm-0.2",
+      `${fixture.title} 非目标行不应写入`,
+    );
+  }
+
+  const second = await runBackfill({
+    apply: true,
+    limit: null,
+    rerunAipo: true,
+    onlyIds,
+    callLlm: llm.callLlm,
+    store,
+  });
+  assert.equal(second.candidates, 0);
+  assert.equal(second.calls, 0);
+  assert.equal(llm.calls(), 2);
+  assert.equal(store.updates.length, 2);
 });
 
 test("a1f03c68（AI 产品运营）与 7dec1e39（伙伴FDE教研）不进入重判候选", async () => {

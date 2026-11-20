@@ -26,8 +26,8 @@ import { SKILL_ALIASES, SKILL_LABELS } from "../modules/career-insights/data/dic
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 
-// 0.2 收紧了 aipo 判定（prompt 负面约束 + 后置校验）。版本号前进，让默认回填重新审视旧版本行。
-export const LLM_NORMALIZER_VERSION = "normalizer/llm-0.2";
+// 0.3 收紧了 aipo 正文主体短语豁免。版本号前进，让默认回填重新审视旧版本行。
+export const LLM_NORMALIZER_VERSION = "normalizer/llm-0.3";
 export const LLM_PURPOSE = "career-normalize";
 export const LLM_PROMPT_VERSION = "career-normalize/2";
 export const LLM_MODEL = "default";
@@ -69,12 +69,18 @@ export const AI_TITLE_TERMS = [
 /**
  * 正文命中这些短语说明职责主体是 AI 产品/能力（例如“负责大模型产品的运营”），后置校验不降级。
  * 只出现“AI 工具/大模型工具/AI 辅助/AI 提效/智能客服/智能质检”等使用型说法不在此列——这正是
- * 传统运营岗被误判成 aipo 的根源。
+ * 传统运营岗被误判成 aipo 的根源。“AI 应用机会”“AI 产品形态”等探索/任职要求语境也不构成豁免。
  */
 export const AI_SUBJECT_PHRASES = [
-  "ai产品",
+  "ai产品经理",
+  "ai产品运营",
+  "ai产品开发",
+  "ai产品设计",
+  "ai产品规划",
+  "ai产品策划",
+  "ai产品功能",
   "大模型产品",
-  "ai应用",
+  "ai应用开发",
   "大模型应用",
   "ai平台",
   "大模型平台",
@@ -88,6 +94,8 @@ export const AI_SUBJECT_PHRASES = [
   "机器学习工程",
   "深度学习",
   "智能体开发",
+  "智能体搭建",
+  "agent搭建",
   "提示词工程",
   "prompt工程",
   "大模型研发",
@@ -170,6 +178,19 @@ export function firstMatchingTerm(text: string, terms: readonly string[]): strin
   return null;
 }
 
+/**
+ * 任职要求/资格行不是「岗位职责主体」的证据：那是对候选人的经历要求，不是这个岗位做什么。
+ * 例：「优先具备…大模型平台…项目经验」「对 AI 产品形态有真实的实践」不能拿来豁免降级。
+ */
+const REQUIREMENT_LINE = /优先|具备|熟悉|掌握|了解|能够|任职|要求|资格|学历|经验|加分/u;
+
+export function responsibilityText(rawText: string): string {
+  return (rawText ?? "")
+    .split(/\r?\n/u)
+    .filter((line) => line.trim() !== "" && !REQUIREMENT_LINE.test(line))
+    .join("\n");
+}
+
 export interface DowngradeDecision {
   role_family: RoleFamily;
   downgraded: boolean;
@@ -192,7 +213,7 @@ export function downgradeNonAiOperations(
   if (firstMatchingTerm(title, AI_TITLE_TERMS) !== null) return keep;
   const domainTerm = firstMatchingTerm(title, NON_AI_DOMAIN_TERMS);
   if (domainTerm === null) return keep;
-  if (firstMatchingTerm(job.raw_text ?? "", AI_SUBJECT_PHRASES) !== null) return keep;
+  if (firstMatchingTerm(responsibilityText(job.raw_text ?? ""), AI_SUBJECT_PHRASES) !== null) return keep;
   return { role_family: "unknown", downgraded: true, domainTerm };
 }
 
@@ -262,8 +283,10 @@ export interface CandidateStore {
   listCandidates(limit: number | null): Promise<CareerJobRow[]>;
   /** --rerun-aipo 的候选：当前 aipo 且标题命中非 AI 领域词的嫌疑行。 */
   listRerunAipoCandidates(limit: number | null): Promise<CareerJobRow[]>;
-  /** 单行独立事务；返回实际更新行数（0 表示该行已被别的进程改过）。 */
-  updateLlmFields(id: string, fields: LlmNormalizedFields): Promise<number>;
+  /** --force-ids 的候选：按完整 id 直接取行，不受版本与本轮兜底范围限制（定向修复用）。 */
+  listByIds(ids: readonly string[]): Promise<CareerJobRow[]>;
+  /** 单行独立事务；返回实际更新行数（0 表示该行已被别的进程改过）。force 时跳过版本护栏。 */
+  updateLlmFields(id: string, fields: LlmNormalizedFields, force?: boolean): Promise<number>;
 }
 
 export interface RunSummary {
@@ -295,6 +318,10 @@ export interface RunOptions {
   concurrency?: number;
   /** 只重判 aipo 嫌疑行；不影响其余行。 */
   rerunAipo?: boolean;
+  /** 在候选查询后、模型调用前按完整 id 过滤。 */
+  onlyIds?: readonly string[];
+  /** --force-ids：只处理 onlyIds 指定的行，且跳过“版本已是当前版本就不写”的护栏（显式定向修复）。 */
+  force?: boolean;
   log?: (line: string) => void;
 }
 
@@ -593,10 +620,17 @@ function formatRange(min: number | null, max: number | null): string {
 export async function runBackfill(options: RunOptions): Promise<RunSummary> {
   const log = options.log ?? (() => {});
   const rerunAipo = options.rerunAipo === true;
-  const rows = rerunAipo
-    ? await options.store.listRerunAipoCandidates(options.limit)
-    : await options.store.listCandidates(options.limit);
+  const onlyIds = options.onlyIds === undefined ? null : new Set(options.onlyIds);
+  const forced = options.force === true && onlyIds !== null;
+  const candidates = forced
+    ? await options.store.listByIds([...onlyIds])
+    : rerunAipo
+      ? await options.store.listRerunAipoCandidates(options.limit)
+      : await options.store.listCandidates(options.limit);
+  const rows = forced || onlyIds === null ? candidates : candidates.filter((row) => onlyIds.has(row.id));
   log(`候选行: ${rows.length}${rerunAipo ? "（--rerun-aipo：仅 aipo 且标题命中非 AI 领域词）" : ""}`);
+  if (forced) log(`--force-ids：指定 ${onlyIds!.size} 个 id，跳过版本护栏`);
+  else if (onlyIds !== null) log(`--only-ids：指定 ${onlyIds.size} 个 id，过滤前候选 ${candidates.length} 行`);
   log(`将调用模型行数: ${rows.length}`);
 
   const estimatedInput = rows.reduce((sum, row) => sum + Math.ceil((SYSTEM_PROMPT.length + buildUserPrompt(row).length) / 1.5), 0);
@@ -654,7 +688,7 @@ export async function runBackfill(options: RunOptions): Promise<RunSummary> {
       continue;
     }
     try {
-      const updated = await options.store.updateLlmFields(outcome.row.id, outcome.fields!);
+      const updated = await options.store.updateLlmFields(outcome.row.id, outcome.fields!, forced);
       if (updated > 0) summary.changed += 1;
       else summary.unchanged += 1;
     } catch (error) {
@@ -700,11 +734,13 @@ function describeDatabase(url: string): string {
 }
 
 function printHelp(): void {
-  console.log("用法: node scripts/backfill-normalizer-llm.ts [--apply] [--limit N] [--rerun-aipo]");
+  console.log("用法: node scripts/backfill-normalizer-llm.ts [--apply] [--limit N] [--rerun-aipo] [--only-ids id1,id2]");
   console.log("  默认 dry-run：真实调用模型，打印候选行与逐行拟变更，但不写库。");
   console.log("  --apply：逐行独立事务写入 role_family / student_friendly / skills / 经验年限 / normalizer_version。");
   console.log("  --limit N：只处理前 N 行。");
   console.log("  --rerun-aipo：只重判 ai_product_operations 且标题命中非 AI 领域词的嫌疑行，其余行不动。");
+  console.log("  --only-ids id1,id2：候选查询后、模型调用前只保留指定完整 id。");
+  console.log("  --force-ids id1,id2：按 id 定向修复，跳过“已是当前版本就不写”的护栏（用于规则修正后的一次性纠偏）。");
   console.log("  需要 MODEL_CALLS_ENABLED=true，否则直接退出。");
 }
 
@@ -773,7 +809,18 @@ class PostgresCareerJobStore implements CandidateStore {
           LIMIT ${limit}`;
   }
 
-  async updateLlmFields(id: string, fields: LlmNormalizedFields): Promise<number> {
+  async listByIds(ids: readonly string[]): Promise<CareerJobRow[]> {
+    if (ids.length === 0) return [];
+    return await this.client<CareerJobRow[]>`
+      SELECT id::text AS id, title, raw_text, degree_raw, experience_raw, skills,
+             experience_min_years, experience_max_years,
+             role_family, student_friendly, normalizer_version
+      FROM career_jobs
+      WHERE id::text IN ${this.client([...ids])}
+      ORDER BY id`;
+  }
+
+  async updateLlmFields(id: string, fields: LlmNormalizedFields, force = false): Promise<number> {
     return this.client.begin(async (tx) => {
       const result = await tx`
         UPDATE career_jobs SET
@@ -785,7 +832,7 @@ class PostgresCareerJobStore implements CandidateStore {
           normalizer_version = ${LLM_NORMALIZER_VERSION},
           updated_at = now()
         WHERE id = ${id}
-          AND normalizer_version IS DISTINCT FROM ${LLM_NORMALIZER_VERSION}`;
+          AND (${force} OR normalizer_version IS DISTINCT FROM ${LLM_NORMALIZER_VERSION})`;
       return result.count;
     });
   }
@@ -798,6 +845,25 @@ async function main(): Promise<void> {
   }
   const apply = process.argv.includes("--apply");
   const rerunAipo = process.argv.includes("--rerun-aipo");
+  const onlyIdsIndex = process.argv.indexOf("--only-ids");
+  const forceIdsIndex = process.argv.indexOf("--force-ids");
+  const onlyIdsArg = onlyIdsIndex >= 0 ? process.argv[onlyIdsIndex + 1] : undefined;
+  const forceIdsArg = forceIdsIndex >= 0 ? process.argv[forceIdsIndex + 1] : undefined;
+  if (onlyIdsIndex >= 0 && (onlyIdsArg === undefined || onlyIdsArg.startsWith("--"))) {
+    throw new Error("--only-ids 需要逗号分隔的完整 id 列表");
+  }
+  if (forceIdsIndex >= 0 && (forceIdsArg === undefined || forceIdsArg.startsWith("--"))) {
+    throw new Error("--force-ids 需要逗号分隔的完整 id 列表");
+  }
+  if (forceIdsIndex >= 0 && onlyIdsIndex >= 0) throw new Error("--force-ids 与 --only-ids 只能用一个");
+  const idsArg = forceIdsArg ?? onlyIdsArg;
+  const onlyIds = idsArg === undefined
+    ? undefined
+    : [...new Set(idsArg.split(",").map((id) => id.trim()).filter((id) => id !== ""))];
+  if (onlyIds !== undefined && onlyIds.length === 0) {
+    throw new Error("--force-ids/--only-ids 需要逗号分隔的完整 id 列表");
+  }
+  const force = forceIdsIndex >= 0;
   const limitIndex = process.argv.indexOf("--limit");
   const limit = limitIndex >= 0 ? Number.parseInt(process.argv[limitIndex + 1] ?? "", 10) : null;
   if (limitIndex >= 0 && (limit === null || !Number.isFinite(limit) || limit < 1)) {
@@ -841,6 +907,8 @@ async function main(): Promise<void> {
       apply,
       limit,
       rerunAipo,
+      onlyIds,
+      force,
       callLlm,
       store,
       log: (line) => console.log(line),
