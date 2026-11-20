@@ -91,8 +91,10 @@
 
 /* The shell follows the input device, not the window alone: a mouse or trackpad keeps the desktop rail
    even below `lg`, where a desktop window shrunk by a large display scale would otherwise fall back to
-   the phone's top bar and tab bar. Only touch screens below `lg` get the phone shell. */
-@media (pointer: fine) and (max-width: 699px) {
+   the phone's top bar and tab bar. Only 600–699px is that transition band (an unfolded foldable, a zoomed
+   laptop), so a mouse gets the rail there; anything narrower keeps the phone shell, where a real phone
+   width still has its tab bar and its whole content column. */
+@media (pointer: fine) and (min-width: 600px) and (max-width: 699px) {
   .phone-shell-only { display: none !important; }
   .desktop-rail,
   .desktop-backtop { display: flex !important; }

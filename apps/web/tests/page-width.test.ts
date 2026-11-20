@@ -4,6 +4,9 @@
 // 711 for an Android foldable, which reads the desktop pages beside the rail) and full-sidebar (941) widths.
 // Narrow desktops read in one column (2026-10-30): what a side column holds there (an article's reason,
 // topics, original and outline; the switch between reports) must stay within reach.
+// The shell follows the input device: 320 and 393 are touch screens and keep the phone shell (320 in
+// particular must not lose 64px of content to the rail), while 669 upwards is a mouse window and reads
+// the desktop shell, so each page is waited on with what its shell actually renders.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, webkit, expect, type Browser, type Page } from "@playwright/test";
@@ -104,16 +107,19 @@ before(async () => {
 });
 after(async () => { await chrome?.close(); await safari?.close(); await web?.stop(); });
 
+type Shell = "phone" | "desktop";
+
 /**
  * Each page with what widened it: a report's long lead, the career daily and hot list, the list page with its
- * same-event line, and the home workbench.
+ * same-event line, and the home workbench. What a page waits on depends on its shell: the phone's PhoneBar
+ * and tab bar links only exist there, so the desktop shell waits on the page body instead.
  */
-const PAGES: Array<{ path: string; ready: (page: Page, width: number) => Promise<void> }> = [
+const PAGES: Array<{ path: string; ready: (page: Page, shell: Shell) => Promise<void> }> = [
   ...["weekly", "monthly"].map((kind) => ({
     path: `/${kind}`,
-    ready: async (page: Page) => {
+    ready: async (page: Page, shell: Shell) => {
       await expect(page.getByRole("heading", { name: "今日头条", exact: true })).toBeVisible();
-      await expect(page.getByRole("link", { name: "周报", exact: true }).filter({ visible: true })).toBeVisible();
+      if (shell === "phone") await expect(page.getByRole("link", { name: "周报", exact: true }).filter({ visible: true })).toBeVisible();
     },
   })),
   {
@@ -132,7 +138,12 @@ const PAGES: Array<{ path: string; ready: (page: Page, width: number) => Promise
   },
   {
     path: "/items/fit",
-    ready: async (page: Page) => {
+    ready: async (page: Page, shell: Shell) => {
+      // Below `lg` the desktop shell has no 目录 button (it sits in the toolbar `lg` adds), so wait on the title.
+      if (shell === "desktop") {
+        await expect(page.getByRole("heading", { level: 1, name: "宽度检查文章" })).toBeVisible();
+        return;
+      }
       await expect(page.getByText("固定推荐理由", { exact: true }).filter({ visible: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "固定主题" }).filter({ visible: true })).toBeVisible();
       await expect(page.getByRole("link", { name: /原文/ }).filter({ visible: true }).first()).toBeVisible();
@@ -180,15 +191,25 @@ function pastEdge(width: number): string[] {
   ];
 }
 
+/** Touch screens keep the phone shell; a mouse gets the desktop rail from 600px up. */
+const SHELLS: Array<{ shell: Shell; widths: number[] }> = [
+  { shell: "phone", widths: [320, 393] },
+  { shell: "desktop", widths: [669, 711, 941] },
+];
+
 for (const engine of ["Chromium", "WebKit"] as const) test(`${engine}: pages stay within the screen at 320, 393, 669, 711 and 941 pixels`, async () => {
-  for (const width of [393, 320, 669, 711, 941]) {
-    const context = await (engine === "Chromium" ? chrome : safari).newContext({ viewport: { width, height: 873 }, isMobile: width < 941, reducedMotion: "reduce" });
+  const browser = engine === "Chromium" ? chrome : safari;
+  for (const { shell, widths } of SHELLS) for (const width of widths) {
+    const viewport = { width, height: 873 };
+    const context = shell === "phone"
+      ? await browser.newContext({ viewport, hasTouch: true, isMobile: true, reducedMotion: "reduce" })
+      : await browser.newContext({ viewport, reducedMotion: "reduce" });
     try {
       const page = await context.newPage();
       for (const { path, ready } of PAGES) {
         await visit(page, web.origin + path);
-        await ready(page, width);
-        assert.deepEqual(await page.evaluate(pastEdge, width), [], `${path} at ${width}px`);
+        await ready(page, shell);
+        assert.deepEqual(await page.evaluate(pastEdge, width), [], `${path} at ${width}px (${shell} shell)`);
       }
     } finally { await context.close(); }
   }
