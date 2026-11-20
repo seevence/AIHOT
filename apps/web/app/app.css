@@ -89,6 +89,17 @@
   --breakpoint-2xl: 1536px;
 }
 
+/* The shell follows the input device, not the window alone: a mouse or trackpad keeps the desktop rail
+   even below `lg`, where a desktop window shrunk by a large display scale would otherwise fall back to
+   the phone's top bar and tab bar. Only touch screens below `lg` get the phone shell. */
+@media (pointer: fine) and (max-width: 699px) {
+  .phone-shell-only { display: none !important; }
+  .desktop-rail,
+  .desktop-backtop { display: flex !important; }
+  /* Without the phone's top bar the page starts under it, as it does at `lg`. */
+  #main { padding-top: 24px; }
+}
+
 :root {
   /* Page widths follow the screen's shape. Lists fill the screen up to 21:9
      and centre beyond it (32:9); reading pages fill a 16:9 screen and centre on wider ones. A browser
