@@ -163,19 +163,21 @@ function squeeze(text: string): string {
 }
 
 /** 纯 ASCII 词要求词边界，避免 “email”/“maintain” 里的 ai 被当成 AI 关键词。 */
-function containsTerm(haystack: string, term: string): boolean {
+function containsTerm(text: string, squeezed: string, term: string): boolean {
   const needle = squeeze(term);
   if (needle === "") return false;
   if (/^[a-z0-9]+$/.test(needle)) {
-    return new RegExp(`(^|[^a-z0-9])${needle}([^a-z0-9]|$)`, "u").test(haystack);
+    // ASCII 词必须在**压缩空白前**的文本上判断词边界：squeeze 会把 “AI Agent” 变成 “aiagent”，
+    // 于是 “…ai([^a-z0-9])” 永远不命中，AI Agent / AI Coding 这类标题会被误判成非 AI 主体。
+    return new RegExp(`(^|[^a-z0-9])${needle}([^a-z0-9]|$)`, "u").test(text.toLowerCase());
   }
-  return haystack.includes(needle);
+  return squeezed.includes(needle);
 }
 
 export function firstMatchingTerm(text: string, terms: readonly string[]): string | null {
-  const haystack = squeeze(text);
+  const squeezed = squeeze(text);
   for (const term of terms) {
-    if (containsTerm(haystack, term)) return term;
+    if (containsTerm(text, squeezed, term)) return term;
   }
   return null;
 }

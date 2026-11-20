@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  AI_TITLE_TERMS,
   LLM_NORMALIZER_VERSION,
   downgradeNonAiOperations,
+  firstMatchingTerm,
   isRerunAipoCandidate,
   llmNormalizationSchema,
   mapSkillsToKnown,
@@ -453,6 +455,22 @@ test("--rerun-aipo 第二轮：8 条产品/架构/策划职能岗回退 unknown�
   assert.equal(second.candidates, 0);
   assert.equal(second.calls, 0);
   assert.equal(llm.calls(), 8);
+});
+
+test("AI Agent / AI Coding 这类带空格的 AI 标题词仍算 AI 主体（词边界在压缩空白前判断）", () => {
+  const fixtures = ["AI Agent产品经理（J106491）", "AI Coding 方向开发工程师", "AI Infra 平台产品经理", "AI 产品经理（Agent 知识引擎方向）"];
+  for (const title of fixtures) {
+    assert.equal(firstMatchingTerm(title, AI_TITLE_TERMS), "ai", `${title} 应命中 AI 标题词`);
+    assert.equal(
+      downgradeNonAiOperations({ title, raw_text: "负责 AI Agent 产品的设计与落地。" }, { role_family: "ai_product_operations" })
+        .downgraded,
+      false,
+      `${title} 标题含 AI 主体词，不应降级`,
+    );
+  }
+  // 纯 ASCII 词仍然要求词边界，避免把 email / maintain 里的 ai 当成 AI。
+  assert.equal(firstMatchingTerm("email marketing manager", AI_TITLE_TERMS), null);
+  assert.equal(firstMatchingTerm("maintain the system", AI_TITLE_TERMS), null);
 });
 
 test("标题含 AI 主体词的产品/架构岗不被降级", () => {
