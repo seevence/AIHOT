@@ -8,7 +8,7 @@ import type {
 } from "../contracts/api.ts";
 import type { MetricSpecV1, RoleFamily } from "../contracts/job.ts";
 import { SKILL_DICTIONARY_VERSION } from "../data/dictionaries.ts";
-import { NORMALIZER_VERSION } from "../data/index.ts";
+import { LLM_NORMALIZER_VERSION_PREFIX, NORMALIZER_VERSION } from "../data/index.ts";
 import {
   computePolicyJobSharedThemesMetric,
   computeSharedThemes,
@@ -28,6 +28,9 @@ const ROLE_FAMILY_ORDER: readonly RoleFamily[] = [
 const EVIDENCE_LIMIT = 5;
 const SKILL_METRIC_LIMIT = 10;
 const EMPTY_TIMESTAMP = "1970-01-01T00:00:00.000Z";
+// SQL 里无法调用 isCurrentNormalizerVersion（data/normalize.ts），这里用等价条件：
+// 无版本信息（NULL）按旧数据；只有既不是 NORMALIZER_VERSION 也不带 LLM 前缀的才算旧版本。
+const LLM_NORMALIZER_VERSION_LIKE = `${LLM_NORMALIZER_VERSION_PREFIX}%`;
 
 interface SummaryCounts {
   sample_size: number;
@@ -160,7 +163,10 @@ export async function buildSummary(db: Db): Promise<SummaryResponseV1> {
       SELECT COUNT(*) FILTER (WHERE COALESCE(skills, '[]'::jsonb) = '[]'::jsonb)::int AS unknown_count
       FROM career_jobs`,
     db<{ stale_count: number }[]>`
-      SELECT COUNT(*) FILTER (WHERE normalizer_version <> ${NORMALIZER_VERSION})::int AS stale_count
+      SELECT COUNT(*) FILTER (
+        WHERE normalizer_version IS NULL
+           OR (normalizer_version <> ${NORMALIZER_VERSION} AND normalizer_version NOT LIKE ${LLM_NORMALIZER_VERSION_LIKE})
+      )::int AS stale_count
       FROM career_jobs`,
   ]);
 

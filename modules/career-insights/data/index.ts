@@ -28,6 +28,8 @@ export {
 } from "./dictionaries.ts";
 
 export {
+  isCurrentNormalizerVersion,
+  LLM_NORMALIZER_VERSION_PREFIX,
   NORMALIZER_VERSION,
   normalizeRawJob,
   normalizeRawJobs,

@@ -1,7 +1,13 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RawCollectedJobV1 } from "../contracts/index.ts";
-import { NORMALIZER_VERSION, normalizeRawJob, normalizeRawJobs, resolveRoleFamily } from "../data/normalize.ts";
+import {
+  isCurrentNormalizerVersion,
+  NORMALIZER_VERSION,
+  normalizeRawJob,
+  normalizeRawJobs,
+  resolveRoleFamily,
+} from "../data/normalize.ts";
 
 function rawJob(overrides: Partial<RawCollectedJobV1> = {}): RawCollectedJobV1 {
   return {
@@ -189,4 +195,13 @@ test("明确的 AI 产品/工程标题仍然被识别，不受负例收窄影响
 
 test("归一化版本随 B1 规则 bump 到 normalizer/0.3.0", () => {
   assert.equal(NORMALIZER_VERSION, "normalizer/0.3.0");
+});
+
+test("判定当前归一化版本：0.3.0 与 LLM 兜底版本有效，其余无效", () => {
+  assert.equal(isCurrentNormalizerVersion(NORMALIZER_VERSION), true);
+  assert.equal(isCurrentNormalizerVersion("normalizer/llm-0.1"), true);
+  assert.equal(isCurrentNormalizerVersion(null), false);
+  assert.equal(isCurrentNormalizerVersion("normalizer/0.2.0"), false);
+  assert.equal(isCurrentNormalizerVersion("normalizer/0.1.0"), false);
+  assert.equal(isCurrentNormalizerVersion("unknown"), false);
 });
