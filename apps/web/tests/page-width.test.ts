@@ -13,7 +13,29 @@ import { FIXTURE_AT as at, fakeApi, feedItem, itemDetail, startWebServer, visit,
 const longText = "查看完整说明 https://example.org/announcements/" + "a".repeat(100) + "。";
 const longTitle = "一条很长的标题".repeat(30);
 const keys = { daily: "2026-10-15", weekly: "2026-W42", monthly: "2026-10" };
-const groupCard = { key: "g1", anchorAt: at, item: feedItem({ id: "rep-1", title: "代表文章" }), group: { factId: "f1", additionalSourceCount: 1, reportCount: 2, memberIds: ["rep-1"] } };
+const jobItem = {
+  id: "fixture-job", company_name: "固定企业", title: "固定岗位", role_family: "ai_algorithm",
+  locations: ["北京"], employment_type: "campus", student_friendly: "yes", skills: ["python"],
+  published_at: at, first_seen_at: at, last_seen_at: at, official_url: "https://example.org/job",
+};
+/** The home workbench's data: numbers that let every block render its real layout, not just its fallback. */
+const careerSummary = {
+  contract_version: "0.1", data_origin: "live", as_of: at, sample_size: 12, company_count: 3, source_count: 2,
+  first_observed_at: at, last_observed_at: at, has_multiple_snapshots: true, dictionary_version: "0.1", shared_themes: [], warnings: [],
+  metrics: [
+    { metric_id: "observed_new_jobs", version: "1.0", label: "观测新增职位数", unit: "count", status: "ok", value: 5, numerator_count: 5, denominator_count: null, sample_size: 12, as_of: at, dimension: {}, evidence: [], disclaimer: "固定口径" },
+    { metric_id: "student_friendly_share", version: "1.0", label: "学生友好职位占比", unit: "ratio", status: "ok", value: 0.5, numerator_count: 6, denominator_count: 12, sample_size: 12, as_of: at, dimension: {}, unknown_count: 2, unknown_ratio: 0.17, evidence: [], disclaimer: "固定口径" },
+  ],
+};
+const careerCatalog = {
+  contract_version: "0.1", data_origin: "live", as_of: at, window_days: 30, sample_size: 12,
+  directions: [{
+    role_family: "ai_algorithm", job_count: 7, company_count: 3, new_in_window: 4, student_friendly_count: 5,
+    top_skills: [{ skill: "python", count: 6 }, { skill: "large_language_models", count: 4 }, { skill: "pytorch", count: 3 }],
+  }],
+  titles: [],
+  skills: [{ skill: "python", job_count: 6, share: 0.75 }, { skill: "large_language_models", job_count: 4, share: 0.5 }],
+};
 const outline = Array.from({ length: 4 }, (_, i) => ({ id: `part-${i}`, level: 2, text: `第${i + 1}部分` }));
 const article = itemDetail({
   id: "fit", title: "宽度检查文章", topics: [{ slug: "fixture-topic", name: "固定主题" }], outline,
@@ -37,12 +59,28 @@ const api = fakeApi((url) => {
       entries: [{ company: "固定企业", job_count: 12, latest_published_at: at, role_families: [] }],
     };
   }
-  if (path === "/api/site/timeline") return { filters: { channel: "all", category: null, tag: null }, cards: [groupCard], nextCursor: null, hot: null, dayCounts: { "2026-10-04": 1 } };
-  if (path === "/api/site/groups/f1/reports") {
-    return { factId: "f1", reports: [
-      { id: "rep-1", title: "代表文章", source: { name: "Fixture" }, timelineAt: at, originalUrl: "https://example.org/1" },
-      { id: "other-2", title: longTitle, source: { name: "Fixture" }, timelineAt: at, originalUrl: "https://example.org/2" },
-    ] };
+  if (path === "/api/site/career-insights/summary") return careerSummary;
+  if (path === "/api/site/career-insights/catalog") return careerCatalog;
+  if (path === "/api/site/career-insights/signals") {
+    return {
+      contract_version: "0.1", data_origin: "live", window_days: 30, skipped: [], generated_at: at,
+      signals: [{
+        rule: "cross_industry", company: "固定企业", job_id: "fixture-job", job_title: "固定岗位", confidence: "high",
+        evidence: { company_job_count: 10, ai_family_job_count: 6, ai_family_ratio: 0.6, matched_terms: ["机械"] },
+        reason_text: longText, source_key: "fixture", official_url: "https://example.org/job", first_seen_at: at,
+      }],
+    };
+  }
+  if (path === "/api/site/career-insights/jobs") {
+    return { contract_version: "0.1", data_origin: "live", items: [jobItem], page: 1, page_size: 20, total: 1, as_of: at, filters: { page: 1, page_size: 20 } };
+  }
+  if (path === "/api/site/pool") {
+    // The list page's widest line is 同一件事，精选收录的是《…》: an unbroken long title in one row.
+    return {
+      filters: { channel: "all", category: null, tag: null, q: null, tab: "time" },
+      items: [{ ...feedItem({ id: "rep-1", title: "代表文章" }), sameEvent: { id: "sel-1", title: longTitle } }],
+      page: 1, pageCount: 1, total: 1, todayCount: 1, freshness: at,
+    };
   }
   const match = /^\/api\/site\/reports\/(daily|weekly|monthly)\/latest-page$/.exec(path);
   if (match) {
@@ -66,7 +104,10 @@ before(async () => {
 });
 after(async () => { await chrome?.close(); await safari?.close(); await web?.stop(); });
 
-/** Each page with what widened it: a report's long lead, the career daily and hot list, and the home list with its reading group open. */
+/**
+ * Each page with what widened it: a report's long lead, the career daily and hot list, the list page with its
+ * same-event line, and the home workbench.
+ */
 const PAGES: Array<{ path: string; ready: (page: Page, width: number) => Promise<void> }> = [
   ...["weekly", "monthly"].map((kind) => ({
     path: `/${kind}`,
@@ -102,12 +143,20 @@ const PAGES: Array<{ path: string; ready: (page: Page, width: number) => Promise
     },
   },
   {
+    path: "/all",
+    ready: async (page: Page) => {
+      await expect(page.getByRole("link", { name: "代表文章", exact: true }).filter({ visible: true }).first()).toBeVisible();
+      // The same-event line renders the whole long title; it must not push the page wider.
+      await expect(page.getByText(longTitle).first()).toBeVisible();
+    },
+  },
+  {
     path: "/",
-    ready: async (page: Page, width: number) => {
-      // Desktop opens the group in place; phones open it in a sheet.
-      if (width < 700) return expect(page.getByRole("link", { name: "代表文章", exact: true })).toBeVisible();
-      await page.getByRole("button", { name: "另外 1 家也报道了" }).filter({ visible: true }).click();
-      await expect(page.getByRole("link", { name: longTitle })).toBeVisible();
+    ready: async (page: Page) => {
+      // The home page is the data workbench now: its blocks, not a feed, fill the first screen.
+      await expect(page.getByRole("heading", { level: 1, name: "就业数据工作台" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 2, name: "AI 就业研判" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 2, name: "热门岗位 Top 6" })).toBeVisible();
     },
   },
 ];
