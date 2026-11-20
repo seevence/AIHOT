@@ -170,7 +170,10 @@ function parseCatalogOptions(query: unknown): CareerCatalogOptions {
 async function respond(reply: FastifyReply, read: () => Promise<unknown>): Promise<FastifyReply> {
   reply.header("Cache-Control", "no-store");
   try {
-    return reply.send(await read());
+    const value = await read();
+    // 研判缓存未生成时对外是 204，而不是一个空对象。
+    if (value === null) return reply.code(204).send();
+    return reply.send(value);
   } catch (error) {
     const apiError = error instanceof CareerApiError
       ? error
@@ -223,5 +226,10 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
 
   app.get("/api/site/career-insights/catalog", async (request, reply) => respond(reply, async () => {
     return repository.careerCatalog(parseCatalogOptions(request.query));
+  }));
+
+  app.get("/api/site/career-insights/brief", async (request, reply) => respond(reply, async () => {
+    assertNoQuery(request.query);
+    return repository.careerBrief();
   }));
 }

@@ -44,6 +44,9 @@ function fakeRepository(overrides: Partial<CareerRepository> = {}): CareerReposi
     careerCatalog: async () => {
       throw new Error("not used");
     },
+    careerBrief: async () => {
+      throw new Error("not used");
+    },
     writeBatch: async () => ({ accepted: 0, updated: 0, duplicates: 0, rejected: 0, errors: [] }),
     ...overrides,
   };

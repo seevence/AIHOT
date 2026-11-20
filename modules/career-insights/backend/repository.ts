@@ -7,6 +7,7 @@ import type {
   SummaryResponseV1,
 } from "../contracts/api.ts";
 import type {
+  CareerBriefV1,
   CareerCatalogResponseV1,
   CareerDailyResponseV1,
   CareerHotResponseV1,
@@ -26,5 +27,6 @@ export interface CareerRepository {
   dailySummary(): Promise<CareerDailyResponseV1>;
   careerSignals(options: CareerSignalsOptions): Promise<CareerSignalsResponseV1>;
   careerCatalog(options: CareerCatalogOptions): Promise<CareerCatalogResponseV1>;
+  careerBrief(): Promise<CareerBriefV1 | null>;
   writeBatch(batch: CareerObservationBatchV1): Promise<IngestResultV1>;
 }
