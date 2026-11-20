@@ -133,6 +133,78 @@
   - `page_size` 前端固定 20（`POLICY_PAGE_SIZE`），API 上限 100
   - `moe-policy` 源未启用时，选中该来源会出现 0 条
 
+### E8（2026-11-20 就业化前端改版；PR #16）
+
+- 合并关系：`origin/main` = `1782bbd`（PR #16，2026-11-20 22:47:44 +0800，tip `15cecc6`）；本节提交均为 `origin/main` 祖先，只有 `bb5b24a`、`96e8f99`、`8698672`、`90494b8` 是 `feat/stage-merge` 上**尚未进 main** 的本地提交（`bb5b24a` 为 skipped 提示修复）。
+- 写集：`apps/web/**`（导航/首页/壳层/站点文案）、`modules/career-insights/{web/**,module.ts,fixtures/**,tests/**}`、`site/site.ts`；未改 `backend/`、`data/`（`CareerBriefV1` 由 `c21f0b9` 只加在 `contracts/insights.ts`）。
+- **导航重构（`2727322`）**
+  - 主导航 5 项：首页 `/`、热门岗位 `/career-insights/jobs`、职业洞察 `/career-insights`、就业日报 `/daily`（`withSubject("日报")`，`covers` `/weekly`、`/monthly`）、收藏 `/starred`。
+  - `NAV.hidden = ["/all", "/hot", "/topics"]`（`site/site.ts`）：全部动态、就业热点、主题退出主导航与手机底栏，页面仍可直接打开；隐藏项的返回链路改回首页。
+  - 手机底栏 4 个 tab：首页、岗位、洞察、收藏（`hot` 被 `inNav` 过滤；日报没有手机 tab；原「我的」页退出，收藏承担其入口）。
+  - 实测：首页 SSR 侧栏只出现 5 项，`全部`/`就业热点`/`主题` 计数 0；底栏标签为 首页/岗位/洞察/收藏。
+- **首页数据工作台（`38f3277`，8 段）**
+
+| # | 区块 id | 标题 | 数据 |
+|---|---|---|---|
+| 1 | `home-overview` | 今日概览 | summary + catalog |
+| 2 | `home-brief` | AI 就业研判 | `/brief` 缓存（204 →「继续积累观测」） |
+| 3 | `home-indicators` | 需求变化 | summary 指标 |
+| 4 | `home-top-directions` | 热门岗位 Top 6 | catalog `limit=6` |
+| 5 | `home-signals` | 值得注意的信号（`CareerSignals` 卡片标题；该块无数据时外壳为「市场信号」） | `/signals` |
+| 6 | `home-skills` | 热门技能与准备建议 | catalog.skills |
+| 7 | `home-daily` | 最新就业日报 | `/daily` |
+| 8 | `home-latest-jobs` | 最新岗位 | `/jobs`（6 条） |
+
+  - 取数与降级：6 个请求并发（summary/catalog/signals/daily/latestJobs/brief）；每个区块独立 `settled()`，失败只把该块显示「本区块暂时不可用」；brief 单独区分 204（`empty`）与请求失败；整页 `cachedPage(60)`；`?q=` 仍重定向 `/all`。常量：`HOME_CATALOG_LIMIT=6`、`HOME_SIGNALS_LIMIT=5`、`HOME_LATEST_JOBS=6`。
+  - skipped 提示（`bb5b24a`）：原实现只统计 `skipped` 中 `rule === "surge"` 的条数；改为**任何 skipped > 0 都显示**，按 rule 分组计数，`data-signals-skipped` 写 skipped 总数；测试新增 1 项（`career-feeds.standalone.test.ts` 现 8 项）。
+- **职业洞察页七段（`c21f0b9`）**：`/career-insights` 用 `CareerInsightsBoard` 渲染 7 个 `data-insight-section`：
+  1. `career-brief` AI 趋势研判（事实/推断/证据；缓存缺失显示「继续积累观测」）
+  2. `career-job-trend` 岗位趋势（catalog）
+  3. `career-skill-trend` 技能趋势（summary + catalog；含方向内高频技能组合）
+  4. `career-hot-jobs` 热门岗位（方向榜 / 职位榜 / 市场信号）
+  5. `career-student-advice` 学生就业建议（brief）
+  6. `career-policy-jobs` 政策与岗位联动（summary.shared_themes）
+  7. `career-method` 数据范围与方法（口径、未知字段、局限）
+  - loader：summary + catalog（`limit=10`、`window_days=30`）+ signals + brief 并发，任一失败只降级对应区块（brief 的 204 与失败都收敛为 null）；`Cache-Control: no-store`。
+  - 实测：`/career-insights` 200，7 个 `data-insight-section` 顺序与源码一致。
+- **岗位目录页（`c21f0b9`）**：`/career-insights/jobs`（`module.ts` 注册），`JobsCatalogBoard` 三块——`direction-ranking` 方向榜、`title-ranking` 职位榜、`job-list` 岗位列表；学生友好 / 城市 chip 与分页全部由 URL 参数驱动，`catalog`（limit 10 / window 30）与 `jobs` 并发取数；筛选加载显示 `CareerPending`「正在加载筛选结果…」；空目录显示「继续积累观测」。实测：200，`data-section` 为 direction-ranking/title-ranking/job-list，方向榜 4 行（33/18/10/7，按 `data-catalog-direction`）。
+- **就业日报页与就业热点榜（`c573c91`）**
+  - `/daily` 改接 `GET .../daily`（`CareerDailyReport`）：各来源采集结果 + 今日概况（今日新增岗位 / 今日新增政策 / 职位库总量 / 政策库总量 / 空技能岗位占比），`has_run=false` 时有专门提示；`/weekly`、`/monthly` 不变（导航 `covers` 只用于高亮）。
+  - `/hot` 改接 `GET .../hot`（`CareerHotList`）：企业招聘热度榜，按在招岗位数排序，显示前 3 职族与最近发布时间；页面 h1 与 meta 标题为「企业招聘热度榜」。
+  - 实测：`/daily` 200：5 个来源、今日新增 25、职位库 188、政策库 6、空技能 45/188 = 23.9%；`/hot` 200：3 家（腾讯 70 / 美团 66 / 百度 52）、`window_days=30`。`/hot` 已在 `2727322` 后退出主导航（`NAV.hidden`），只能直接访问。
+- **政策页与入口（`8e81f33` / `2dd4a86` / `0904032`；后续修正 `79e3b4c` / `645601c`）**
+  - `8e81f33` 初版政策列表页（E7 已记录）。
+  - `2dd4a86 fix(career-insights): 政策页非法筛选返回 400 而非静默丢弃`：`parsePolicyFiltersOrThrow` 区分「未提供」与「提供了但非法」，非法参数抛 `data(..., { status: 400 })` 交给 ErrorBoundary；主题用 `Object.hasOwn` 防原型链键；fixture API 同步按 `source_key` 过滤并移除 collector 未启用的 moe-policy 样例。
+  - `0904032 feat(career-insights): 职业洞察页新增政策文件入口`：方向入口之后增加与一级 section 并列的「政策文件」入口（`PolicyEntry` → `/career-insights/policies`），standalone SSR 可断言。
+  - E7 遗留纠正：每页条数不再是固定 20——`79e3b4c` 增加 20/50/100 切换（`aria-current` 标当前档，链接保留筛选）；来源/主题 chip 改由 API `facets` 驱动并带 count（`645601c`），来源校验放宽为形态校验（`^[a-z0-9][a-z0-9-]{0,63}`），因此 E7 的「`moe-policy` 未启用时选中该来源会出现 0 条」不再是可达路径（未启用源不进入 facets 选项；当前库只有 ndrc-policy / state-council-policy 两源）。
+  - 实测：`/career-insights/policies` 200，h1「政策文件」，6 条；来源 chip 2 项（各 3 条）、主题 chip 2 项。
+- **壳层修复（`0f0e6a9` + `3088e94`）**
+  - `0f0e6a9 fix(web): 按输入设备决定外壳，鼠标设备窄窗口不再退回手机 tab`：`pointer: fine` 且 <700px 时保留桌面 rail、隐藏 PhoneBar/TabBar 并补 `#main` 顶距；触屏仍走手机外壳。
+  - `3088e94 fix(web): 鼠标窄窗口只在 600–699px 用桌面 rail，更窄保留手机壳`：带宽收窄为 `@media (pointer: fine) and (min-width: 600px) and (max-width: 699px)`；<600px 一律手机壳（320px 真实手机不丢 64px 内容列）。
+  - 用例参数化：`apps/web/tests/page-width.test.ts` 的 `SHELLS` 拆成 `phone: [320, 393]`（`hasTouch + isMobile`）与 `desktop: [669, 711, 941]`（鼠标上下文），`PAGES[].ready(page, shell)` 按外壳等待不同元素，断言语带 shell 名。
+- **全站文案就业化（`993a68d`）**
+  - `site/site.ts`：`SITE.subject` 由 `"AI"` 改为 `"就业"`，`homeTitle`/`topicsTitle`/`description`/`tagline`/`keywords`/`ABOUT.headline` 与 `CARDS`/`SEO_TITLES` 的就业口径同步（如 `keywords` = 就业趋势/招聘/AI 岗位/应届就业/就业政策）。
+  - 导航与 `/hot` 的「热点榜」改为「就业热点」；`/all`、`/topics`、`/starred` 空态追加「本站内容暂未接入，可先查看 就业趋势洞察」引导链接（`/topics` 同时补 `topics.length === 0` 空态）。
+  - 实测：首页 `<title>` 为 `MyHOT — 就业趋势 · 每日岗位与政策洞察`；`/daily` 为 `就业日报（2026-11-20） · MyHOT`；`/hot` 为 `企业招聘热度榜：按在招岗位数排序 · MyHOT`（`/hot` 标题在 `c573c91` 已再次改写，`993a68d` 的「就业热点」保留在导航标签/卡片文案）。
+- **页面实测（2026-11-20 23:5x～11-21 00:0x CST，本机运行栈 SSR）**
+
+| 路径 | HTTP | 标题 / 关键结构 |
+|---|---|---|
+| `/` | 200 | h1 就业数据工作台；8 个区块标题（今日概览、AI 就业研判、需求变化、热门岗位 Top 6、值得注意的信号、热门技能与准备建议、最新就业日报、最新岗位） |
+| `/career-insights` | 200 | 7 个 `data-insight-section` |
+| `/career-insights/jobs` | 200 | h1 热门岗位；`data-section` 3 个；方向榜 4 行 |
+| `/daily` | 200 | h1 就业日报；`data-daily-source` 5 个；「各来源采集结果」「今日概况」 |
+| `/career-insights/policies` | 200 | h1 政策文件；6 条政策 |
+| `/hot` | 200 | h1 企业招聘热度榜；3 家企业（腾讯/美团/百度） |
+
+- **验证**：`node --import ./tests/standalone.ts --test career-feeds.standalone.test.ts career-insights-board.standalone.test.ts data-normalize.standalone.test.ts` → **31/31 通过**（含 `bb5b24a` 的 skipped 分组用例、`15cecc6` 的城市集合用例、`c21f0b9` 的七段与目录页用例）。
+- **已知限制 / 未覆盖**
+  - 未跑浏览器级用例（`npm run test:web`，含 `page-width.test.ts` 的 Playwright 响应式断言）；壳层结论来自源码与用例改动，未在浏览器复验。
+  - 本机运行栈镜像构建于 2026-11-20 22:49 CST（覆盖到 `15cecc6`），`bb5b24a` 的 skipped 提示改动只由源码与 standalone 用例覆盖；实测页面上 skipped 提示为「另有 3 家公司因历史不足 2 天暂无法判定突增」（当前 3 条 skipped 恰好全是 surge，与修复后行为一致）。
+  - 写稿期间本分支 `90494b8` 把 1 行 unknown 改判为 ai_product_operations，方向计数由 33/17/10/7 变为 33/18/10/7（页面结构不变）；PR #16 合入 main 时职族口径为 unknown 121/188 = 64.4%，当前库为 120/188 = 63.8%。
+  - `/hot` 退出主导航后无站内入口（仅 URL 直达）；如需曝光需再调整 `NAV.hidden` 或首页入口。
+  - E7 的两条已知限制（页大小固定 20、moe-policy 0 条）已被 `79e3b4c` / `645601c` 取代，见上。
+
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）
 
 | # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |
@@ -146,6 +218,7 @@
 | 7 | 后端时间序列化统一为 UTC `Z`（`as_of`/`observed_at`/`published_at`） | C / D | 约定已在前端契约（非 Z 偏移降级为原文） | 后端若返回 `+08:00` 等偏移，前端按原文显示、不做可读化 |
 | 8 | 真实数据下 `as_of` 可读化复验（含跨月/跨年与闰年边界） | C / D + A | **已复验**（原「待后端链路」已更新）：在 0.2.0 的 40 行与扩采 74 行真实数据上均通过，含全站 `as_of` 显示 | 前端逻辑已由真实数据样例确认 |
 | 9 | 政策卡片 `policy.published_at` 日期格式确认（是否也按 `Asia/Shanghai` 可读化） | C / D（政策数据与格式） | 未确认 | 当前 `SharedThemeList` 按原文展示；格式确认后由 E 接入 `CareerTime` |
+| 10 | `career_briefs` 首版缓存已生成（1 行，`as_of=2026-11-20T10:58:45.58Z`）；数据前进后需离线重跑 `scripts/build-career-brief.ts` | A + C / D | 首版已写入；生成入口只有离线脚本，`server.ts` 无 brief 定时任务 | 重跑前首页/洞察页仍显示旧研判 |
 
 说明：以上均为记录/风格级问题，不阻塞阶段完成；真实数据与外壳层问题留待集成分支处理
 ## 最近更新
@@ -154,3 +227,5 @@
 - 本次同步：协同表 #3/#4/#8 的「未完成/未执行/待后端链路」已被后续取代——真实数据链路已闭环（0.2.0 40/40，扩采 74 行基线），E 的复验证据为第一段 22/22、第二段 43/43、扩采 74 行增量 39/39 全 PASS；补充 E6 合入记录（`cd69c68` / `04f7cc4`）；政策列表页前端 404 仍为未覆盖项（路由属 A）。
 - **2026-11-19**：`1ae9ccd`（含政策页 `8e81f33`）——政策列表页 `/career-insights/policies` 已完成，记录见「E7」；E6 与协同表 #4 的「前端 404 未覆盖」已标注为被后续取代。
 - **2026-11-20**：**未读时间线随首页改版停用**。首页从 `Timeline` 切换为「就业数据工作台」后，`Timeline` 组件已无页面使用；`/all` 走 `/api/site/pool` + `DayList`，不传 `group`、不接 `readSet`/`unreadOnly`，无法承载「只看未读」。对应 `apps/web/tests/timeline-unread.test.ts`（`:187` 全部已读、`:195` 自动加载上限）已删除，合并后 CI 的 `Web tests` 不再因首页改版失败。**如需恢复，另开任务**：为 `Timeline` 重新接页面入口（或把未读能力并入 `DayList`），并恢复/重写这两个用例。
+- **2026-11-20**：PR #16（`1782bbd`，tip `15cecc6`）合入就业化前端改版，新增「E8」：导航 5+4（`2727322`）、首页 8 段工作台与 skipped 提示（`38f3277`、`bb5b24a`）、职业洞察七段与岗位目录页（`c21f0b9`）、`/daily` 与 `/hot` 接口接入（`c573c91`）、政策页与入口收口（`8e81f33` / `2dd4a86` / `0904032`，后续 `79e3b4c` / `645601c`）、壳层 600–699px 规则（`0f0e6a9` / `3088e94`）、全站就业文案（`993a68d`）；E7 的两条已知限制已由 `79e3b4c` / `645601c` 取代。
+- **2026-11-20**：`bb5b24a`（skipped 提示）、`96e8f99`、`8698672`、`90494b8` 为 `feat/stage-merge` 上的本地后续提交，尚未进 main；首页/洞察页 skipped 提示行为以源码与 standalone 用例为准，`90494b8` 的职族改判见 E8 已知限制。

@@ -44,6 +44,7 @@
 | D3 | D3 | SQL 指标冻结 + 政策读取接口（`/policies`）、真实数据三接口验收清单 | 已完成，已合入集成分支（原「进行中 / 待独立 review」已更新） | PASS（2026-11-19，仅 minor）：`e9dddd5`（minor 复核 PASS）、`e0bc809` 指纹统一、`9c6c83a` 原型链与 page_size clamp 已合入；I-1 `5df5856` PASS |
 | D4 | D4–D5 | 后端只修缺陷：第二次采集观测验证、性能与错误处理、联调期问题 | 未开始 | - |
 | S0 | tasks.md S0 | 云端基线 worktree、路线图登记、基线门禁、写集隔离模板 | 完成，待独立 review | 门禁部分通过（环境缺陷 2 例） |
+| R-1120 | PR #15 / PR #16 | 岗位目录、异常信号、热点/日报、离线研判、采集告警、stale 判定修复 | 已合入 main（`0bf12b7` / `1782bbd`） | 随 PR 合入 |
 
 ## 不可妥协约束（摘自共享路线图与开发契约）
 
@@ -651,7 +652,114 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 - 本地后续提交：`254c7dc`（merge：按 A 裁定修正 unknown 与应届友好文案，源提交 `04f7cc4`）。
 - 历史结论保留：D2/D3 各节的实测记录与「待独立 review」原文不删除，以本节为最终状态。
 
+## 2026-11-20 补记：岗位目录、异常信号、热点/日报、离线研判与采集告警（PR #16）
+
+- 合并关系（`git merge-base --is-ancestor` 逐项核对）：`origin/main` = `1782bbd Merge pull request #16 from seevence/feat/integration`（2026-11-20 22:47:44 +0800），PR #16 的 tip 为 `15cecc6`；本节列出的提交均为 `origin/main` 祖先。本工作分支 `feat/stage-merge`（写稿时 HEAD `90494b8`）在 `15cecc6` 之上还有 `bb5b24a`、`96e8f99`、`8698672`、`90494b8` 四个本地提交，**尚未进 main**（`bb5b24a` 即首页/洞察页 skipped 提示修复，见「career-dashboard-roadmap.md」E8；`8698672` / `90494b8` 属采集与归一化，见 collector 路线图）。
+- 实测环境（2026-11-20 23:5x～11-21 00:0x CST，只读）：本机 Docker Compose（`aihot-web-1`/`aihot-api-1` 暴露 3000，`aihot-db-1` 映射 `127.0.0.1:15432`），库为真实采集库——`career_jobs` **188**、`career_job_observations` **440**、`career_policies` **6**、`career_ingest_runs` **53**、`career_briefs` **1**；`data_origin` 全部 `live`（188/188）；观测日 2（CST 日粒度）。接口用 `Invoke-WebRequest` 实测，库内数字用只读 SQL 复核，未写库、未重跑采集。写稿期间本分支又有 `90494b8`（ASCII 词边界 bug）把 1 行 unknown 改判为 ai_product_operations，库内职族从 `121/188` 变为 `120/188 = 63.8%`（aipo 17→18）；本节实测取改判后的库，PR #16 合入 main 时的口径是 `121/188 = 64.4%`。
+
+### 岗位目录 `GET /api/site/career-insights/catalog`（C-CATALOG@1，`fd94961`）
+
+- 提交：`fd94961 feat(career-insights): 新增岗位目录 API（方向榜/职位榜/技能榜）`；新增 `backend/career-catalog.ts`（212 行）、`tests/career-catalog.test.ts`（200 行 / 5 项），`backend/http.ts` +23 行路由，`repository.ts` / `sql-repository.ts` 各加一个只读方法，`contracts/insights.ts` +45 行类型。
+- 接口：`GET /api/site/career-insights/catalog?limit=&window_days=`，只接受这两个参数（其它参数 400）；`limit` 默认 **6**、上限 **50**；`window_days` 默认 **30**、上限 **365**；越界与非正整数一律 400 `invalid_parameter`；`Cache-Control: no-store`；空表返回三个空数组而不是 500。
+- 口径（一次全库快照聚合三张榜）：
+  - 方向榜 `directions`：按 `role_family` 聚合，`unknown` 不进榜（单列在 summary）；每方向 `top_skills` 前 3。
+  - 职位榜 `titles`：按 `title_key` 归一（去括号内容、去「城市名 + 分隔符」前缀、去空白并小写），**跨城市同一职位只计一次**；`cities` 与 `top_skills` 各前 3。
+  - 技能榜 `skills`：固定前 10；`share = job_count / 有技能岗位数`，未识别技能的岗位不进分母。
+  - `limit` 同时约束方向榜与职位榜，技能榜固定 10 条（`feeds.server.ts` 注释与 `career-catalog.ts` 的 `TOP_SKILLS=10` 一致）。
+- 契约只加：`contract_version` 仍 `0.1`，`contracts/insights.ts` 该提交只新增类型、无删行；`openapi.json` 截至 HEAD 未登记 catalog（见「已知边界」）。
+- 实测（默认参数）：HTTP 200；`data_origin=live`、`sample_size=188`、`window_days=30`、`as_of=2026-11-20T10:58:45.580Z`；`directions` 4 条、`titles` 6 条、`skills` 10 条。
+  - 方向榜：`ai_application_development` 33（公司 3 / 窗口内新进 33 / 学生友好 2）、`ai_product_operations` 18（3/18/1）、`data` 10（3/10/0）、`ai_algorithm` 7（2/7/0）。
+  - 职位榜前 3：商业分析师 3、大客户服务经理 TAM（J107214）3、WorkBuddy-移动端高级开发工程师-深圳/北京 2。
+  - 技能榜：`data_analysis` 61（share 0.4266）、`large_language_models` 54（0.3776）、`ai_agents` 48（0.3357）、`python` 27（0.1888）、`sql` 20（0.1399）……分母 = 有技能岗位 **143** = 188 − 空技能 45（空技能 45/188 = 23.9%，unknown 单列）。
+  - 参数行为：`limit=2&window_days=7` → `directions` 2、`titles` 2、`skills` 仍 10、`window_days=7`；`limit=51` → 400「between 1 and 50」；`limit=0` → 400「positive integer」；未知参数 `foo` → 400「Unsupported query parameter」。
+
+### 异常信号 `GET /api/site/career-insights/signals`（`9f01746`）
+
+- 提交：`9f01746 feat(career-insights): 新增就业异常信号只读 API`；新增 `backend/career-signals.ts`（388 行）、`tests/career-signals.test.ts`（226 行 / 7 项）；`http.ts` +23；`contracts/insights.ts` +66 行类型（只加、`contract_version` 不变）。
+- 接口：`GET /api/site/career-insights/signals?limit=&window_days=`；`limit` 默认 10、上限 50；`window_days` 默认 30、上限 365；参数非法 400；空表返回空数组而不是 500；`no-store`。
+- 四条可复算规则（每条信号带数字依据 `evidence`、中文 `reason_text`、`source_key`、`official_url`、`confidence`）：
+
+| rule | 名称 | 判定与阈值（`career-signals.ts`） |
+|---|---|---|
+| `cross_industry` | 跨界组合 | AI 族占多数的公司出现机械/硬件等非 AI 岗位：公司岗位 ≥3 且 AI 族占比 ≥0.6，命中 `CROSS_DOMAIN_TERMS`（机械、结构设计、电气、硬件、制造、供应链、物流、土木、建筑、化工…） |
+| `new_family` | 新职族首现 | 公司近 `window_days` 天内第一次出现某职族：该族最早 `first_seen_at` 落在窗口内；族内 ≥2 个 high，否则 medium |
+| `surge` | 数量突增 | 最近 24h 新岗位 ≥5 且达到历史日均 3 倍；历史不足 2 天记 `skipped.reason=insufficient_history`；历史日均 0 时 `surge_ratio=null` 但仍可判突增 |
+| `skill_mismatch` | 技能错配 | 标题命中算法/大模型词（`ALGORITHM_TITLE_TERMS`）的岗位，技能要求命中机械/硬件类词（`CROSS_DOMAIN_TERMS`） |
+
+- 排序与去重：`confidence` high 优先，其后 `first_seen_at` 倒序；同 `company + rule + family` 只保留最新一条；`skipped` 单独返回。
+- 实测：`?limit=50` → HTTP 200；`signals` 11 条（全部 `new_family`、`confidence=high`），`skipped` 3 条（百度 / 美团 / 腾讯 均 `history_days=0.32`、`insufficient_history`）；`data_origin=live`、`window_days=30`。默认 `limit=10` 时只返回前 10 条（首页 `HOME_SIGNALS_LIMIT=5`）。
+
+### 就业热点榜与就业日报 `GET .../hot`、`GET .../daily`（`0833650`；openapi `f6d1a82`）
+
+- 提交：`0833650 feat(career-insights): 新增就业热点榜与就业日报只读 API`；新增 `backend/career-analytics.ts`（228 行）、`tests/career-analytics.test.ts`（279 行 / 6 项），`contracts/insights.ts` 首次建立（+54 行类型）、`contracts/index.ts` 只在既有导出行尾追加 `export * from "./insights.ts"`（1 行增删）；`f6d1a82 docs(api): register hot, daily and signals endpoints in the openapi contract` 把 hot/daily/signals 登记进 `openapi.json`（+179 行）。
+- `GET /api/site/career-insights/hot?limit=&window_days=`：`limit` 默认 10、上限 50；`window_days` 默认 30、上限 365。按 `company_name` 聚合**最近 `window_days` 天内有观测**的职位（`EXISTS career_job_observations`；只有当前态、没有近期观测的职位不进榜）；排序 `job_count DESC`、`latest_published_at DESC NULLS LAST`、`company ASC`；`role_families` 取非 unknown 前 3；`as_of` = 窗口内 `MAX(last_seen_at)`；空表 `entries=[]`。
+- `GET /api/site/career-insights/daily`：无参数（带参数 400）。CST 当日采集摘要：
+  - `sources` 按 `source_key` 汇总当天 `career_ingest_runs`（`collected/accepted/updated/duplicates`；`status` 取当天最差 ok/partial/failed）；当天没有任何 run 时 `has_run=false` 且 `sources=[]`。
+  - `jobs_total`、`new_jobs_today`（`first_seen_at` 当日）、`policies_total`、`new_policies_today`、`unknown_ratio`、`sample_size`、`date`（CST 日）、`generated_at`。
+  - 注意：这里的 `unknown_ratio` 是**空技能岗位占比**（实测 45/188 = 23.9%），不是职族 unknown；职族 unknown 见 summary 的 `job_family_share`（实测 120/188 = 63.8%；PR #16 合入时为 121/188 = 64.4%，unknown 单列）。
+- 契约只加：`contract_version` 仍 `0.1`；`insights.ts` 无删行；`index.ts` 只新增一行导出。
+- 实测：`/hot?limit=50` → 200，`entries` 3 家：腾讯 70（前 3 族 ai_application_development 17 / ai_algorithm 5 / ai_product_operations 3；最近发布 2026-11-20T00:00:00.000Z）、美团 66（9/7/5；最近发布 null）、百度 52（9/6/3；最近发布 2026-11-20T00:00:00.000Z）。`/daily` → 200：`date=2026-11-20`、`has_run=true`、`sources` 5 个（tencent 20/20/0/0、meituan 20/3/0/17、baidu 20/2/0/18、ndrc-policy 3/0/0/3、state-council-policy 3/0/0/3，均 `status=ok`）、`jobs_total=188`、`new_jobs_today=25`、`policies_total=6`、`new_policies_today=0`、`unknown_ratio=0.2394`（45/188）。
+
+### 离线 LLM 研判：迁移 0164、`scripts/build-career-brief.ts`、`GET .../brief`（`083d9f7` / `ce49bd8`）
+
+- 提交：`083d9f7 feat(career-insights): 离线 LLM 研判缓存与 brief 路由`；新增 `modules/career-insights/migrations/0164_career_briefs.sql`（21 行）、`backend/brief.ts`（356 行）、`scripts/build-career-brief.ts`（148 行）、`tests/career-brief.test.ts`（首版 278 行；`ce49bd8` 后 322 行 / 13 项）与 `backend/http.ts` 路由；`ce49bd8 fix(career-insights): brief 数字校验接受输入小数的舍入与百分比引用` 修数字校验（合计 +149/−9：`backend/brief.ts` 改 112 行、`tests/career-brief.test.ts` +46 行）。
+- 表 `career_briefs`（0164，2026-11-20 13:06:19Z 已应用）：18 列，`UNIQUE (as_of, prompt_version)`，`confidence CHECK IN ('low','medium','high')`，`facts/inferences/actions/evidence/limitations` 为 jsonb 数组，另有 `observation_days`、`receipt_id`、`model` 便于追溯。
+- 生成链路（离线，读者不触发模型）：`scripts/build-career-brief.ts` 读聚合输入（`loadCareerCatalog` + 观测日数 + 可引用职位/政策 id）→ `chatJson`（`purpose=career-brief`、`prompt_version=career-brief/1`、temperature 0.2、maxTokens 2000、timeout 120s）→ `composeCareerBrief` 校验 → 按 `(as_of, prompt_version)` upsert；支持 `--dry-run` / `--window-days` / `--limit`，需要 `MODEL_CALLS_ENABLED=true`，无岗位样本时不调用模型。生成入口只有该离线脚本：`server.ts` 的 `schedules` 只有 `career.ingest`（06:10）与 `career.llm-normalize`（06:40），没有 brief 任务。
+- 读取：`GET /api/site/career-insights/brief`，无参数（带参数 400）；只读缓存，**无缓存 204**（`respond` 对 `null` 回 204）、有缓存 200，均 `no-store`。
+- 校验规则（`brief.ts`；`ce49bd8` 后）：模型输出只许引用输入中已有的数字——递归收集聚合输入全部 number；小数按输出自身精度舍入等价、百分比形式（值 ×100 或带 `%`）等价、整数只认精确相等；`as_of` 的年/月/日片段与 1900–2100 年份白名单放行；未匹配的数字判不合规，错误信息带 80 字上下文。观测日不足 2 天强制 `confidence="low"` 并移除走势断言；`evidence` 只能引用输入候选 id、标题以库内为准；`facts` 每条 ≤60 字。
+- 实测：`career_briefs` **1 行**——`as_of=2026-11-20T10:58:45.58Z`、`generated_at=2026-11-20T14:47:42.184Z`、`prompt_version=career-brief/1`、`confidence=low`、`observation_days=2`、`sample_size=188`、`window_days=30`、`model=default`、`receipt_id=290`、数组长度 facts 21 / inferences 4 / actions 5 / evidence 4 / limitations 5。
+- 实测 `GET /api/site/career-insights/brief` → **HTTP 200**（缓存已生成，不再是「待生成首版」时的 204）；响应 `confidence="low"`、`limitations` 5 条、`evidence` 4 条（均为职位）。无缓存 204 路径由 `tests/career-brief.test.ts` 的「the brief route answers 204 without a cache and 200 with no-store when cached」覆盖。
+- 已知 minor：`facts` 的 60 字截断会把以英文 id 列举的句子截断（实测一条为「岗位方向共4个：ai_application_development、ai_product_operations、dat」），不影响数字校验。
+
+### stale 判定修复：`normalizer/llm-*` 视为当前版本（`3b12577`）
+
+- 问题：`summary.ts` 的 stale 计数原为 `normalizer_version <> NORMALIZER_VERSION`，LLM 兜底回填写入的 `normalizer/llm-*` 被误判为旧版本，真实库会冒 `stale_data` 警告。
+- 修复：`data/normalize.ts` 新增 `isCurrentNormalizerVersion()`（当前 `normalizer/0.3.0` 或前缀 `normalizer/llm-` 视为当前；`NULL` 与更旧版本仍算旧），`data/index.ts` 导出；`summary.ts` 的 SQL 用等价条件 `normalizer_version IS NULL OR (normalizer_version <> 'normalizer/0.3.0' AND normalizer_version NOT LIKE 'normalizer/llm-%')`。
+- 实测：库内版本分布 `llm-0.3` 132 / `llm-0.1` 31 / `0.3.0` 23 / `llm-0.2` 2（合计 188），全部按当前版本计；`GET .../summary` 的 `warnings` 无 `stale_data`（旧版本计数 0）。
+- 测试：`data-normalize.standalone.test.ts` 新增 1 项（0.3.0 与 llm 有效、`null`/0.1/0.2/`unknown` 无效，本次实跑通过）；`repository.test.ts` 新增 4 项（llm 行不告警、混合不告警、0.2.0 仍告警、`NULL` 视为旧）。
+
+### `career.ingest` 告警：失败、进程中断与停摆（`ecce052` / `f58b9ca`）
+
+- `ecce052 feat(career-insights): career.ingest 失败纳入运维告警`：整体抛错（`job_runs.status='failed'`）与 `detail.failedSources` 非空都转成 `ops.alerts` 的 `Finding`（key=`career.ingest`），沿用既有节流（同一 key 一天一次）与恢复消息；告警正文带 job 名、北京时间、失败来源与 `/admin/runs` 入口。
+- `f58b9ca fix(career-insights): 采集被中断的 skipped 与停摆超 26 小时都告警` 补两类假阴性：
+  1. `skipped` 中由 `closeInterruptedRuns` 补记的行（error 含「执行进程已退出」）按 today 级告警，文案说明上一次采集被中断；付费预算暂停的 skipped 保持不告警。
+  2. 最近一次成功（`ok`/`partial`）早于 **26 小时**前、或根本没有成功记录时，用独立 key `career.ingest.stale` 告警，恢复消息独立，避免与 failed 恢复混淆。
+- 实测：`tests/alerts.test.ts` 9 项全绿（本次实跑）。
+
+### 政策 facets 与采集/测试收尾（`c3ea09b` / `15cecc6`）
+
+- `c3ea09b feat(api): add policy source and theme facets to the policy list`（2026-11-19）：`GET .../policies` 响应增加 `facets.sources`（按 `source_key` 计数，仅 `published_at IS NOT NULL`）与 `facets.themes`（`jsonb_array_elements_text` 展开主题计数，同样只统计有发布日期的政策）；facets 为全量分面，不随 `page/page_size/source_key/theme` 变化；`openapi.json` +70 行登记。口径细节见「policies facets 口径补充（2026-11-19）」，不重复。前端随后由 `645601c` 改用 facets 渲染来源/主题 chip（带 count）。
+- 实测：`GET .../policies` → 200，`total=6`、`page_size=20`、`as_of=2026-11-19T11:35:43.522Z`；`facets.sources` = ndrc-policy 3 + state-council-policy 3；`facets.themes` = talent_development 1 + employment_promotion 1（计数和 2 < total 6，差额 4 条为无主题政策，符合既有无主题政策不进入 themes 的口径）。
+- `15cecc6 test(career-insights): 城市候选按集合比较，CAREER_FIXTURE_PORT 登记到模板`：城市候选断言改为按集合比较（C-CATALOG@1 未定义同频先后，`localeCompare` 随 ICU 排序规则变化）；`.env.example` 登记 `CAREER_FIXTURE_PORT`（仅本地/测试 fixture 端口，默认 3101，生产不设）。
+
+### 接口实测汇总（2026-11-20 23:5x～11-21 00:0x CST，本机运行栈）
+
+| 接口 | HTTP | 参数 | 关键数字 |
+|---|---|---|---|
+| `/catalog` | 200 | 默认 | `sample_size=188`；directions 4（33/18/10/7）、titles 6、skills 10 |
+| `/catalog` | 200 | `limit=2&window_days=7` | directions 2、titles 2、skills 10 |
+| `/signals` | 200 | `limit=50` | signals 11（全 new_family/high）、skipped 3 |
+| `/hot` | 200 | `limit=50` | entries 3（腾讯 70 / 美团 66 / 百度 52） |
+| `/daily` | 200 | 无 | date 2026-11-20、sources 5、jobs_total 188、new_jobs_today 25、unknown_ratio 0.2394 |
+| `/brief` | 200 | 无 | confidence low、sample_size 188、window_days 30、evidence 4 |
+| `/policies` | 200 | 无 | total 6、facets.sources 2 项（3/3）、facets.themes 2 项（1/1） |
+| `/catalog` | 400 | `limit=51` / `limit=0` / `window_days=366` / `foo=1` | `invalid_parameter` |
+
+### 验证
+
+- 后端用例（本地 PostgreSQL `127.0.0.1:5433/aihot_test`，`node --test-global-setup=tests/databases.ts --import ./tests/databases.ts --test ...`）：`career-catalog` 5 + `career-signals` 7 + `career-brief` 13 + `alerts` 9 + `career-analytics` 6 + `policy-http` 4 = **44/44 通过**（exit 0）。
+- 纯函数/前端用例（`node --import ./tests/standalone.ts --test ...`）：`career-feeds.standalone` 8 + `career-insights-board.standalone` 8 + `data-normalize.standalone` 15 = **31/31 通过**。
+- 未跑：`npm run typecheck`、`test:web`（Playwright 浏览器）、`test:standalone` 全量；本次只补文档、未改代码。
+
+### 已知边界
+
+- `openapi.json`（截至 HEAD）只登记 summary/jobs/jobs/{id}/policies/hot/daily/signals，**未登记 catalog 与 brief**；`f6d1a82` 只登记了 hot/daily/signals。
+- `/daily.unknown_ratio` 是空技能岗位占比（45/188 = 23.9%），不是职族 unknown；职族 unknown 只在 summary 的 `job_family_share`（120/188 = 63.8%；PR #16 合入时 121/188 = 64.4%，分母 188、unknown 单列）。
+- `career_briefs` 只有 1 行缓存；首页与洞察页都读这一行，数据 `as_of` 前进后仍需重跑 `scripts/build-career-brief.ts` 才更新（没有定时生成任务）。
+- 离线研判缓存不随聚合同步：缓存生成于 2026-11-20T14:47:42Z（当时 aipo 20），当前 catalog 已为 aipo 18；页面会同时显示旧研判与实时榜单，属离线缓存语义。
+
 ## 最近更新
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`。
 - 本次同步：D2/D3 阶段状态与 review 列由「待独立 review」更新为已合入 + PASS，并登记 `e9dddd5` / `e0bc809` / `9c6c83a` / `5df5856` 四项收敛提交。- **2026-11-19**：`b3375cc`（PR #12 已合入主线）——新增「policies facets 口径补充」：`facets.themes` 的 count 之和可小于 `total`（无主题政策不进入 themes 计数）、`facets.sources` 只统计 `published_at` 非空的政策（与列表可见集合一致）、facets 为全量分面不随分页/筛选变化。仅补文档，接口行为与历史结论未变。
+- **2026-11-20**：PR #16（`1782bbd`，tip `15cecc6`）合入岗位目录（`fd94961`）、异常信号（`9f01746`）、就业热点榜与就业日报（`0833650`，openapi `f6d1a82`）、离线 LLM 研判与 `0164_career_briefs`（`083d9f7` / `ce49bd8`）、`career.ingest` 告警（`ecce052` / `f58b9ca`）、stale 判定修复（`3b12577`）、政策 facets（`c3ea09b`）与城市候选/fixture 端口收尾（`15cecc6`）；本机实测 `/brief` 已由 204 变为 200。`bb5b24a`、`96e8f99` 为 `feat/stage-merge` 上未进 main 的本地提交。
