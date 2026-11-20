@@ -2,6 +2,7 @@ import { redirect, useLoaderData } from "react-router";
 import { SITE } from "@aihot/site";
 import type { Route } from "./+types/home";
 import type {
+  CareerBriefV1,
   CareerCatalogResponseV1,
   CareerDailyResponseV1,
   CareerSignalsResponseV1,
@@ -13,7 +14,7 @@ import { logError } from "../lib/errors.server";
 import { pageReuse } from "../lib/page-reuse";
 import { pageMeta, siteLd } from "../lib/seo";
 import type { Screen } from "../components/shell/screens";
-import type { HomeBriefState, HomeBriefV1 } from "../features/home/contracts.ts";
+import type { HomeBriefState } from "../features/home/contracts.ts";
 import { HOME_CATALOG_LIMIT } from "../features/home/contracts.ts";
 import { HomeWorkbench } from "../features/home/HomeWorkbench.tsx";
 import {
@@ -48,7 +49,7 @@ async function settled<T>(path: string, promise: Promise<T>, signal: AbortSignal
 /** 研判区块要区分「无缓存(204)」与请求失败，单独收敛。 */
 async function settledBrief(signal: AbortSignal): Promise<HomeBriefState> {
   try {
-    const data = await loadCareerBrief<HomeBriefV1>(signal);
+    const data = await loadCareerBrief<CareerBriefV1>(signal);
     return data === null ? { status: "empty" } : { status: "ok", data };
   } catch (error) {
     if (!signal.aborted) logError(error, { msg: "home block failed", method: "GET", path: careerBriefPath() });
