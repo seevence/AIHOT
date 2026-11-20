@@ -26,7 +26,13 @@ const TREND_TERMS = [
   "decrease", "rise", "fall",
 ] as const;
 const CONFIDENCE_VALUES = ["low", "medium", "high"] as const;
-const NUMBER_TOKEN = /\d+(?:\.\d+)?/g;
+const NUMBER_TOKEN = /(\d[\d,]*(?:\.\d+)?)(%?)/g;
+const DATE_TOKEN = /\d{1,4}/g;
+const CONTEXT_CHARS = 80;
+const CONTEXT_PADDING = 24;
+const RELATIVE_TOLERANCE = 1e-6;
+const YEAR_MIN = 1900;
+const YEAR_MAX = 2100;
 
 const SYSTEM_PROMPT = [
   "你是学生就业数据研判助手。输入是一份 JSON 聚合统计：岗位方向、职位、技能、观察窗、样本量、观测日数，以及可引用的岗位与政策 id。",
@@ -157,17 +163,107 @@ function clampFact(text: string): string {
   return characters.length <= MAX_FACT_CHARS ? text : characters.slice(0, MAX_FACT_CHARS).join("");
 }
 
-function numericTokens(text: string): string[] {
-  return text.match(NUMBER_TOKEN) ?? [];
+interface NumberToken {
+  raw: string;
+  value: number;
+  percent: boolean;
+  digits: number;
+  index: number;
+}
+
+/** 聚合输入里的数字可能嵌在对象与数组内（如 skills[].share），全部收集为可引用值。 */
+function collectNumbers(value: unknown, out: number[]): void {
+  if (typeof value === "number") {
+    if (Number.isFinite(value)) out.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectNumbers(item, out);
+    return;
+  }
+  if (isRecord(value)) {
+    for (const item of Object.values(value)) collectNumbers(item, out);
+  }
+}
+
+function decimalDigits(raw: string): number {
+  const dot = raw.indexOf(".");
+  return dot < 0 ? 0 : raw.length - dot - 1;
+}
+
+function numberTokens(text: string): NumberToken[] {
+  const tokens: NumberToken[] = [];
+  for (const match of text.matchAll(NUMBER_TOKEN)) {
+    const digitsPart = match[1]!.replaceAll(",", "");
+    const value = Number(digitsPart);
+    if (!Number.isFinite(value)) continue;
+    tokens.push({
+      raw: match[0],
+      value,
+      percent: match[2] === "%",
+      digits: decimalDigits(digitsPart),
+      index: match.index ?? 0,
+    });
+  }
+  return tokens;
+}
+
+function nearEquals(value: number, target: number): boolean {
+  return Math.abs(value - target) <= Math.max(RELATIVE_TOLERANCE, Math.abs(target) * RELATIVE_TOLERANCE);
+}
+
+function equalAt(value: number, target: number, digits: number): boolean {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) === Math.round(target * factor);
+}
+
+/** as_of 里的年、月、日片段可以原样引用，不算编造。 */
+function dateTokens(input: CareerBriefInputV1): Set<number> {
+  const tokens = new Set<number>();
+  for (const match of input.as_of.matchAll(DATE_TOKEN)) tokens.add(Number(match[0]));
+  return tokens;
+}
+
+function isDateToken(token: NumberToken, dates: ReadonlySet<number>): boolean {
+  if (!Number.isInteger(token.value)) return false;
+  return dates.has(token.value) || (token.value >= YEAR_MIN && token.value <= YEAR_MAX);
+}
+
+/**
+ * 引用判定：等值、百分比换算，或按输出自身精度舍入后相等。
+ * 0.426573… 可被引成 0.4266（4 位）、0.43、42.7%、42.66%；
+ * 整数（0 位小数）只认精确相等，因此 43%（把 42.65% 粗舍）会被拒绝。
+ */
+function matchesKnownNumber(token: NumberToken, known: readonly number[], dates: ReadonlySet<number>): boolean {
+  if (isDateToken(token, dates)) return true;
+  return known.some((value) => {
+    if (!Number.isFinite(value)) return false;
+    if (nearEquals(token.value, value)) return true;
+    if (nearEquals(token.value / 100, value)) return true;
+    if (token.digits === 0) return false;
+    if (equalAt(token.percent ? value * 100 : value, token.value, token.digits)) return true;
+    return token.percent ? false : equalAt(value * 100, token.value, token.digits);
+  });
+}
+
+function numberContext(text: string, token: NumberToken): string {
+  const start = Math.max(0, token.index - CONTEXT_PADDING);
+  const end = Math.min(text.length, token.index + token.raw.length + CONTEXT_PADDING);
+  const snippet = text.slice(start, end).replace(/\s+/g, " ").trim();
+  const characters = [...snippet];
+  return characters.length <= CONTEXT_CHARS ? snippet : characters.slice(0, CONTEXT_CHARS).join("");
 }
 
 function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly string[]): void {
-  const allowed = new Set(numericTokens(JSON.stringify(input)));
+  const known: number[] = [];
+  collectNumbers(input, known);
+  const dates = dateTokens(input);
   for (const text of texts) {
-    for (const token of numericTokens(text)) {
-      if (!allowed.has(token)) {
-        throw new CareerBriefValidationError(`Model output contains a number absent from the aggregate input: ${token}.`);
-      }
+    for (const token of numberTokens(text)) {
+      if (matchesKnownNumber(token, known, dates)) continue;
+      throw new CareerBriefValidationError(
+        `Model output contains a number absent from the aggregate input: ${token.raw} (context: ${numberContext(text, token)}).`,
+      );
     }
   }
 }
