@@ -13,6 +13,43 @@ import type { FeedItemSummary, SiteItemDetail } from "@aihot/contracts/site";
 /** When the synthetic reports were published. */
 export const FIXTURE_AT = "2026-10-04T08:00:00.000Z";
 
+/**
+ * The six career reads the workbench home makes. Answers fixtures a page can render without a block
+ * falling to "本区块暂时不可用"; `brief` answers 204 (no cached analysis yet), as the api does.
+ * Tests that own a deadline can set `X-Accel-Expires` before calling this.
+ */
+export function careerApi(url: URL, res: ServerResponse): unknown {
+  const at = FIXTURE_AT;
+  switch (url.pathname) {
+    case "/api/site/career-insights/summary":
+      return {
+        contract_version: "0.1", data_origin: "live", as_of: at, sample_size: 0, company_count: 0, source_count: 0,
+        first_observed_at: at, last_observed_at: at, has_multiple_snapshots: false, metrics: [], shared_themes: [],
+        dictionary_version: "fixture", warnings: [],
+      };
+    case "/api/site/career-insights/catalog":
+      return { contract_version: "0.1", data_origin: "live", as_of: at, window_days: 30, sample_size: 0, directions: [], titles: [], skills: [] };
+    case "/api/site/career-insights/signals":
+      return { contract_version: "0.1", data_origin: "live", window_days: 30, signals: [], skipped: [], generated_at: at };
+    case "/api/site/career-insights/daily":
+      return {
+        contract_version: "0.1", data_origin: "live", date: "2026-10-15", sources: [], has_run: true,
+        jobs_total: 0, new_jobs_today: 0, new_policies_today: 0, policies_total: 0, unknown_ratio: null, sample_size: 0, generated_at: at,
+      };
+    case "/api/site/career-insights/jobs":
+      return {
+        contract_version: "0.1", data_origin: "live", items: [], page: 1, page_size: 20, total: 0, as_of: at,
+        filters: { page: 1, page_size: 20 },
+      };
+    case "/api/site/career-insights/brief":
+      res.statusCode = 204;
+      res.end();
+      return undefined;
+    default:
+      return undefined;
+  }
+}
+
 /** A report as list cards show it; the fields a test does not name are fixed. */
 export function feedItem(fields: Partial<FeedItemSummary> & Pick<FeedItemSummary, "id" | "title">): FeedItemSummary {
   return {
@@ -47,6 +84,9 @@ export function fakeApi(route: (url: URL, res: ServerResponse, req: IncomingMess
     if (url.pathname === "/api/site/meta") return res.end(JSON.stringify({ changelogVersion: "fixture" }));
     if (url.pathname === "/api/site/track") { res.statusCode = 204; return res.end(); }
     if (url.pathname === "/api/health") return res.end("{}");
+    const career = careerApi(url, res);
+    if (res.writableEnded) return;
+    if (career !== undefined) return res.end(JSON.stringify(career));
     res.statusCode = 404;
     res.end(JSON.stringify({ code: "not_found" }));
   });

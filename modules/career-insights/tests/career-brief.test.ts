@@ -143,11 +143,55 @@ test("facts are cut to 60 characters", () => {
   assert.equal([...record.facts[0]!].length, 60);
 });
 
+function shareInput(overrides: Partial<CareerBriefInputV1> = {}): CareerBriefInputV1 {
+  return input({
+    skills: [{ skill: "data_analysis", job_count: 42, share: 0.4266 }],
+    ...overrides,
+  });
+}
+
 test("a number absent from the aggregate input rejects the draft", () => {
   assert.throws(
     () => composeCareerBrief(input(), draft({ facts: ["本月新增 999 个岗位"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
-    CareerBriefValidationError,
+    (error: unknown): boolean => error instanceof CareerBriefValidationError && error.message.includes("999"),
   );
+});
+
+test("a decimal share may be quoted as an equal, percentage or rounded value", () => {
+  for (const fact of ["技能占比 42.7%", "技能占比 42.66%", "技能占比 0.43"]) {
+    const record = composeCareerBrief(shareInput(), draft({ facts: [fact] }), {
+      generated_at: "2026-11-20T01:00:00.000Z",
+    });
+    assert.equal(record.facts[0], fact);
+  }
+});
+
+test("a long decimal share may be quoted at lower precision", () => {
+  const record = composeCareerBrief(
+    shareInput({ skills: [{ skill: "data_analysis", job_count: 61, share: 61 / 143 }] }),
+    draft({ facts: ["data_analysis 占比 0.4266"] }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.equal(record.facts[0], "data_analysis 占比 0.4266");
+});
+
+test("a percentage the input cannot support is rejected with its context", () => {
+  assert.throws(
+    () => composeCareerBrief(shareInput(), draft({ facts: ["技能占比 43%"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
+    (error: unknown): boolean =>
+      error instanceof CareerBriefValidationError && error.message.includes("43%") && error.message.includes("技能占比 43%"),
+  );
+});
+
+test("sample sizes and the as_of date are quotable", () => {
+  const record = composeCareerBrief(
+    input({ sample_size: 188 }),
+    draft({ facts: ["样本量 188 个岗位", "数据截止 2026 年 11 月"] }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.deepEqual(record.facts, ["样本量 188 个岗位", "数据截止 2026 年 11 月"]);
 });
 
 test("evidence ids outside the input candidates are dropped silently", () => {

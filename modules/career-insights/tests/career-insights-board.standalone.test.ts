@@ -276,7 +276,8 @@ test("student-friendly and city filters drive ranking and links", () => {
   assert.equal(studentHtml("[data-filter-student-friendly='idle']").attr("href"), "/career-insights/jobs?page=1&page_size=20");
 
   const cityFilters: JobFiltersV1 = { ...FILTERS, city: "北京" };
-  assert.deepEqual(catalogCityOptions(CATALOG.titles), ["北京", "上海", "深圳"]);
+  // 三个城市的计数相同，C-CATALOG@1 未定义同频时的先后；localeCompare 随环境的 ICU 排序规则而变，按集合比较。
+  assert.deepEqual(new Set(catalogCityOptions(CATALOG.titles)), new Set(["北京", "上海", "深圳"]));
   assert.deepEqual(filterTitles(CATALOG.titles, cityFilters).map((title) => title.title_key), ["算法工程师"]);
 
   const cityHtml = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: cityFilters }));
