@@ -362,6 +362,153 @@ test("--rerun-aipo：6 条已知误判（传统领域岗 + AI 仅作工具）回
   );
 });
 
+/** 第二轮收紧：标题命中产品/架构/策划/合作商职能词的传统岗（T79 残留 8 条）。 */
+const roundTwoFixtures = [
+  {
+    id: "18f54f89-0000-0000-0000-000000000101",
+    title: "差旅场景组-产品经理",
+    raw_text:
+      "负责差旅场景下出行/住宿产品功能的规划与设计，输出高质量产品方案；协同技术、运营、商务等团队推进落地。" +
+      "\n3年以上产品经理工作经验；能熟练应用AI工具完成以项目或完整能力为目标的产品能力建设。",
+  },
+  {
+    id: "225bfe26-0000-0000-0000-000000000102",
+    title: "微信小店-产品策划-b 端产品方向",
+    raw_text:
+      "负责商业交易产研相关功能的策划，从产品概念提出、设计到推动实施；结合商家经营模式制定产品方向与功能规划。" +
+      "\n1年及以上产品策划经验，有电商行业背景优先。",
+  },
+  {
+    id: "365f9ba0-0000-0000-0000-000000000103",
+    title: "金融解决方案架构师（J107444）",
+    raw_text:
+      "面向金融机构客户做需求洞察与经营，识别云与人工智能领域的建设需求；负质检云整体解决方案规划与售前全流程推进" +
+      "（需求分析、方案设计、技术交流、架构评估、POC、投标）；5年以上企业级解决方案或技术售前经验。",
+  },
+  {
+    id: "4803cd06-0000-0000-0000-000000000104",
+    title: "合作商管理专家",
+    raw_text:
+      "制定并优化合作商管理制度与流程；负责合作商成本分析改善与绩效评估，联动前线推动改善闭环；" +
+      "\n5年以上合作商管理或相关业务运营经验；熟练使用AI工具，帮助工作提效。",
+  },
+  {
+    id: "5caff3f3-0000-0000-0000-000000000105",
+    title: "产品经理（联盟 C 端产品方向）",
+    raw_text:
+      "负责联盟 C 端产品链路建设，覆盖用户从触达、浏览、交易到核销的全交易链路；主导关键转化环节的产品设计与迭代；" +
+      "\n5年以上互联网产品经验，有导购/CPS 联盟或交易类产品经验者优先。",
+  },
+  {
+    id: "5e7bd45f-0000-0000-0000-000000000106",
+    title: "到餐交履产品经理/高级产品经理（排队快点方向）",
+    raw_text:
+      "负责排队快点产品的中长期规划，打通排队系统与第三方SaaS的深度对接；负责用户端选号、预点餐、支付等交互链路的设计与迭代。" +
+      "\n5年以上互联网产品经验，有O2O、到店/到家交易履约经验者优先。",
+  },
+  {
+    id: "a909889e-0000-0000-0000-000000000107",
+    title: "B端产品经理",
+    raw_text:
+      "负责到餐商家信息采集产品的规划与全链路产品设计，推进信息采集从人工到半自动；" +
+      "围绕采集准确率、覆盖率组建敏捷小组，推进需求评审、方案设计、开发上线、效果验证全流程。" +
+      "\n3年以上B端产品经理工作经验；能够充分利用AI提升个人效率。",
+  },
+  {
+    id: "da0e2e35-0000-0000-0000-000000000108",
+    title: "方案策划经理（北京/上海）",
+    raw_text:
+      "负责营销业务的全链路营销策划，制定并执行营销策略；挖掘潜在商业机会，为不同行业客户提供定制化的营销解决方案；" +
+      "与销售、产品、运营等多部门协作，推动策略落地实施并输出营销洞察报告。",
+  },
+];
+
+test("--rerun-aipo 第二轮：8 条产品/架构/策划职能岗回退 unknown，第二次 0 候选", async () => {
+  const store = new MemoryStore(
+    roundTwoFixtures.map((fixture) =>
+      job({ ...fixture, role_family: "ai_product_operations", normalizer_version: "normalizer/llm-0.1" }),
+    ),
+  );
+  const llm = fakeLlm([aipoOutput]);
+
+  const first = await runBackfill({ apply: true, limit: null, rerunAipo: true, callLlm: llm.callLlm, store });
+
+  assert.equal(first.candidates, 8);
+  assert.equal(first.calls, 8);
+  assert.equal(first.changed, 8);
+  assert.equal(first.downgraded, 8);
+  for (const fixture of roundTwoFixtures) {
+    const row = store.jobs.find((item) => item.id === fixture.id)!;
+    assert.equal(row.role_family, "unknown", `${fixture.title} 应回退 unknown`);
+    assert.equal(row.normalizer_version, LLM_NORMALIZER_VERSION);
+  }
+
+  const second = await runBackfill({ apply: true, limit: null, rerunAipo: true, callLlm: llm.callLlm, store });
+  assert.equal(second.candidates, 0);
+  assert.equal(second.calls, 0);
+  assert.equal(llm.calls(), 8);
+});
+
+test("标题含 AI 主体词的产品/架构岗不被降级", () => {
+  const fixtures = ["AI产品经理", "大模型产品经理", "AI 解决方案架构师", "AI产品经理（Agent 知识引擎方向）"];
+  for (const title of fixtures) {
+    assert.equal(
+      downgradeNonAiOperations(
+        { title, raw_text: "负责 AI 产品规划与运营，追踪大模型能力边界。" },
+        { role_family: "ai_product_operations" },
+      ).downgraded,
+      false,
+      `${title} 标题含 AI 主体词，不应降级`,
+    );
+  }
+});
+
+test("正文以 AI 产品/大模型应用为主体时，同款传统标题不降级（红线）", () => {
+  const fixtures = [
+    { title: "B端产品经理", raw_text: "主导信息采集AI能力建设，涵盖智能语音外呼、商家端Agent自助采集等核心AI产品功能。" },
+    { title: "产品经理（联盟 C 端产品方向）", raw_text: "对 AI 产品形态有真实的实践或深度思考，能将 AI 能力转化为可衡量的业务价值。" },
+    { title: "金融解决方案架构师（J107444）", raw_text: "挖掘可落地的AI应用机会，推动从场景验证到平台建设及规模化应用。" },
+    {
+      title: "伙伴FDE培训设计与教研专家（J107259）",
+      raw_text: "熟悉大模型应用（RAG、Workflow、Agent）与常见模型工具，负责 Agent 搭建与评测上线等课程开发。",
+    },
+  ];
+  for (const fixture of fixtures) {
+    assert.equal(
+      downgradeNonAiOperations(fixture, { role_family: "ai_product_operations" }).downgraded,
+      false,
+      `${fixture.title} 正文含 AI 主体职责，不应降级`,
+    );
+  }
+});
+
+test("a1f03c68（AI 产品运营）与 7dec1e39（伙伴FDE教研）不进入重判候选", async () => {
+  const store = new MemoryStore([
+    job({
+      id: "a1f03c68-f271-482c-8734-c3cf91d382db",
+      title: "AI产品运营岗",
+      raw_text: "参与美团的各类运营岗位：用户运营、商家及供给运营、内容运营、工具系统运营。",
+      role_family: "ai_product_operations",
+      normalizer_version: "normalizer/llm-0.1",
+    }),
+    job({
+      id: "7dec1e39-4bd0-4545-9a09-4672d2a3b39c",
+      title: "伙伴FDE培训设计与教研专家（J107259）",
+      raw_text: "围绕百度智能云伙伴FDE培训开发需求发现、方案设计、Agent搭建、评测上线等课程；熟悉大模型应用（RAG、Workflow、Agent）。",
+      role_family: "ai_product_operations",
+      normalizer_version: LLM_NORMALIZER_VERSION,
+    }),
+  ]);
+  const llm = fakeLlm([aipoOutput]);
+
+  const summary = await runBackfill({ apply: true, limit: null, rerunAipo: true, callLlm: llm.callLlm, store });
+
+  assert.equal(summary.candidates, 0);
+  assert.equal(summary.calls, 0);
+  assert.equal(summary.downgraded, 0);
+  assert.equal(store.jobs.every((item) => item.role_family === "ai_product_operations"), true);
+});
+
 test("真实的 AI 产品运营岗不被后置校验降级", async () => {
   const store = new MemoryStore([
     job({
