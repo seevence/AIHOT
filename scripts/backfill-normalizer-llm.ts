@@ -23,11 +23,13 @@ import type {
   StudentFriendly,
 } from "../modules/career-insights/contracts/index.ts";
 import { SKILL_ALIASES, SKILL_LABELS } from "../modules/career-insights/data/dictionaries.ts";
+import { LLM_NORMALIZER_VERSION } from "../modules/career-insights/data/normalize.ts";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..");
 
 // 0.3 收紧了 aipo 正文主体短语豁免。版本号前进，让默认回填重新审视旧版本行。
-export const LLM_NORMALIZER_VERSION = "normalizer/llm-0.3";
+// 版本号定义在模块的 data/normalize.ts 里，每日 cron 兜底与手工回填共用；这里保持既有导出。
+export { LLM_NORMALIZER_VERSION };
 export const LLM_PURPOSE = "career-normalize";
 export const LLM_PROMPT_VERSION = "career-normalize/2";
 export const LLM_MODEL = "default";
