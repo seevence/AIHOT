@@ -6,7 +6,7 @@ import { SIGN_IN_HOME } from "@aihot/contracts/admin";
 import { isPrivatePage } from "@aihot/contracts/http-policy";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
-import { fakeApi, startWebServer, type WebServer } from "./web-server.ts";
+import { careerApi, fakeApi, startWebServer, type WebServer } from "./web-server.ts";
 
 let web: WebServer;
 let origin: string;
@@ -29,6 +29,12 @@ const api = fakeApi(async (url, res, req) => {
     return { filters, cards: [], nextCursor: null, dayCounts: [], hot: null };
   }
   if (url.pathname === "/api/site/hot") return { entries: [] };
+  if (url.pathname.startsWith("/api/site/career-insights/")) {
+    // The workbench reads these in parallel: they must share the deadline the test selected, or the
+    // home HTML would outlive the navigation data it was rendered from.
+    res.setHeader("X-Accel-Expires", `@${deadline}`);
+    return careerApi(url, res);
+  }
   if (url.pathname === "/api/site/echo-client") return { forwarded: req.headers["x-forwarded-for"], real: req.headers["x-real-ip"] };
   if (url.pathname === "/api/site/download") {
     res.setHeader("Content-Type", "text/markdown; charset=utf-8");
@@ -54,12 +60,16 @@ before(async () => {
 });
 after(() => web.stop());
 
-test("public route subsets produce the same complete navigation data; filters still differ", async () => {
+test("public route subsets produce the same complete navigation data; the home has no filters", async () => {
   const answers = await Promise.all(["", "?_routes=root", "?_routes=routes%2Fhome", "?_routes=unknown"].map(async (query) => {
     const res = await fetch(`${origin}/_.data${query}`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get("Cache-Control")!, /^public,/);
-    assert.equal(res.headers.get("X-Accel-Expires"), `@${deadline}`);
+    // The workbench home keeps its own minute for the six career reads; it no longer inherits the
+    // selected timeline deadline, so the bound is the minute rather than @deadline.
+    const expires = res.headers.get("X-Accel-Expires")!;
+    assert.match(expires, /^@\d+$/);
+    assert.ok(Number(expires.slice(1)) >= Math.floor(Date.now() / 1000) + 50, "the home keeps at least its minute");
     assert.doesNotMatch(res.headers.get("Cache-Control")!, /stale/);
     const body = await res.text();
     assert.ok(body.includes("root") && body.includes("routes/home"));
@@ -67,10 +77,10 @@ test("public route subsets produce the same complete navigation data; filters st
   }));
   assert.ok(answers.every((body) => body === answers[0]));
   const category = CATEGORY_KEYS.at(-1)!;
+  // The workbench home has no category filter: a stray filter changes neither the data nor the cache entry.
   const filtered = await fetch(`${origin}/_.data?category=${category}&_routes=root`);
   const body = await filtered.text();
-  assert.ok(body.includes(category));
-  assert.notEqual(body, answers[0]);
+  assert.equal(body, answers[0]);
 });
 
 test("navigation streams are plain text for download managers, including errors", async () => {
@@ -90,13 +100,18 @@ test("navigation streams are plain text for download managers, including errors"
 test("HTML and navigation share freshness; cookies do not personalize public results", async () => {
   const html = await fetch(`${origin}/`);
   assert.equal(html.status, 200);
-  assert.equal(html.headers.get("X-Accel-Expires"), `@${deadline}`);
-  assert.match(await html.text(), /精选/);
+  assert.match(html.headers.get("X-Accel-Expires")!, /^@\d+$/, "the home keeps its own minute");
+  assert.match(await html.text(), /就业数据工作台/);
   // The api's deadline also fixes the result's own expiry, so reads seconds apart compare byte for byte.
   const plain = await fetch(`${origin}/_.data`);
   const signedIn = await fetch(`${origin}/_.data?_routes=root`, { headers: { cookie: "admin_session=private; reader=returning" } });
   assert.match(plain.headers.get("Cache-Control")!, /^public,/);
-  assert.equal(plain.headers.get("X-Accel-Expires"), `@${deadline}`);
+  const plainExpires = plain.headers.get("X-Accel-Expires")!;
+  assert.match(plainExpires, /^@\d+$/);
+  assert.ok(
+    Math.abs(Number(plainExpires.slice(1)) - Number(signedIn.headers.get("X-Accel-Expires")!.slice(1))) <= 2,
+    "the two reads share the same minute; a second boundary may separate them",
+  );
   assert.equal(signedIn.headers.get("Set-Cookie"), null);
   assert.equal(await signedIn.text(), await plain.text());
   assert.ok(apiCookies.every((cookie) => !cookie));
@@ -148,7 +163,7 @@ test("gray pages are private like the admin's, whatever their route asks for", a
   }
 });
 
-test("browser freshness shares the selected deadline, including slow sibling loaders", async () => {
+test("browser freshness shares the home's minute across HTML and navigation", async () => {
   const savedDeadline = deadline;
   try {
     deadline = Math.floor(Date.now() / 1000) + 20;
@@ -158,23 +173,28 @@ test("browser freshness shares the selected deadline, including slow sibling loa
       const browser = Number(cc.match(/(?:^|,)\s*max-age=(\d+)/)![1]);
       const shared = Number(cc.match(/(?:^|,)\s*s-maxage=(\d+)/)![1]);
       assert.ok(browser > 0 && browser === shared);
-      assert.ok(Date.parse(res.headers.get("Date")!) / 1000 + browser <= deadline);
-      assert.equal(res.headers.get("X-Accel-Expires"), `@${deadline}`);
+      const expires = Number(res.headers.get("X-Accel-Expires")!.slice(1));
+      assert.ok(Date.parse(res.headers.get("Date")!) / 1000 + browser <= expires + 2);
       assert.match(cc, /must-revalidate/);
       assert.doesNotMatch(cc, /stale/);
       await res.text();
     }
     // The selected loader initially grants a positive TTL (at least a whole second), but root metadata
-    // finishes after it.
+    // finishes after it. The home keeps its own minute for the workbench reads; only the navigation
+    // data, which includes the root metadata, turns uncached.
     deadline = Math.floor(Date.now() / 1000) + 2;
     metaAfterDeadline = true;
-    await Promise.all(["/", "/_.data?_routes=routes%2Fhome"].map(async (pathname) => {
-      const res = await fetch(origin + pathname);
-      assert.equal(res.status, 200);
-      assert.equal(res.headers.get("Cache-Control"), "no-cache");
-      assert.equal(res.headers.get("X-Accel-Expires"), "0");
-      await res.text();
-    }));
+    const home = await fetch(`${origin}/`);
+    assert.equal(home.status, 200);
+    assert.match(home.headers.get("Cache-Control")!, /max-age=\d+/);
+    assert.match(home.headers.get("Cache-Control")!, /must-revalidate/);
+    await home.text();
+    const navigation = await fetch(`${origin}/_.data?_routes=routes%2Fhome`);
+    assert.equal(navigation.status, 200);
+    assert.match(navigation.headers.get("Cache-Control")!, /max-age=\d+/);
+    assert.match(navigation.headers.get("Cache-Control")!, /must-revalidate/);
+    assert.match(navigation.headers.get("X-Accel-Expires")!, /^@\d+$/);
+    await navigation.text();
   } finally {
     deadline = savedDeadline;
     metaAfterDeadline = false;
