@@ -1,42 +1,60 @@
-import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } from "react-router";
+import { isRouteErrorResponse, useLoaderData, useRouteError } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
-import type { JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import { careerApiPath, loadCareerApi, parseDashboardFilters, parseDirectionView, serializeJobFilters } from "../api";
+import type { Screen } from "@aihot/web/components/shell/screens";
+import type { SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import { API_BASE_URL } from "@aihot/web/lib/api.server";
+import { careerApiPath, loadCareerApi } from "../api";
 import { loadCareerSignals } from "../feeds.server";
-import { CareerDashboard } from "../components/CareerDashboard";
-import { CareerError, CareerLoading, CareerPending } from "../components/CareerStates";
+import type { CareerBriefV1, CareerCatalogResponseV1 } from "../../contracts/index.ts";
+import { CareerInsightsBoard } from "../components/CareerInsightsBoard";
+import { CareerError, CareerLoading } from "../components/CareerStates";
+
+const CATALOG_LIMIT = 10;
+const CATALOG_WINDOW_DAYS = 30;
+
+/** 任一接口失败只让对应区块显示“暂时不可用”，不整页失败。 */
+function degrade<T>(promise: Promise<T>, signal: AbortSignal): Promise<T | null> {
+  return promise.catch((error: unknown) => {
+    if (signal.aborted) throw error;
+    return null;
+  });
+}
+
+/** 离线研判无缓存时 API 返回 204；这里把 204 与请求失败都收敛为 null，由页面显示“继续积累观测”。 */
+async function loadCareerBrief(signal: AbortSignal): Promise<CareerBriefV1 | null> {
+  try {
+    const response = await fetch(`${API_BASE_URL}${careerApiPath("/brief")}`, {
+      headers: { accept: "application/json", "x-aihot-ssr": "1" },
+      signal,
+    });
+    if (response.status === 204) return null;
+    if (!response.ok) return null;
+    return (await response.json()) as CareerBriefV1;
+  } catch (error) {
+    if (signal.aborted) throw error;
+    return null;
+  }
+}
 
 export async function loader({ request }: LoaderArgs) {
-  const search = new URL(request.url).searchParams;
-  const filters = parseDashboardFilters(search);
-  const { view, roleFamily } = parseDirectionView(search);
-  const query = serializeJobFilters(filters);
-  const directionRoleFamily = view === "direction" ? roleFamily : undefined;
-  const [summary, jobs, studentFriendlyJobs, signals] = await Promise.all([
-    loadCareerApi<SummaryResponseV1>(careerApiPath("/summary"), request.signal),
-    loadCareerApi<JobListResponseV1>(`${careerApiPath("/jobs")}?${query}`, request.signal),
-    directionRoleFamily
-      ? loadCareerApi<JobListResponseV1>(
-          `${careerApiPath("/jobs")}?${serializeJobFilters({
-            ...filters,
-            role_family: directionRoleFamily,
-            student_friendly: "yes",
-            page: 1,
-          })}`,
-          request.signal,
-        )
-      : Promise.resolve(null),
-    loadCareerSignals(request.signal),
+  const { signal } = request;
+  const [summary, catalog, signals, brief] = await Promise.all([
+    degrade(loadCareerApi<SummaryResponseV1>(careerApiPath("/summary"), signal), signal),
+    degrade(
+      loadCareerApi<CareerCatalogResponseV1>(`${careerApiPath("/catalog")}?limit=${CATALOG_LIMIT}&window_days=${CATALOG_WINDOW_DAYS}`, signal),
+      signal,
+    ),
+    degrade(loadCareerSignals(signal), signal),
+    loadCareerBrief(signal),
   ]);
-  const direction = directionRoleFamily
-    ? { roleFamily: directionRoleFamily, studentFriendlyTotal: studentFriendlyJobs?.total ?? 0 }
-    : undefined;
-  return { summary, jobs, filters, direction, signals };
+  return { summary, catalog, signals, brief };
 }
 
 export function headers() {
   return { "Cache-Control": "no-store" };
 }
+
+export const handle: Screen = { tab: "insights", name: "职业洞察" };
 
 export function meta() {
   return [{ title: "职业洞察" }];
@@ -51,16 +69,5 @@ export function ErrorBoundary() {
 
 export default function CareerDashboardRoute() {
   const data = useLoaderData<typeof loader>();
-  const navigation = useNavigation();
-  const pending = navigation.state === "loading";
-  return (
-    <>
-      {pending && (
-        <div className="mb-3">
-          <CareerPending label="正在加载筛选结果…" />
-        </div>
-      )}
-      <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} direction={data.direction} signals={data.signals} />
-    </>
-  );
+  return <CareerInsightsBoard summary={data.summary} catalog={data.catalog} signals={data.signals} brief={data.brief} />;
 }

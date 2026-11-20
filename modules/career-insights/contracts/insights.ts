@@ -161,3 +161,21 @@ export interface CareerCatalogResponseV1 {
   titles: CareerTitleV1[];
   skills: CareerSkillV1[];
 }
+
+/**
+ * 离线 LLM 研判缓存：学生访问直接读最近一次生成结果，无缓存时 API 返回 204。
+ * 数字来自聚合指标，模型只产出文字；观测日不足 2 天时 confidence="low" 且不做走势断言。
+ */
+export interface CareerBriefV1 {
+  contract_version: "0.1";
+  generated_at: string;
+  as_of: string;
+  sample_size: number;
+  window_days: number;
+  facts: string[];
+  inferences: string[];
+  actions: string[];
+  evidence: Array<{ kind: "job" | "policy"; id: string; title: string }>;
+  limitations: string[];
+  confidence: "low" | "medium" | "high";
+}
