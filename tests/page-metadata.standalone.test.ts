@@ -52,6 +52,30 @@ const api = createServer((req, res) => {
   res.setHeader("Content-Type", "application/json");
   const send = (value: unknown) => res.end(JSON.stringify(value));
   if (path === "/api/site/meta") return send({ changelogVersion: "fixture" });
+  // The home page is the career workbench; each block degrades alone, so every feed it reads answers.
+  if (path === "/api/site/career-insights/summary") return send({
+    contract_version: "0.1", data_origin: "synthetic_fixture", as_of: at,
+    sample_size: 0, company_count: 0, source_count: 0, first_observed_at: at, last_observed_at: at,
+    has_multiple_snapshots: false, metrics: [], shared_themes: [], dictionary_version: "fixture", warnings: [],
+  });
+  if (path === "/api/site/career-insights/catalog") return send({
+    contract_version: "0.1", data_origin: "synthetic_fixture", as_of: at, window_days: 7, sample_size: 0,
+    directions: [], titles: [], skills: [],
+  });
+  if (path === "/api/site/career-insights/signals") return send({
+    contract_version: "0.1", data_origin: "synthetic_fixture", window_days: 7, signals: [], skipped: [], generated_at: at,
+  });
+  if (path === "/api/site/career-insights/daily") return send({
+    contract_version: "0.1", data_origin: "synthetic_fixture", date: "2026-10-04", sources: [], has_run: false,
+    jobs_total: 0, new_jobs_today: 0, new_policies_today: 0, policies_total: 0, unknown_ratio: null, sample_size: 0, generated_at: at,
+  });
+  if (path === "/api/site/career-insights/jobs") return send({
+    contract_version: "0.1", data_origin: "synthetic_fixture", items: [], page: 1, page_size: 20, total: 0, as_of: at,
+    filters: { page: 1, page_size: 20 },
+  });
+  if (path === "/api/site/career-insights/brief") { res.statusCode = 204; return res.end(); }
+  // The daily archive lists the issues; it is a page of its own, not the latest issue.
+  if (path === "/api/site/reports/daily") return send({ items: [{ key: "2026-10-04", issueNumber: 1, title: `${SITE.name} 测试刊物`, count: 1 }] });
   if (path === "/api/site/timeline") return send({ filters: readFilters(url.searchParams), cards: [{ key: item.id, anchorAt: at, item, group: null }], nextCursor: null, hot: null, dayCounts: { "2026-10-04": 1 } });
   if (path === "/api/site/pool") return send({ filters: { ...readFilters(url.searchParams), q: url.searchParams.get("q"), tab: url.searchParams.get("tab") ?? "time" }, items: [item], page: Number(url.searchParams.get("page") ?? 1), pageCount: 3, total: 100, todayCount: 1, freshness: at });
   const article = /^\/api\/site\/items\/([^/]+?)(?:\/original)?$/.exec(path)?.[1];
@@ -85,15 +109,21 @@ function structured($: cheerio.CheerioAPI): Array<Record<string, unknown>> {
 }
 
 test("filtered feeds keep their exact content address but leave indexing to the public landing pages", async () => {
-  for (const base of ["/", "/all"]) for (const query of ["channel=news", "category=ai-models", "tag=Agent", "channel=x&category=paper&tag=Agent"]) {
-    const $ = await page(`${base}?${query}&utm_source=fixture&anchorAt=old&deep=1`);
-    assert.equal($("meta[name=robots]").attr("content"), "noindex, follow", `${base}?${query}`);
-    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}${base}?${query}`);
+  for (const query of ["channel=news", "category=ai-models", "tag=Agent", "channel=x&category=paper&tag=Agent"]) {
+    const $ = await page(`/all?${query}&utm_source=fixture&anchorAt=old&deep=1`);
+    assert.equal($("meta[name=robots]").attr("content"), "noindex, follow", `/all?${query}`);
+    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?${query}`);
     assert.ok($("main").text().includes(item.title));
   }
   const $ = await page("/all?q=Claude&tab=relevance&page=2&anchorAt=old");
   assert.equal($("meta[name=robots]").attr("content"), "noindex, follow");
   assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?q=Claude&tab=relevance&page=2`);
+  // The home page is the career workbench now: a feed channel selects nothing there, so it keeps the
+  // landing page's own address and stays indexable.
+  const home = await page("/?channel=news");
+  assert.equal(home("meta[name=robots]").attr("content"), "max-image-preview:large");
+  assert.equal(home("link[rel=canonical]").attr("href"), `${web.origin}/`);
+  assert.ok(!home("main").text().includes(item.title), "the filtered feed lives on /all");
 });
 
 test("ordinary feed pages remain indexable and normalize ignored parameters", async () => {
@@ -121,13 +151,13 @@ test("an event page stands in search once it gathers more than one report", asyn
 });
 
 // Chinese readers search issues by the date as they write it ("10月4日 AI 新闻"), not by the key.
-for (const [kind, label, date] of [["daily", "日报", "10月4日"], ["weekly", "周报", "9月28日—10月4日"], ["monthly", "月报", "2026年10月"]] as const) {
+// /daily is the career daily now, not an industry issue; the industry issues left are the weekly and monthly.
+for (const [kind, label, date] of [["weekly", "周报", "9月28日—10月4日"], ["monthly", "月报", "2026年10月"]] as const) {
   test(`${kind} issue metadata describes its visible lead and the permanent entry names the latest issue's date`, async () => {
     const r = report(kind);
     const $ = await page(`/${kind}/${r.key}`);
     const title = `${withSubject(label)}｜${date}：${r.lead!.title}`;
-    // A daily is described by its own headlines; its lead's paragraph is that article's own description.
-    const description = kind === "daily" ? `${date} ${withSubject("新闻")}：${r.lead!.title}；${item.title}。` : `${date} ${withSubject("资讯")}：${r.lead!.leadParagraph}`;
+    const description = `${date} ${withSubject("资讯")}：${r.lead!.leadParagraph}`;
     assert.equal($("meta[name=description]").attr("content"), description);
     assert.equal($("title").text(), `${title} · ${SITE.name}`);
     assert.equal($("meta[property='og:title']").attr("content"), title);
@@ -152,8 +182,20 @@ test("a daily without a lead is not headed by a report its highlights were only 
   assert.equal(structured($).find((entry) => entry["@type"] === "NewsArticle")!.headline, title);
 });
 
+test("the daily archive and the career daily have their own names instead of an issue's", async () => {
+  const archive = await page("/daily/archive");
+  assert.equal(archive("title").text(), `${withSubject("日报")} · 历史存档 · ${SITE.name}`);
+  assert.equal(archive("meta[name=robots]").attr("content"), "max-image-preview:large");
+  assert.equal(archive("link[rel=canonical]").attr("href"), `${web.origin}/daily/archive`);
+  // Its own description, not the latest issue's lead.
+  assert.equal(archive("meta[name=description]").attr("content"), `${SITE.name} 历史日报，按日期归档。`);
+  const daily = await page("/daily");
+  assert.equal(daily("title").text(), `就业日报（2026-10-04） · ${SITE.name}`);
+  assert.equal(daily("link[rel=canonical]").attr("href"), `${web.origin}/daily`);
+});
+
 test("the latest issue is one page however its address is written", async () => {
-  for (const path of ["/daily/", "/weekly/"]) {
+  for (const path of ["/weekly/", "/monthly/"]) {
     const $ = await page(path);
     assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}${path.slice(0, -1)}`, path);
   }
