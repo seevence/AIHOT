@@ -306,6 +306,13 @@ job 侧合计 accepted 6 / updated 0 / duplicates 24；`career_job_observations`
 - 空值、非整数、越界（1..10）均抛 `CliArgumentError` 并 `exit=2`，在发起任何网络请求前退出，不静默回退。
 - 提交后 report 顶层写入 `page_limit`；本次证据为 `page_limit=2`。
 
+### 采集窗口上限与 `--pages N` 口径（2026-11-19 补登）
+
+- **`pageLimit` 上限为 10**：三个 job adapter（腾讯 / 美团 / 百度）内部对 `pageLimit` 做 `Math.max(1, Math.min(pageLimit, 10))` clamp，超过 10 只会被截断到 10，**不报错**——这是既有硬编码，此前未文档化。理由是防止单轮采集耗时与源站压力失控：单页 10 条、单源 10 页已是 100 条/源，再放大既拉长 wall time，也提高触发源站限流/封禁的概率。
+- CLI 侧 `--pages` 与 adapter 同一区间（`PAGE_LIMIT_MIN=1`、`PAGE_LIMIT_MAX=10`），但越界（<1 或 >10）在发起任何网络请求前抛 `CliArgumentError`、`exit=2`，不静默回退；截断只发生在直接调用 adapter 的路径上。
+- `--pages N` 的含义是「**每源 N 页 × 每页 10 条**」，不是「每源 N 条」：N=1 → 每源 10 条，N=2 → 每源 20 条，N=5 → 每源 50 条，N=10 → 每源 100 条。
+- 单轮采集窗口 = **3 个 job 源 × N 页 × 10 条**（政策源不参与分页口径，仍为每源 1 列表 + 3 详情）。因此 N=2 → 60 条/轮（与「扩采实测」的 `job 侧 collected 60` 一致），N=5 → 150 条/轮，N=10 → 300 条/轮；这些是采集上限，实际入库量仍受去重（`duplicates`）与解析拒绝影响。
+
 ### 扩采实测
 
 命令：`npx tsx modules/career-insights/collector/cli/ingest-career.ts --live --pages 2`
@@ -411,3 +418,4 @@ B 侧落地要点：
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`（merge：按 A 裁定修正 unknown 与应届友好文案，源提交 `04f7cc4`）。
 - 本次同步：未关闭项 #7 与待办 #2 的「E 复验已启动」已被后续取代——E1–E5 + E6 已合入（`cd69c68`），真实数据复验第一段 22/22、第二段 43/43、扩采 74 行增量 39/39 全 PASS；政策列表页前端仍 404，属未覆盖项（路由归 A）。历史结论与 74 行基线数字（jobs 74 / obs 230 / policies 6 / runs 38 等）保持不变。
 - **2026-11-19**：`1ae9ccd`（含政策页 `8e81f33`）——新增「候选源启用评估（2026-11-19，只读）」：`moe-policy` 代码就绪但受 HTTP 降级门禁阻塞、待 A 裁决；阿里与字节不建议；本轮不启用任何新源，74 行基线不变。
+- **2026-11-19**：`b3375cc`（PR #12 已合入主线）——补登「采集窗口上限与 `--pages N` 口径」：`pageLimit` 上限 10（adapter 内部 clamp 1..10，超限截断不报错；CLI `--pages` 越界报错退出），`--pages N` 为每源 N 页 × 每页 10 条，单轮窗口 = 3 源 × N × 10。仅补文档，采集行为与历史结论未变。

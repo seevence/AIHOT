@@ -458,6 +458,49 @@ test("old normalizer rows raise a stale warning and the unknown bucket reports c
   );
 });
 
+test("llm-backed normalizer rows count as current and do not raise a stale warning", async () => {
+  await seed(job({ normalizer_version: "normalizer/llm-0.1" }));
+
+  const summary = await repository.summary();
+  assert.equal(summary.sample_size, 1);
+  assert.equal(summary.warnings.some((warning) => warning.code === "stale_data"), false);
+});
+
+test("mixed current and llm-backed rows do not raise a stale warning", async () => {
+  await seed(
+    job({ normalizer_version: NORMALIZER_VERSION }),
+    job({ job_key: "job-2", content_hash: digest("j2"), normalizer_version: "normalizer/llm-0.1" }),
+  );
+
+  const summary = await repository.summary();
+  assert.equal(summary.sample_size, 2);
+  assert.equal(summary.warnings.some((warning) => warning.code === "stale_data"), false);
+});
+
+test("a pre-0.3.0 version still raises a stale warning", async () => {
+  await seed(job({ normalizer_version: "normalizer/0.2.0" }));
+
+  const summary = await repository.summary();
+  assert.ok(summary.warnings.some((warning) => warning.code === "stale_data"));
+});
+
+test("a row without a normalizer version is treated as stale", async () => {
+  await seed(job());
+  // 该列在 schema 上是 NOT NULL：临时放开约束，覆盖「版本信息缺失」分支。
+  await sql`ALTER TABLE career_jobs ALTER COLUMN normalizer_version DROP NOT NULL`;
+  try {
+    await sql`UPDATE career_jobs SET normalizer_version = NULL`;
+
+    const summary = await repository.summary();
+    assert.ok(summary.warnings.some((warning) => warning.code === "stale_data"));
+  } finally {
+    await sql`DELETE FROM career_job_observations
+      WHERE job_id IN (SELECT id FROM career_jobs WHERE normalizer_version IS NULL)`;
+    await sql`DELETE FROM career_jobs WHERE normalizer_version IS NULL`;
+    await sql`ALTER TABLE career_jobs ALTER COLUMN normalizer_version SET NOT NULL`;
+  }
+});
+
 test("a fully classified sample still reports an explicit zero unknown coverage", async () => {
   await seed(job({ role_family: "data" }));
 

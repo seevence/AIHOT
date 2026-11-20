@@ -2,6 +2,7 @@
 // with real batches against PostgreSQL and then assert what the public summary will report, because
 // the value of this chain is the evidence it can defend, not the rows it stores.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { after, beforeEach, test } from "node:test";
 import { closeDb, sql } from "@aihot/backend/db";
 import type { NormalizedJobV1 } from "../contracts/index.ts";
@@ -360,4 +361,33 @@ test("policy facets match the real grouping and ignore paging and filters", asyn
   });
   assert.equal(filtered.total, 1);
   assert.deepEqual(filtered.facets, page.facets, "filters do not change the facets");
+});
+test("the openapi contract registers the hot, daily and signals endpoints", () => {
+  const contract = JSON.parse(
+    readFileSync(new URL("../contracts/openapi.json", import.meta.url), "utf8"),
+  ) as {
+    paths: Record<string, unknown>;
+    components: { schemas: Record<string, unknown> };
+  };
+
+  for (const path of [
+    "/api/site/career-insights/hot",
+    "/api/site/career-insights/daily",
+    "/api/site/career-insights/signals",
+  ]) {
+    assert.ok(contract.paths[path], `missing path ${path}`);
+  }
+  for (const schema of [
+    "CareerHotResponseV1",
+    "CareerDailyResponseV1",
+    "CareerSignalsResponseV1",
+    "CareerHotEntryV1",
+    "CareerDailySourceV1",
+    "CareerSignalV1",
+    "CareerSignalEvidenceV1",
+    "CareerSignalSkippedV1",
+    "CareerHotRoleFamilyCountV1",
+  ]) {
+    assert.ok(contract.components.schemas[schema], `missing schema ${schema}`);
+  }
 });

@@ -90,6 +90,64 @@
           "500": { "$ref": "#/components/responses/InternalError" }
         }
       }
+    },
+    "/api/site/career-insights/hot": {
+      "get": {
+        "operationId": "listCareerHot",
+        "summary": "企业招聘热度榜",
+        "description": "job_count 只计最近 window_days 天内有观测的岗位；排序为 job_count DESC、latest_published_at DESC（无发布时间排后）、company ASC。",
+        "parameters": [
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 } },
+          { "name": "window_days", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 365, "default": 30 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "企业热度榜",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CareerHotResponseV1" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/site/career-insights/daily": {
+      "get": {
+        "operationId": "getCareerDaily",
+        "summary": "今日就业日报",
+        "description": "按 Asia/Shanghai 日汇总；unknown_ratio 是「空技能岗位数 / sample_size」，sample_size=0 时为 null；当天没有任何 run 时 sources 为空且 has_run=false，其余计数仍按当前库表如实返回。",
+        "responses": {
+          "200": {
+            "description": "今日就业日报",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CareerDailyResponseV1" } } }
+          },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
+    "/api/site/career-insights/signals": {
+      "get": {
+        "operationId": "listCareerSignals",
+        "summary": "就业异常信号",
+        "description": "四条可解释规则：cross_industry（公司岗位≥3 且算法/AI 族占比≥60%，同时出现机械/硬件等非 AI 岗位）、new_family（窗口内公司首次出现的职族）、surge（24h 新岗位≥5 且达到历史日均 3 倍，历史不足 2 天写入 skipped）、skill_mismatch（算法/大模型标题岗位要求机械/硬件类技能）；每条信号带可复算 evidence 与 reason_text。",
+        "parameters": [
+          { "name": "limit", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 50, "default": 10 } },
+          { "name": "window_days", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 365, "default": 30 } }
+        ],
+        "responses": {
+          "200": {
+            "description": "就业异常信号",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CareerSignalsResponseV1" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
     }
   },
   "components": {
@@ -209,6 +267,127 @@
             "required": ["page", "page_size"]
           },
           "facets": { "$ref": "#/components/schemas/PolicyFacetsV1" }
+        }
+      },
+      "CareerHotRoleFamilyCountV1": {
+        "type": "object",
+        "required": ["role_family", "count"],
+        "properties": {
+          "role_family": { "$ref": "#/components/schemas/RoleFamily" },
+          "count": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "CareerHotEntryV1": {
+        "type": "object",
+        "required": ["company", "job_count", "latest_published_at", "role_families"],
+        "properties": {
+          "company": { "type": "string" },
+          "job_count": { "type": "integer", "minimum": 0 },
+          "latest_published_at": { "type": ["string", "null"], "format": "date-time" },
+          "role_families": { "type": "array", "items": { "$ref": "#/components/schemas/CareerHotRoleFamilyCountV1" } }
+        }
+      },
+      "CareerHotResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "as_of", "window_days", "entries"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "as_of": { "type": "string", "format": "date-time" },
+          "window_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+          "entries": { "type": "array", "items": { "$ref": "#/components/schemas/CareerHotEntryV1" } }
+        }
+      },
+      "CareerDailySourceV1": {
+        "type": "object",
+        "required": ["source_key", "collected", "accepted", "updated", "duplicates", "status"],
+        "properties": {
+          "source_key": { "type": "string" },
+          "collected": { "type": "integer", "minimum": 0 },
+          "accepted": { "type": "integer", "minimum": 0 },
+          "updated": { "type": "integer", "minimum": 0 },
+          "duplicates": { "type": "integer", "minimum": 0 },
+          "status": { "type": "string", "enum": ["ok", "partial", "failed"] }
+        }
+      },
+      "CareerDailyResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "date", "sources", "has_run", "jobs_total", "new_jobs_today", "new_policies_today", "policies_total", "unknown_ratio", "sample_size", "generated_at"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+          "sources": { "type": "array", "items": { "$ref": "#/components/schemas/CareerDailySourceV1" } },
+          "has_run": { "type": "boolean" },
+          "jobs_total": { "type": "integer", "minimum": 0 },
+          "new_jobs_today": { "type": "integer", "minimum": 0 },
+          "new_policies_today": { "type": "integer", "minimum": 0 },
+          "policies_total": { "type": "integer", "minimum": 0 },
+          "unknown_ratio": {
+            "type": ["number", "null"],
+            "minimum": 0,
+            "maximum": 1,
+            "description": "空技能岗位数 / sample_size；sample_size=0 时为 null"
+          },
+          "sample_size": { "type": "integer", "minimum": 0 },
+          "generated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CareerSignalEvidenceV1": {
+        "type": "object",
+        "properties": {
+          "company_job_count": { "type": "integer", "minimum": 0 },
+          "ai_family_job_count": { "type": "integer", "minimum": 0 },
+          "ai_family_ratio": { "type": "number", "minimum": 0, "maximum": 1 },
+          "matched_terms": { "type": "array", "items": { "type": "string" } },
+          "matched_title_terms": { "type": "array", "items": { "type": "string" } },
+          "matched_skill_terms": { "type": "array", "items": { "type": "string" } },
+          "role_family": { "$ref": "#/components/schemas/RoleFamily" },
+          "family_job_count": { "type": "integer", "minimum": 0 },
+          "window_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+          "earliest_first_seen_at": { "type": "string", "format": "date-time" },
+          "last_24h_jobs": { "type": "integer", "minimum": 0 },
+          "history_days": { "type": "integer", "minimum": 0 },
+          "history_daily_average": { "type": "number", "minimum": 0 },
+          "surge_ratio": { "type": ["number", "null"] }
+        }
+      },
+      "CareerSignalV1": {
+        "type": "object",
+        "required": ["rule", "company", "job_id", "job_title", "evidence", "reason_text", "source_key", "official_url", "first_seen_at", "confidence"],
+        "properties": {
+          "rule": { "type": "string", "enum": ["cross_industry", "new_family", "surge", "skill_mismatch"] },
+          "company": { "type": "string" },
+          "job_id": { "type": "string", "format": "uuid" },
+          "job_title": { "type": "string" },
+          "evidence": { "$ref": "#/components/schemas/CareerSignalEvidenceV1" },
+          "reason_text": { "type": "string" },
+          "source_key": { "type": "string" },
+          "official_url": { "type": "string", "format": "uri" },
+          "first_seen_at": { "type": "string", "format": "date-time" },
+          "confidence": { "type": "string", "enum": ["high", "medium"] }
+        }
+      },
+      "CareerSignalSkippedV1": {
+        "type": "object",
+        "required": ["rule", "company", "reason", "history_days"],
+        "properties": {
+          "rule": { "type": "string", "const": "surge" },
+          "company": { "type": "string" },
+          "reason": { "type": "string", "const": "insufficient_history" },
+          "history_days": { "type": "integer", "minimum": 0 }
+        }
+      },
+      "CareerSignalsResponseV1": {
+        "type": "object",
+        "required": ["contract_version", "data_origin", "window_days", "signals", "skipped", "generated_at"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "data_origin": { "$ref": "#/components/schemas/DataOrigin" },
+          "window_days": { "type": "integer", "minimum": 1, "maximum": 365 },
+          "signals": { "type": "array", "items": { "$ref": "#/components/schemas/CareerSignalV1" } },
+          "skipped": { "type": "array", "items": { "$ref": "#/components/schemas/CareerSignalSkippedV1" } },
+          "generated_at": { "type": "string", "format": "date-time" }
         }
       },
       "MetricResultV1": {

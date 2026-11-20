@@ -5,6 +5,11 @@ import type {
   SummaryResponseV1,
 } from "../contracts/api.ts";
 import type { PolicyEvidenceRefV1 } from "../contracts/index.ts";
+import type {
+  CareerDailyResponseV1,
+  CareerHotResponseV1,
+  CareerSignalsResponseV1,
+} from "../contracts/insights.ts";
 
 const FIXTURE_AS_OF = "2026-01-01T00:00:00.000Z";
 const FIXTURE_JOB_ID = "00000000-0000-4000-8000-000000000001";
@@ -268,4 +273,96 @@ export const FIXTURE_POLICY_LIST_V1 = {
   page_size: 20,
   total: 6,
   filters: { page: 1, page_size: 20 },
+};
+/** 联调样例：企业招聘热度榜（两个虚构企业，其中一个没有发布日期）。 */
+export const FIXTURE_HOT_V1: CareerHotResponseV1 = {
+  contract_version: "0.1",
+  data_origin: "synthetic_fixture",
+  as_of: FIXTURE_AS_OF,
+  window_days: 30,
+  entries: [
+    {
+      company: "虚构样例科技有限公司",
+      job_count: 12,
+      latest_published_at: "2026-01-01T09:00:00.000Z",
+      role_families: [
+        { role_family: "ai_algorithm", count: 5 },
+        { role_family: "ai_application_development", count: 4 },
+        { role_family: "data", count: 2 },
+        { role_family: "ai_product_operations", count: 1 },
+      ],
+    },
+    {
+      company: "虚构智能制造有限公司",
+      job_count: 3,
+      latest_published_at: null,
+      role_families: [{ role_family: "data", count: 2 }],
+    },
+  ],
+};
+
+/** 联调样例：今日就业日报（一次已完成的采集，两个来源）。 */
+export const FIXTURE_DAILY_V1: CareerDailyResponseV1 = {
+  contract_version: "0.1",
+  data_origin: "synthetic_fixture",
+  date: "2026-01-01",
+  sources: [
+    { source_key: "synthetic-careers", collected: 20, accepted: 15, updated: 3, duplicates: 2, status: "ok" },
+    { source_key: "synthetic-policy", collected: 8, accepted: 6, updated: 0, duplicates: 2, status: "partial" },
+  ],
+  has_run: true,
+  jobs_total: 128,
+  new_jobs_today: 15,
+  new_policies_today: 6,
+  policies_total: 42,
+  unknown_ratio: 0.125,
+  sample_size: 128,
+  generated_at: FIXTURE_AS_OF,
+};
+
+/** 联调样例：异常信号（三类规则）与一条因历史不足跳过的突增项。 */
+export const FIXTURE_SIGNALS_V1: CareerSignalsResponseV1 = {
+  contract_version: "0.1",
+  data_origin: "synthetic_fixture",
+  window_days: 30,
+  signals: [
+    {
+      rule: "cross_industry",
+      company: "虚构样例科技有限公司",
+      job_id: FIXTURE_JOB_ID,
+      job_title: "联调样例：AI 应用开发实习生（非真实职位）",
+      evidence: { company_job_count: 12, ai_family_job_count: 10, ai_family_ratio: 0.833, matched_terms: ["机械工程"] },
+      reason_text: "该公司 12 个岗位中有 10 个属于算法/AI 族（83.3%），同时出现机械工程岗位。",
+      source_key: "synthetic-careers",
+      official_url: FIXTURE_JOB_URL,
+      first_seen_at: FIXTURE_AS_OF,
+      confidence: "high",
+    },
+    {
+      rule: "new_family",
+      company: "虚构智能制造有限公司",
+      job_id: "00000000-0000-4000-8000-000000000011",
+      job_title: "联调样例：数据平台工程师（非真实职位）",
+      evidence: { role_family: "data", family_job_count: 2, window_days: 30, earliest_first_seen_at: FIXTURE_AS_OF },
+      reason_text: "该公司近 30 天首次出现数据职族，共 2 个岗位。",
+      source_key: "synthetic-careers",
+      official_url: "https://careers.example/jobs/synthetic-ai-011",
+      first_seen_at: FIXTURE_AS_OF,
+      confidence: "medium",
+    },
+    {
+      rule: "skill_mismatch",
+      company: "虚构新创有限公司",
+      job_id: "00000000-0000-4000-8000-000000000012",
+      job_title: "联调样例：大模型算法工程师（非真实职位）",
+      evidence: { matched_title_terms: ["大模型"], matched_skill_terms: ["硬件调试"] },
+      reason_text: "标题含大模型类关键词，但岗位要求硬件调试技能。",
+      source_key: "synthetic-careers",
+      official_url: "https://careers.example/jobs/synthetic-ai-012",
+      first_seen_at: FIXTURE_AS_OF,
+      confidence: "medium",
+    },
+  ],
+  skipped: [{ rule: "surge", company: "虚构新创有限公司", reason: "insufficient_history", history_days: 1 }],
+  generated_at: FIXTURE_AS_OF,
 };

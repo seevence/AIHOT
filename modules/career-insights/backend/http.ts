@@ -4,6 +4,20 @@ import type { EmploymentType, RoleFamily, StudentFriendly } from "../contracts/i
 import { CAREER_SOURCE_DEFINITIONS } from "../collector/sources.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import { CareerApiError, InvalidParameterError, NotFoundError } from "./errors.ts";
+import {
+  DEFAULT_HOT_LIMIT,
+  DEFAULT_HOT_WINDOW_DAYS,
+  MAX_HOT_LIMIT,
+  MAX_HOT_WINDOW_DAYS,
+  type HotCompanyOptions,
+} from "./career-analytics.ts";
+import {
+  DEFAULT_SIGNAL_LIMIT,
+  DEFAULT_SIGNAL_WINDOW_DAYS,
+  MAX_SIGNAL_LIMIT,
+  MAX_SIGNAL_WINDOW_DAYS,
+  type CareerSignalsOptions,
+} from "./career-signals.ts";
 import { DEFAULT_PAGE_SIZE, MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
 import type { PolicyFiltersV1 } from "./policy-read.ts";
 import type { CareerRepository } from "./repository.ts";
@@ -13,6 +27,8 @@ const EMPLOYMENT_TYPES = ["campus", "internship", "experienced", "other", "unkno
 const STUDENT_FRIENDLY_VALUES = ["yes", "no", "unknown"] as const;
 const FILTER_KEYS = new Set(["role_family", "company", "city", "employment_type", "student_friendly", "skill", "page", "page_size"]);
 const POLICY_FILTER_KEYS = new Set(["source_key", "theme", "page", "page_size"]);
+const HOT_FILTER_KEYS = new Set(["limit", "window_days"]);
+const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidParameter(parameter: string, message: string): InvalidParameterError {
@@ -51,7 +67,7 @@ function optionalText(input: Record<string, unknown>, key: string): string | und
   return value.trim();
 }
 
-function pageNumber(input: Record<string, unknown>, key: "page" | "page_size", fallback: number, maximum?: number): number {
+function pageNumber(input: Record<string, unknown>, key: string, fallback: number, maximum?: number): number {
   const raw = input[key];
   if (raw === undefined) return fallback;
   if (typeof raw !== "string" || !/^[1-9][0-9]*$/.test(raw)) {
@@ -110,6 +126,28 @@ function parsePolicyFilters(query: unknown): PolicyFiltersV1 {
   };
 }
 
+function parseHotOptions(query: unknown): HotCompanyOptions {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !HOT_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+
+  return {
+    limit: pageNumber(input, "limit", DEFAULT_HOT_LIMIT, MAX_HOT_LIMIT),
+    window_days: pageNumber(input, "window_days", DEFAULT_HOT_WINDOW_DAYS, MAX_HOT_WINDOW_DAYS),
+  };
+}
+
+function parseSignalOptions(query: unknown): CareerSignalsOptions {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !SIGNAL_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+
+  return {
+    limit: pageNumber(input, "limit", DEFAULT_SIGNAL_LIMIT, MAX_SIGNAL_LIMIT),
+    window_days: pageNumber(input, "window_days", DEFAULT_SIGNAL_WINDOW_DAYS, MAX_SIGNAL_WINDOW_DAYS),
+  };
+}
+
 async function respond(reply: FastifyReply, read: () => Promise<unknown>): Promise<FastifyReply> {
   reply.header("Cache-Control", "no-store");
   try {
@@ -149,5 +187,18 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
 
   app.get("/api/site/career-insights/policies", async (request, reply) => respond(reply, async () => {
     return repository.listPolicies(parsePolicyFilters(request.query));
+  }));
+
+  app.get("/api/site/career-insights/hot", async (request, reply) => respond(reply, async () => {
+    return repository.hotCompanies(parseHotOptions(request.query));
+  }));
+
+  app.get("/api/site/career-insights/daily", async (request, reply) => respond(reply, async () => {
+    assertNoQuery(request.query);
+    return repository.dailySummary();
+  }));
+
+  app.get("/api/site/career-insights/signals", async (request, reply) => respond(reply, async () => {
+    return repository.careerSignals(parseSignalOptions(request.query));
   }));
 }

@@ -1,4 +1,4 @@
-import { useLoaderData } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { SITE, subjectAfter, withSubject } from "@aihot/site";
 import type { Route } from "./+types/topics";
 import type { TopicSummary, TopicsResponse } from "@aihot/contracts/site";
@@ -10,6 +10,7 @@ import { IconChevronRight } from "../components/icons";
 import { IntentLink } from "../components/ui/IntentLink";
 import { BrandMark } from "../components/BrandMark";
 import { PhoneBar } from "../components/shell/PhoneBar";
+import { EmptyState } from "../components/ui/Page";
 import { navUp } from "../components/shell/nav";
 import type { Screen } from "../components/shell/screens";
 
@@ -108,7 +109,17 @@ export default function TopicsPage() {
           <span className="num">{topics.length}</span> 个主题，追踪最新精选与重要进展。
         </p>
       </header>
-      {groups.map((g) => (
+      {topics.length === 0 ? (
+        <div className="mt-4 rounded-card border border-dashed border-line-strong">
+          <EmptyState title="暂无主题">
+            本站内容暂未接入，可先查看
+            <Link to="/career-insights" className="font-medium text-accent hover:underline">
+              就业趋势洞察
+            </Link>
+            。
+          </EmptyState>
+        </div>
+      ) : groups.map((g) => (
         <section key={g.key} aria-labelledby={`topics-${g.key}`} className="pt-8">
           <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
             <h2 id={`topics-${g.key}`} className="text-[15px] font-bold text-ink">

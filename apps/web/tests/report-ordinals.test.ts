@@ -2,6 +2,8 @@
 // Failure cases: the masthead numbering the newest of 405 issues 400 (the navigation index's length); an
 // issue older than the index losing its number; the calendar marking that issue as not published; the
 // daily archive counting 400 issues beside a masthead that numbers 405.
+// /daily is the career daily (就业日报) and has no issue numbers; the weekly and monthly latest pages still
+// number their issues through report-latest.
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { ReportDetail, ReportKind, ReportNavigationEntry } from "@aihot/contracts/site";
@@ -24,9 +26,17 @@ function report(kind: ReportKind, key: string): ReportDetail {
   };
 }
 let web: WebServer;
+const numbersKinds: ReportKind[] = ["weekly", "monthly"];
 const api = fakeApi((url) => {
   const path = url.pathname;
   if (path === "/api/site/reports/daily") return { kind: "daily", items: index("daily").map((entry) => ({ ...entry, count: 1 })) };
+  if (path === "/api/site/career-insights/daily") {
+    return {
+      contract_version: "0.1", data_origin: "synthetic_fixture", date: "2026-10-15", sources: [], has_run: true,
+      jobs_total: 0, new_jobs_today: 0, new_policies_today: 0, policies_total: 0, unknown_ratio: null, sample_size: 0,
+      generated_at: "2026-10-15T00:00:00Z",
+    };
+  }
   const match = /^\/api\/site\/reports\/(daily|weekly|monthly)\/(.+)$/.exec(path);
   if (match) {
     const kind = match[1] as ReportKind;
@@ -47,7 +57,7 @@ function masthead(html: string): string {
   return header[1]!.replace(/<[^>]+>/g, "");
 }
 
-for (const kind of kinds) {
+for (const kind of numbersKinds) {
   test(`the ${kind} masthead numbers the newest of 405 issues 405, not the navigation's 400`, async () => {
     const response = await fetch(`${web.origin}/${kind}`);
     assert.equal(response.status, 200, web.logs());
@@ -82,6 +92,15 @@ test("the daily archive counts every issue, as the masthead numbers them", async
   const response = await fetch(`${web.origin}/daily/archive`);
   assert.equal(response.status, 200, web.logs());
   assert.match(masthead(await response.text()), /共\s*405\s*期/);
+});
+
+test("the daily page is the career daily: dated, without an issue number", async () => {
+  const response = await fetch(`${web.origin}/daily`);
+  assert.equal(response.status, 200, web.logs());
+  const html = await response.text();
+  assert.match(html, /就业日报/);
+  assert.match(html, /2026-10-15/);
+  assert.doesNotMatch(html, /第\s*\d+\s*期/);
 });
 
 // On 2 January 2027 the chip for the 31 December issue read "12月31日" and the 1 January issue's "前一日"

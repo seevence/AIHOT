@@ -1,12 +1,23 @@
 import { createServer, type ServerResponse } from "node:http";
 import type { ApiErrorResponseV1 } from "@aihot/career-insights/contracts";
-import { FIXTURE_JOB_DETAIL_V1, FIXTURE_JOB_LIST_V1, FIXTURE_POLICY_LIST_V1, FIXTURE_SUMMARY_V1 } from "../fixtures/api.ts";
+import {
+  FIXTURE_DAILY_V1,
+  FIXTURE_HOT_V1,
+  FIXTURE_JOB_DETAIL_V1,
+  FIXTURE_JOB_LIST_V1,
+  FIXTURE_POLICY_LIST_V1,
+  FIXTURE_SIGNALS_V1,
+  FIXTURE_SUMMARY_V1,
+} from "../fixtures/api.ts";
 import { POLICY_SOURCE_OPTIONS, THEME_LABELS } from "./labels.ts";
 
 const HOST = "127.0.0.1";
-const PORT = 3101;
+/** 断言时用 CAREER_FIXTURE_PORT 避开并行测试的 3101。 */
+const PORT = Number(process.env.CAREER_FIXTURE_PORT) || 3101;
 const MAX_PAGE = 10_000;
 const MAX_PAGE_SIZE = 100;
+const MAX_LIMIT = 50;
+const MAX_WINDOW_DAYS = 365;
 
 /** fixture 条目没有 source_key 字段；按位置把 6 条样例分配给启用的政策源，模拟后端按 source_key 过滤。 */
 const POLICY_SOURCE_ITEM_INDEXES: Readonly<Record<string, readonly number[]>> = {
@@ -33,8 +44,15 @@ function positiveInteger(raw: string | null, fallback: number, maximum: number):
   return Number.isSafeInteger(value) && value <= maximum ? value : null;
 }
 
+function unsupportedQuery(params: URLSearchParams, allowed: readonly string[]): string | undefined {
+  return [...params.keys()].find((key) => !allowed.includes(key));
+}
+
 /** 测试读取最近一次政策请求的参数，断言 loader 与分页把查询原样传给 API。 */
 export const policyRequests: URLSearchParams[] = [];
+
+/** 测试读取最近一次 hot / daily / signals 请求，断言 loader 的地址与参数。 */
+export const feedRequests: Array<{ pathname: string; params: URLSearchParams }> = [];
 
 export const fixtureServer = createServer((req, res) => {
   try {
@@ -51,6 +69,36 @@ export const fixtureServer = createServer((req, res) => {
     }
     if (pathname === "/api/site/career-insights/jobs") {
       send(res, 200, FIXTURE_JOB_LIST_V1);
+      return;
+    }
+    if (pathname === "/api/site/career-insights/hot" || pathname === "/api/site/career-insights/signals") {
+      feedRequests.push({ pathname, params: new URLSearchParams(searchParams) });
+      const unsupported = unsupportedQuery(searchParams, ["limit", "window_days"]);
+      const limit = positiveInteger(searchParams.get("limit"), 10, MAX_LIMIT);
+      const windowDays = positiveInteger(searchParams.get("window_days"), 30, MAX_WINDOW_DAYS);
+      if (unsupported !== undefined || limit === null || windowDays === null) {
+        sendError(res, 400, "invalid_parameter", "invalid_feed_query");
+        return;
+      }
+      if (pathname.endsWith("/hot")) {
+        send(res, 200, { ...FIXTURE_HOT_V1, window_days: windowDays, entries: FIXTURE_HOT_V1.entries.slice(0, limit) });
+      } else {
+        send(res, 200, {
+          ...FIXTURE_SIGNALS_V1,
+          window_days: windowDays,
+          signals: FIXTURE_SIGNALS_V1.signals.slice(0, limit),
+        });
+      }
+      return;
+    }
+    if (pathname === "/api/site/career-insights/daily") {
+      feedRequests.push({ pathname, params: new URLSearchParams(searchParams) });
+      const unsupported = unsupportedQuery(searchParams, []);
+      if (unsupported !== undefined) {
+        sendError(res, 400, "invalid_parameter", "invalid_feed_query");
+        return;
+      }
+      send(res, 200, FIXTURE_DAILY_V1);
       return;
     }
     if (pathname === "/api/site/career-insights/policies") {

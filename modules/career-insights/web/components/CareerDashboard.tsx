@@ -1,10 +1,12 @@
 import { Link } from "react-router";
 import type { JobFiltersV1, JobListItemV1, JobListResponseV1, RoleFamily, SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import type { CareerSignalsResponseV1 } from "../../contracts/index.ts";
 import { buildDirectionHref, buildJobHref, buildJobsHref } from "../filters";
 import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS } from "../labels";
 import { CareerTime } from "../time";
 import { CareerEmpty, FixtureNotice, SingleSnapshotNotice } from "./CareerStates";
 import { CareerFilters } from "./CareerFilters";
+import { CareerSignals } from "./CareerSignals";
 import { DIRECTION_VALUES, DirectionView } from "./DirectionView";
 import { FilterEmpty } from "./FilterEmpty";
 import { MetricList } from "./MetricList";
@@ -56,11 +58,12 @@ function DirectionLinks() {
   );
 }
 
-export function CareerDashboard({ summary, jobs, filters, direction }: {
+export function CareerDashboard({ summary, jobs, filters, direction, signals }: {
   summary: SummaryResponseV1;
   jobs: JobListResponseV1;
   filters: JobFiltersV1;
   direction?: DirectionTarget;
+  signals: CareerSignalsResponseV1;
 }) {
   const fixture = summary.data_origin === "synthetic_fixture" || jobs.data_origin === "synthetic_fixture";
   const noJobs = summary.sample_size === 0 || jobs.items.length === 0;
@@ -72,6 +75,8 @@ export function CareerDashboard({ summary, jobs, filters, direction }: {
         <h1 data-page-title="" className="text-[24px] font-semibold text-ink">职业洞察</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-3">职位样本、技能需求与政策共享主题；所有指标均来自 API。</p>
       </header>
+
+      <CareerSignals signals={signals.signals} skipped={signals.skipped} />
 
       {fixture && <FixtureNotice />}
       {summary.sample_size > 0 && !summary.has_multiple_snapshots && <SingleSnapshotNotice />}

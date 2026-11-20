@@ -20,7 +20,7 @@ export default [
   route("items/:id/original", "routes/item-original.tsx", { id: "item-original" }),
   route("hot", "routes/hot.tsx"),
   route("story/:publicId", "routes/story.tsx"),
-  route("daily", "routes/report-latest.tsx", { id: "daily-latest" }),
+  route("daily", "routes/daily.tsx", { id: "daily-latest" }),
   route("daily/archive", "routes/daily-archive.tsx"),
   route("daily/:key", "routes/report-detail.tsx", { id: "daily-detail" }),
   route("weekly", "routes/report-latest.tsx", { id: "weekly-latest" }),

@@ -629,6 +629,16 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 4. `synthetic_fixture` 行在 summary、list、detail 三条读路径都拒绝发布。
 
 验证：`npx tsc -p modules/tsconfig.json` 通过；D 线 6 个测试文件 **36/36 通过**（本地 PostgreSQL 5433）。
+
+### policies facets 口径补充（2026-11-19）
+
+`GET /api/site/career-insights/policies` 响应中的 `facets`（`backend/policy-read.ts`）顶层口径补充如下，原接口约定与实测记录不变：
+
+- **`facets.themes` 的 count 之和可以小于 `total`**：无主题的政策（`theme_ids` 为空数组）经 `CROSS JOIN LATERAL jsonb_array_elements_text` 展开后不产生任何行，因此不进入 themes 计数；`total` 仍是符合筛选条件的政策条数。二者不等不代表丢数据，差额即“无主题政策数”。
+- **`facets.sources` 只统计 `published_at` 非空的政策**，与列表可见集合一致（列表同样只返回有 `published_at` 的政策）；`facets.themes` 亦带同一 `published_at IS NOT NULL` 条件。
+- **facets 为全量分面**：不随 `page` / `page_size` / `source_key` / `theme` 变化，翻页或加筛选只改变 `items` / `total`，facets 始终反映当前全部可见政策。
+- 一个政策命中多个主题时，在各主题的 count 中各计 1，故 themes 各 count 之和可等于也可超过 `total`（取决于多主题政策与无主题政策的比例）。
+
 ## D2/D3 收口与 stage 合并（2026-11-19）
 
 - D2 独立 review：**PASS**（无 blocker / major）。本机补强的事务原子性、政策日期日历校验与回归测试经复跑确认；阶段表原「待独立 review」已被取代。
@@ -644,4 +654,4 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 ## 最近更新
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`。
-- 本次同步：D2/D3 阶段状态与 review 列由「待独立 review」更新为已合入 + PASS，并登记 `e9dddd5` / `e0bc809` / `9c6c83a` / `5df5856` 四项收敛提交。
+- 本次同步：D2/D3 阶段状态与 review 列由「待独立 review」更新为已合入 + PASS，并登记 `e9dddd5` / `e0bc809` / `9c6c83a` / `5df5856` 四项收敛提交。- **2026-11-19**：`b3375cc`（PR #12 已合入主线）——新增「policies facets 口径补充」：`facets.themes` 的 count 之和可小于 `total`（无主题政策不进入 themes 计数）、`facets.sources` 只统计 `published_at` 非空的政策（与列表可见集合一致）、facets 为全量分面不随分页/筛选变化。仅补文档，接口行为与历史结论未变。

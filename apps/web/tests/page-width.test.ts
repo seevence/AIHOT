@@ -25,6 +25,18 @@ const api = fakeApi((url) => {
   if (path === "/api/site/items/fit") return article;
   if (path === "/api/site/topics") return { groups: [], topics: [] };
   if (path === "/api/site/hot") return { computedAt: at, windowHours: 48, entries: [] };
+  if (path === "/api/site/career-insights/daily") {
+    return {
+      contract_version: "0.1", data_origin: "synthetic_fixture", date: "2026-10-15", sources: [], has_run: true,
+      jobs_total: 0, new_jobs_today: 0, new_policies_today: 0, policies_total: 0, unknown_ratio: null, sample_size: 0, generated_at: at,
+    };
+  }
+  if (path === "/api/site/career-insights/hot") {
+    return {
+      contract_version: "0.1", data_origin: "synthetic_fixture", as_of: at, window_days: 30,
+      entries: [{ company: "固定企业", job_count: 12, latest_published_at: at, role_families: [] }],
+    };
+  }
   if (path === "/api/site/timeline") return { filters: { channel: "all", category: null, tag: null }, cards: [groupCard], nextCursor: null, hot: null, dayCounts: { "2026-10-04": 1 } };
   if (path === "/api/site/groups/f1/reports") {
     return { factId: "f1", reports: [
@@ -54,15 +66,29 @@ before(async () => {
 });
 after(async () => { await chrome?.close(); await safari?.close(); await web?.stop(); });
 
-/** Each page with what widened it: a report's long lead, and the home list with its reading group open. */
+/** Each page with what widened it: a report's long lead, the career daily and hot list, and the home list with its reading group open. */
 const PAGES: Array<{ path: string; ready: (page: Page, width: number) => Promise<void> }> = [
-  ...["daily", "weekly", "monthly"].map((kind) => ({
+  ...["weekly", "monthly"].map((kind) => ({
     path: `/${kind}`,
     ready: async (page: Page) => {
       await expect(page.getByRole("heading", { name: "今日头条", exact: true })).toBeVisible();
       await expect(page.getByRole("link", { name: "周报", exact: true }).filter({ visible: true })).toBeVisible();
     },
   })),
+  {
+    path: "/daily",
+    ready: async (page: Page) => {
+      await expect(page.getByRole("heading", { level: 1, name: "就业日报" })).toBeVisible();
+      await expect(page.locator("time[data-daily-date='2026-10-15']")).toBeVisible();
+    },
+  },
+  {
+    path: "/hot",
+    ready: async (page: Page) => {
+      await expect(page.getByRole("heading", { level: 1, name: "企业招聘热度榜" })).toBeVisible();
+      await expect(page.locator("[data-hot-entry]")).toHaveCount(1);
+    },
+  },
   {
     path: "/items/fit",
     ready: async (page: Page) => {

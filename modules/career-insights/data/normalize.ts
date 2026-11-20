@@ -23,6 +23,18 @@ import { validateNormalizedJobV1, type ValidationIssueV1 } from "./validate.ts";
 
 export const NORMALIZER_VERSION = "normalizer/0.3.0";
 
+/** LLM 兜底回填写入的版本前缀（见 scripts/backfill-normalizer-llm.ts）。 */
+export const LLM_NORMALIZER_VERSION_PREFIX = "normalizer/llm-";
+
+/**
+ * llm-* 是 LLM 兜底回填的版本，来源不同但产出同 schema、同字段白名单的派生字段，
+ * 且已验证不污染观测（回填前后观测与内容哈希不变），因此算当前版本；
+ * 无版本信息或更早版本仍按旧数据处理。
+ */
+export function isCurrentNormalizerVersion(version: string | null): boolean {
+  return version === NORMALIZER_VERSION || version?.startsWith(LLM_NORMALIZER_VERSION_PREFIX) === true;
+}
+
 const ROLE_FAMILIES: readonly RoleFamily[] = [
   "ai_algorithm",
   "ai_application_development",
