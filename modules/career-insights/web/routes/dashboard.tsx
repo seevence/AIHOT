@@ -2,6 +2,7 @@ import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } fro
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
 import type { JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
 import { careerApiPath, loadCareerApi, parseDashboardFilters, parseDirectionView, serializeJobFilters } from "../api";
+import { loadCareerSignals } from "../feeds.server";
 import { CareerDashboard } from "../components/CareerDashboard";
 import { CareerError, CareerLoading, CareerPending } from "../components/CareerStates";
 
@@ -11,7 +12,7 @@ export async function loader({ request }: LoaderArgs) {
   const { view, roleFamily } = parseDirectionView(search);
   const query = serializeJobFilters(filters);
   const directionRoleFamily = view === "direction" ? roleFamily : undefined;
-  const [summary, jobs, studentFriendlyJobs] = await Promise.all([
+  const [summary, jobs, studentFriendlyJobs, signals] = await Promise.all([
     loadCareerApi<SummaryResponseV1>(careerApiPath("/summary"), request.signal),
     loadCareerApi<JobListResponseV1>(`${careerApiPath("/jobs")}?${query}`, request.signal),
     directionRoleFamily
@@ -25,11 +26,12 @@ export async function loader({ request }: LoaderArgs) {
           request.signal,
         )
       : Promise.resolve(null),
+    loadCareerSignals(request.signal),
   ]);
   const direction = directionRoleFamily
     ? { roleFamily: directionRoleFamily, studentFriendlyTotal: studentFriendlyJobs?.total ?? 0 }
     : undefined;
-  return { summary, jobs, filters, direction };
+  return { summary, jobs, filters, direction, signals };
 }
 
 export function headers() {
@@ -58,7 +60,7 @@ export default function CareerDashboardRoute() {
           <CareerPending label="正在加载筛选结果…" />
         </div>
       )}
-      <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} direction={data.direction} />
+      <CareerDashboard summary={data.summary} jobs={data.jobs} filters={data.filters} direction={data.direction} signals={data.signals} />
     </>
   );
 }

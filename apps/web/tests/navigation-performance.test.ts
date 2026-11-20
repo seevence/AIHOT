@@ -136,11 +136,11 @@ test('SSR all-pages and report kinds return offline with their own content',asyn
     await expect(page.getByRole('link',{name:'全部第 2 页',exact:true})).toBeVisible();
     await context.setOffline(true);await page.goBack();
     await expect(page.getByRole('link',{name:'全部第 1 页',exact:true})).toBeVisible({timeout:1500});
-    await context.setOffline(false);await visit(page,origin+'/daily');
-    await page.getByRole('link',{name:'周报',exact:true}).click();
-    await expect(page.locator('#report-start')).toContainText('周报');
-    await context.setOffline(true);await page.getByRole('link',{name:'日报',exact:true}).click();
-    await expect(page.locator('#report-start')).toContainText('日报',{timeout:1500});
+    await context.setOffline(false);await visit(page,origin+'/weekly');
+    await page.getByRole('link',{name:'月报',exact:true}).click();
+    await expect(page.locator('#report-start')).toContainText('月报');
+    await context.setOffline(true);await page.getByRole('link',{name:'周报',exact:true}).click();
+    await expect(page.locator('#report-start')).toContainText('周报',{timeout:1500});
   }finally{await context.close();}
 });
 
