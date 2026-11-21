@@ -114,7 +114,7 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
     { "aria-labelledby": "catalog-directions", "data-section": "direction-ranking", className: CARD_CLASS },
     h("h2", { id: "catalog-directions", className: "text-[16px] font-semibold text-ink" }, "方向榜"),
     h("p", { className: MUTED_CLASS }, `按职族聚合当前有效岗位；观察窗 ${catalog.window_days} 天。`),
-    h("p", { "data-direction-scope": "", className: `mt-1 ${MUTED_CLASS}` }, "方向榜为全量口径，不随下方筛选变化。"),
+    h("p", { "data-direction-scope": "", className: `mt-1 ${MUTED_CLASS}` }, "方向榜取全量岗位；选「仅学生友好」时按学生友好岗位数排序并按该口径计数，城市等筛选不影响本榜。"),
     ranked.length === 0
       ? h("p", { "data-directions-empty": "", role: "status", className: "mt-3 text-[14px] font-medium text-ink-2" }, CATALOG_EMPTY_TEXT)
       : h(
