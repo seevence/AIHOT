@@ -65,7 +65,8 @@ function filterChip(label: string, href: string, active: boolean, dataAttr: stri
   return h(
     "li",
     { key },
-    h(Link, { to: href, [dataAttr]: active ? "active" : "idle", "aria-current": active ? "true" : undefined, className: active ? CHIP_ACTIVE_CLASS : CHIP_IDLE_CLASS }, label),
+    // 筛选只改结果集，不应把读者弹回页面顶部（滚动位置留给 ScrollRestoration，不重置）。
+  h(Link, { to: href, preventScrollReset: true, [dataAttr]: active ? "active" : "idle", "aria-current": active ? "true" : undefined, className: active ? CHIP_ACTIVE_CLASS : CHIP_IDLE_CLASS }, label),
   );
 }
 
@@ -98,7 +99,7 @@ function FilterBar({ catalog, filters }: { catalog: CareerCatalogResponseV1; fil
       ? h(
           Link,
           Object.assign(
-            { to: CATALOG_PATH, className: "mt-4 inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium text-ink-2" },
+            { to: CATALOG_PATH, preventScrollReset: true, className: "mt-4 inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium text-ink-2" },
             { "data-filter-clear": "" },
           ),
           "清除筛选",
@@ -151,7 +152,7 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
               h(
                 Link,
                 Object.assign(
-                  { to: buildCatalogHref(filters, { role_family: direction.role_family, page: 1 }), className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
+                  { to: buildCatalogHref(filters, { role_family: direction.role_family, page: 1 }), preventScrollReset: true, className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
                   { "data-direction-evidence": direction.role_family },
                 ),
                 "查看该方向岗位",
@@ -199,7 +200,7 @@ function TitleRanking({ catalog, filters }: { catalog: CareerCatalogResponseV1; 
                     h(
                       Link,
                       Object.assign(
-                        { to: buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 }), className: "text-[12.5px] font-medium text-accent hover:underline" },
+                        { to: buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 }), preventScrollReset: true, className: "text-[12.5px] font-medium text-accent hover:underline" },
                         { "data-title-evidence": title.title_key },
                       ),
                       "查看证据",
@@ -242,10 +243,10 @@ function JobPager({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFilt
       "div",
       { className: "flex items-center gap-2" },
       current > 1
-        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), preventScrollReset: true, className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
         : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "上一页"),
       current < totalPages
-        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), preventScrollReset: true, className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
         : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "下一页"),
     ),
   );
