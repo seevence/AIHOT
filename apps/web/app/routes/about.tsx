@@ -1,8 +1,9 @@
-import { Fragment, useCallback, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { IntentLink } from "../components/ui/IntentLink";
 import { Link, useLoaderData } from "react-router";
-import type { SiteContact, SiteStats } from "@aihot/contracts/site";
-import { ABOUT, POLICY, REPORTS, SEO_TITLES, SITE, subjectAfter } from "@aihot/site";
+import type { SiteContact } from "@aihot/contracts/site";
+import type { CareerDailyResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
+import { ABOUT, POLICY, SEO_TITLES, SITE, subjectAfter } from "@aihot/site";
 import { apiGet, cachedPage } from "../lib/api.server";
 import { pageReuse } from "../lib/page-reuse";
 import { organizationLd, pageMeta } from "../lib/seo";
@@ -17,18 +18,21 @@ export const handle: Screen = { tab: "me", name: "关于" };
 export { pageHeaders as headers } from "../lib/api.server";
 export const { clientLoader, shouldRevalidate } = pageReuse<typeof loader>();
 
+/** The career data the figures come from: the latest daily and the summary behind 职业洞察. */
 export async function loader({ request }: { request: Request }) {
-  const [contact, stats] = await Promise.all([
+  const [contact, summary, daily] = await Promise.all([
     apiGet<SiteContact>("/api/site/contact", { signal: request.signal }).catch(() => null),
-    apiGet<SiteStats>("/api/site/stats", { signal: request.signal }).catch(() => null),
+    apiGet<SummaryResponseV1>("/api/site/career-insights/summary", { signal: request.signal }).catch(() => null),
+    apiGet<CareerDailyResponseV1>("/api/site/career-insights/daily", { signal: request.signal }).catch(() => null),
   ]);
-  return cachedPage(300, { contact, stats });
+  return cachedPage(300, { contact, summary, daily });
 }
 
 export function meta() {
   return pageMeta({ title: SEO_TITLES.about, rawTitle: true, description: ABOUT.description, path: "/about", image: "/og/pages/about.png", jsonLd: organizationLd() });
 }
 
+/** The river only illustrates; the page's own sources list is not rendered as lines. */
 const NO_SOURCES: RiverSource[] = [];
 
 /** 3.6 万 from ten thousand up, digits with separators below. */
@@ -49,13 +53,10 @@ function Figure({ n, unit }: { n: number; unit: string }) {
   );
 }
 
-const KIND_ORDER: Array<[string, string]> = [
-  ["x_search", "X"],
-  ["rss", "RSS"],
-  ["web_list", "网页"],
-  ["mp_account", "公众号"],
-  ["json_list", "接口"],
-];
+/** What a figure reads while the api has not answered: no made-up number. */
+function Unavailable() {
+  return <span className="text-[15px] font-semibold text-ink-4">数据更新中</span>;
+}
 
 /**
  * The stage columns' rules: one column on phones, two by two from sm, and from lg four in a row whose
@@ -76,36 +77,68 @@ interface Stage {
   note: ReactNode;
 }
 
-function stagesOf(stats: SiteStats | null): Stage[] {
-  const kinds = stats ? KIND_ORDER.filter(([k]) => stats.sourceKinds[k]).map(([k, label]) => `${label} ${stats.sourceKinds[k]}`).join(" · ") : null;
+/** How many days the data has been observed: the span the summary covers, counted inclusively. */
+function observedDays(summary: SummaryResponseV1 | null): number | null {
+  if (!summary) return null;
+  const first = Date.parse(summary.first_observed_at);
+  const last = Date.parse(summary.last_observed_at);
+  if (!Number.isFinite(first) || !Number.isFinite(last) || last < first) return null;
+  return Math.max(1, Math.round((last - first) / 86_400_000) + 1);
+}
+
+interface Figures {
+  sources: number | null;
+  jobs: number | null;
+  policies: number | null;
+  observedDays: number | null;
+  newJobs: number | null;
+  newPolicies: number | null;
+  dailyDate: string | null;
+}
+
+/** The employment figures the page shows; null wherever the api has no data, so the page says so. */
+function figuresOf(summary: SummaryResponseV1 | null, daily: CareerDailyResponseV1 | null): Figures {
+  return {
+    sources: daily?.sources.length ?? summary?.source_count ?? null,
+    jobs: daily?.jobs_total ?? summary?.sample_size ?? null,
+    policies: daily?.policies_total ?? null,
+    observedDays: observedDays(summary),
+    newJobs: daily?.new_jobs_today ?? null,
+    newPolicies: daily?.new_policies_today ?? null,
+    dailyDate: daily?.date ?? null,
+  };
+}
+
+function stagesOf(figures: Figures): Stage[] {
+  const { sources, jobs, policies, observedDays, newJobs, newPolicies, dailyDate } = figures;
   return [
     {
       no: "01",
       title: "采集",
-      figure: stats && <Figure n={stats.sources} unit="个信源" />,
+      figure: sources === null ? <Unavailable /> : <Figure n={sources} unit="个来源" />,
       text: ABOUT.steps.collect,
-      note: kinds,
+      note: null,
     },
     {
       no: "02",
       title: "收录",
-      figure: stats && <Figure n={stats.items} unit="条动态" />,
+      figure: jobs === null ? <Unavailable /> : <Figure n={jobs} unit="个岗位" />,
       text: ABOUT.steps.store,
-      note: stats && <>过去 24 小时收进 {stats.day.collected.toLocaleString("en-US")} 条</>,
+      note: newJobs === null ? null : `今日新增 ${newJobs.toLocaleString("en-US")} 个岗位`,
     },
     {
       no: "03",
-      title: "精选",
-      figure: stats && <Figure n={stats.selected} unit={REPORTS.metricUnits.selectedCount} />,
+      title: "政策",
+      figure: policies === null ? <Unavailable /> : <Figure n={policies} unit="条政策" />,
       text: ABOUT.steps.select,
-      note: stats && <>过去 24 小时 {stats.day.selected} 条进了精选</>,
+      note: newPolicies === null ? null : `今日新增 ${newPolicies.toLocaleString("en-US")} 条政策`,
     },
     {
       no: "04",
-      title: "成刊",
-      figure: stats && <Figure n={stats.dailies} unit={REPORTS.metricUnits.reportsCovered} />,
+      title: "更新",
+      figure: observedDays === null ? <Unavailable /> : <Figure n={observedDays} unit="天持续观测" />,
       text: ABOUT.steps.publish,
-      note: "也可以用 RSS、API、MCP 订阅",
+      note: dailyDate ? `最新就业日报 ${dailyDate}` : "最新就业日报：数据更新中",
     },
   ];
 }
@@ -176,35 +209,11 @@ function Maker({ maker, contact }: { maker: NonNullable<typeof ABOUT.maker>; con
   );
 }
 
-/** The latest 精选 under the river's paper; it moves on each time an item reaches the paper. */
-function Latest({ item, className = "" }: { item: SiteStats["latest"][number] | undefined; className?: string }) {
-  if (!item) return null;
-  return (
-    <IntentLink viewTransition to={`/items/${item.id}`} className={`group block ${className}`}>
-      <span className="text-[11px] font-semibold tracking-[0.2em] text-accent">最近精选</span>
-      <span key={item.id} className="animate-fade-up mt-1.5 block">
-        <span className="line-clamp-2 text-[13.5px] font-semibold leading-[1.55] text-ink transition-colors group-hover:text-accent">{item.title}</span>
-        <span className="mt-1 block truncate text-[12px] text-ink-4">{item.source}</span>
-      </span>
-    </IntentLink>
-  );
-}
-
 export default function AboutPage() {
-  const { contact, stats } = useLoaderData<typeof loader>();
+  const { contact, summary, daily } = useLoaderData<typeof loader>();
   const [focus, setFocus] = useState<number | null>(null);
-  const [at, setAt] = useState(0);
-  const shown = useRef(0);
-  const sources = useMemo(() => stats?.sampleSources ?? NO_SOURCES, [stats]);
-  const stages = useMemo(() => stagesOf(stats), [stats]);
-  const latest = stats?.latest ?? [];
-  // A pulse reaches the paper every second or so; the headline under it changes at most every 2.8s.
-  const onArrive = useCallback(() => {
-    const now = Date.now();
-    if (now - shown.current < 2800 || latest.length < 2) return;
-    shown.current = now;
-    setAt((i) => (i + 1) % latest.length);
-  }, [latest.length]);
+  const sources = useMemo(() => daily?.sources.length ?? summary?.source_count ?? null, [daily, summary]);
+  const stages = useMemo(() => stagesOf(figuresOf(summary, daily)), [summary, daily]);
 
   return (
     <div className="mx-auto max-w-[var(--page-max-reading)] pb-14 lg:pt-3">
@@ -220,7 +229,12 @@ export default function AboutPage() {
           <p className="mt-5 max-w-[36em] text-[15.5px] leading-[1.85] text-ink-3 xl:text-[17px]">
             {ABOUT.lead.split("{sources}").map((part, i) => (
               <Fragment key={i}>
-                {i > 0 && (stats ? <>{" "}<span className="num font-semibold text-ink">{stats.sources}</span>{" "}</> : ABOUT.sourcesFallback)}
+                {i > 0 && (
+                  <>
+                    {" "}
+                    <span className="num font-semibold text-ink">{sources ?? ABOUT.sourcesFallback}</span>{" "}
+                  </>
+                )}
                 {part}
               </Fragment>
             ))}
@@ -228,7 +242,7 @@ export default function AboutPage() {
         </div>
         <div className="flex flex-wrap gap-3 lg:pb-2">
           <IntentLink to="/" className={buttonClass("primary", "lg")}>
-            看今天的精选 <IconArrowRight size={15} />
+            看今天的就业概览 <IconArrowRight size={15} />
           </IntentLink>
           <IntentLink to="/daily" className={buttonClass("secondary", "lg")}>
             读最新日报
@@ -240,11 +254,8 @@ export default function AboutPage() {
         <h2 id="how" className="sr-only">
           {`${SITE.name} 怎么工作`}
         </h2>
-        <SignalRiver sources={sources} focus={focus} onArrive={onArrive} className="h-[230px] sm:h-[300px] lg:h-[360px] 2xl:h-[420px]">
-          <Latest item={latest[at]} className="absolute left-[75%] top-[calc(42%+42px)] hidden w-[25%] px-6 lg:block" />
-        </SignalRiver>
-        <p className="sr-only">{`示意图：每条线是一个信源；线汇成一束束，代表同一件事的多篇报道；经过精选的闸门，只有少数几束通过，${subjectAfter("汇入每天的", "日报")}。`}</p>
-        <Latest item={latest[at]} className="mt-2 border-t border-line pt-4 lg:hidden" />
+        <SignalRiver sources={NO_SOURCES} focus={focus} className="h-[230px] sm:h-[300px] lg:h-[360px] 2xl:h-[420px]" />
+        <p className="sr-only">{`示意图：每条线是一个采集来源；同一岗位或政策的多次观测归到一起，经过归一与筛选，汇入每天的就业日报。`}</p>
         <ol className="mt-4 grid grid-cols-1 border-t border-line-strong sm:grid-cols-2 lg:mt-0 lg:grid-cols-4">
           {stages.map((s, i) => (
             <li

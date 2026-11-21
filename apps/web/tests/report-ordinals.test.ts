@@ -1,9 +1,8 @@
 // Run after `npm run build -w @aihot/web`. Real production server/router, synthetic HTTP API only.
-// Failure cases: the masthead numbering the newest of 405 issues 400 (the navigation index's length); an
-// issue older than the index losing its number; the calendar marking that issue as not published; the
-// daily archive counting 400 issues beside a masthead that numbers 405.
-// /daily is the career daily (就业日报) and has no issue numbers; the weekly and monthly latest pages still
-// number their issues through report-latest.
+// Failure cases: an issue older than the 400-entry navigation index losing its number; the calendar
+// marking that issue as not published; a stale navigation number overriding the issue's own.
+// /daily is the career daily (就业日报) and has no issue numbers; the weekly and monthly latest pages are
+// being prepared and show no issue list, so these tests read the archived issue pages (report-detail).
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import type { ReportDetail, ReportKind, ReportNavigationEntry } from "@aihot/contracts/site";
@@ -41,7 +40,6 @@ const api = fakeApi((url) => {
   if (match) {
     const kind = match[1] as ReportKind;
     const key = match[2]!;
-    if (key === "latest-page") return { index: index(kind), report: report(kind, keys[kind].at(-1)!) };
     if (key.startsWith("navigation/")) return { items: index(kind) };
     if (keys[kind].includes(key)) return report(kind, key);
   }
@@ -58,14 +56,6 @@ function masthead(html: string): string {
 }
 
 for (const kind of numbersKinds) {
-  test(`the ${kind} masthead numbers the newest of 405 issues 405, not the navigation's 400`, async () => {
-    const response = await fetch(`${web.origin}/${kind}`);
-    assert.equal(response.status, 200, web.logs());
-    const visible = masthead(await response.text());
-    assert.match(visible, /第\s*405\s*期/);
-    assert.doesNotMatch(visible, /第\s*400\s*期/);
-  });
-
   test(`the oldest ${kind} issue, outside the navigation, keeps its number`, async () => {
     const first = keys[kind][0]!;
     assert.ok(!index(kind).some((entry) => entry.key === first));
@@ -88,10 +78,13 @@ for (const kind of numbersKinds) {
   });
 }
 
-test("the daily archive counts every issue, as the masthead numbers them", async () => {
+test("the daily archive says it is being prepared instead of counting issues", async () => {
   const response = await fetch(`${web.origin}/daily/archive`);
   assert.equal(response.status, 200, web.logs());
-  assert.match(masthead(await response.text()), /共\s*405\s*期/);
+  const html = await response.text();
+  assert.match(html, /筹备中/);
+  // The 400-issue navigation is not an archive list: nothing here counts issues.
+  assert.doesNotMatch(html, /共\s*\d+\s*期/);
 });
 
 test("the daily page is the career daily: dated, without an issue number", async () => {
