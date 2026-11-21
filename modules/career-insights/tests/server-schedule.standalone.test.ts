@@ -10,3 +10,11 @@ test("career-insights 声明每日 06:10 的采集任务，missed 只补一次",
   assert.equal(schedule.missed, "once");
   assert.equal(typeof schedule.run, "function");
 });
+
+test("career-insights 在采集之后声明每日 06:40 的增量 LLM 兜底，missed 只补一次", () => {
+  const schedule = server.schedules?.find((entry) => entry.name === "career.llm-normalize");
+  assert.ok(schedule, "career.llm-normalize 已声明");
+  assert.equal(schedule.cron, "40 6 * * *", "与 06:10 采集错开，避免并发写库");
+  assert.equal(schedule.missed, "once");
+  assert.equal(typeof schedule.run, "function");
+});

@@ -413,7 +413,46 @@ B 侧落地要点：
 - 本轮不启用任何新源；74 行基线（3 源 × 2 页）不变。
 - 后续启用顺序：`moe-policy`（待 A 对 HTTP 门禁裁决）→ 阿里 / 字节（需登录态或浏览器渲染，超出当前架构）。
 
+## LLM 归一化兜底与职族精度（2026-11-20）
+
+词典归一化（`normalizer/0.3.0`）对「传统运营/销售/HR/采购等岗位」会把 AI 仅当工具，导致 `role_family` 误判为 AI 产品运营。11-20 追加了一条模型兜底链路，分三次落地并逐步收紧 aipo 判定。
+
+### 三次落地
+
+| 阶段 | 内容 | 结果（psql 实测） |
+|---|---|---|
+| 全量兜底 `llm-0.1` | `scripts/backfill-normalizer-llm.ts`：只处理 role/student 为 unknown 或 skills 为空的行；先 dry-run 20 行核对合并语义再 apply 157 行 | jobs 188、`llm-0.1`=157、0.3.0=31；skills 非空 134→143；observations 440 未变 |
+| 精度收紧 `llm-0.2` | prompt 加负面约束 + 确定性后置校验（标题命中传统职能词且正文无 AI 主体职责 → unknown）+ `--rerun-aipo` 只重判嫌疑行 | aipo 70→20、unknown 68→118（口径：宁可未分类，也不误判成 AI 岗） |
+| 豁免收紧 `llm-0.3` + 对账 | 豁免短语只认具体主体（AI 产品经理 / 大模型产品 / AI 应用开发 / 智能体搭建 / Agent搭建…），且**只在职责行匹配**；「AI 应用机会」「AI 产品形态」「优先项里的 大模型平台」这类任职要求语境不再构成豁免；新增 `--force-ids` 定向修复 | 130 行 0.1/0.2 → `llm-0.3`；aipo 20→17（金融解决方案架构师、产品经理（联盟 C 端产品方向）降 unknown）；二次回填 **0 候选 0 调用** |
+| 词边界修复 `llm-0.3` | 只读审计发现 `squeeze()` 删空白导致 `AI Agent`→`aiagent`，ASCII 词边界 `(^|[^a-z0-9])ai([^a-z0-9]|$)` 不命中 → AI Agent 产品经理被后置校验误降 unknown；改为 ASCII 词在压缩空白前的文本上判边界（email/maintain 仍不误命中） | 全库受影响标题 3 个、真正改判 1 行：`695f1f1a` unknown→ai_product_operations（1 次模型调用，1106+52 tokens）；aipo 17→18、unknown 121→120 |
+
+### 当前口径（2026-11-20T15:2xZ，psql 实测；引用数字时必须同时引用本节口径）
+
+- jobs **188**、observations **440**、policies 6、career_briefs 1。
+- normalizer 版本：`llm-0.3` 132 / `llm-0.1` 31 / `0.3.0` 23 / `llm-0.2` 2。
+- `role_family`：**unknown 120 / ai_application_development 33 / ai_product_operations 18 / data 10 / ai_algorithm 7**。
+- `student_friendly`：no 163 / unknown 21 / yes 4。
+- 数据完整性：回填前后 observations 的 `id|job_id|observed_at|content_hash|collector_version` digest 一致（`0262355afc4ea485a6b2fb16617676e1`），career_jobs 的 `id|last_seen_at|content_hash` digest 一致（`8cb769515c287dc99aea9c634d847e4a`）→ 回填只写白名单派生字段，不污染观测、时间与内容哈希。
+- 成本：130 行 apply usage prompt 154166 / completion 4794；定向纠偏 1 行 1805 / 58。
+
+### 口径风险（必须随数字一起引用）
+
+1. **unknown 占比 120/188 = 63.8%**：这是「宁可未分类也不误判」的结果，**不代表** 63.8% 的岗位与 AI 无关。方向占比、技能趋势只能用已分类子集，并在同段注明分母与 unknown 单列。只读审计（`.session-dump/unknown-audit-2026-11-20.md`）结论：121 行 unknown 中 110 行为明显非 AI 职能岗（销售/运营/游戏策划/采购/客服等，诚实未分类）、10 行边界、1 行规则 bug（已修）；**不建议放宽标题词典**（按现有词典重算会把 14 行判成非 unknown，其中 13 行是错的）。
+2. 31 行 `llm-0.1` 的派生字段已完整、不在兜底范围（按裁决不重跑以省成本）；若只需统一版本号，用 `scripts/backfill-normalizer.ts`（只刷派生字段与版本，不调模型）。
+3. 2 行仍 `llm-0.2`（B端产品经理等）经 dry-run 复核 aipo 判定不变，未再次付费。
+4. 版本保持 `llm-0.3` 不 bump：本次收紧只影响「标题非 AI 主体且正文仅在任职要求行提及 AI」的行，全库此类仅 3 行（B端产品经理 / 伙伴FDE教研 / 金融解决方案架构师）且已逐行复核；bump 会让 132 行变 stale 并触发全库重新调用，收益不成比例。
+5. 每日 cron 采集后仍会新增 unknown 行，未接 cron 前需要人工回填（T-A 把兜底接进 cron，见下节）。
+
+### 证据文件
+
+- `modules/career-insights/collector/evidence/live-runs/20261120T1103Z-llm-backfill.json`（llm-0.1 全量回填）
+- `.../20261120T1513Z-llm-02-backfill-before.json`、`...-dry-run-20.log`（llm-0.3 回填前快照与 dry-run 20 行）
+- `.../20261120T1523Z-llm-03-reconcile.json`（130 行回填对账 + 定向纠偏 + 豁免回归检查）
+- `.../20261120T1555Z-llm-04-word-boundary.json`（ASCII 词边界 bug 修复 + AI Agent 产品经理改判）
+
 ## 最近更新
+
+- **2026-11-20**：新增「LLM 归一化兜底与职族精度」：`llm-0.1` 全量兜底 → `llm-0.2` 精度收紧（aipo 70→20）→ `llm-0.3` 豁免只认职责行 → 修 ASCII 词边界 bug（AI Agent 标题误降）。最终 aipo 18、unknown 120/188；回填只写白名单派生字段（observations 与 last_seen_at/content_hash digest 前后一致），二次回填 0 候选 0 调用。另新增 cron 每日 06:40 有预算增量兜底（`career.llm-normalize`）。
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`（merge：按 A 裁定修正 unknown 与应届友好文案，源提交 `04f7cc4`）。
 - 本次同步：未关闭项 #7 与待办 #2 的「E 复验已启动」已被后续取代——E1–E5 + E6 已合入（`cd69c68`），真实数据复验第一段 22/22、第二段 43/43、扩采 74 行增量 39/39 全 PASS；政策列表页前端仍 404，属未覆盖项（路由归 A）。历史结论与 74 行基线数字（jobs 74 / obs 230 / policies 6 / runs 38 等）保持不变。

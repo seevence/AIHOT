@@ -26,6 +26,9 @@ export const NORMALIZER_VERSION = "normalizer/0.3.0";
 /** LLM 兜底回填写入的版本前缀（见 scripts/backfill-normalizer-llm.ts）。 */
 export const LLM_NORMALIZER_VERSION_PREFIX = "normalizer/llm-";
 
+/** LLM 兜底写入的当前版本号：手工回填与每日 cron 兜底共用一个值。 */
+export const LLM_NORMALIZER_VERSION = "normalizer/llm-0.3";
+
 /**
  * llm-* 是 LLM 兜底回填的版本，来源不同但产出同 schema、同字段白名单的派生字段，
  * 且已验证不污染观测（回填前后观测与内容哈希不变），因此算当前版本；

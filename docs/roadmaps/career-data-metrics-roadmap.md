@@ -218,7 +218,17 @@
 - 5433 `aihot_test`：`ingest.test.ts` + `repository.test.ts` 共 16 tests / 16 pass / 0 fail（含 3 条刷新场景：版本升级刷新、旧哈希跨版本刷新、同版本派生变化刷新，均不新增 observation）。
 - 未写 15432：生产库仅执行 `SELECT`。worktree 下 `scripts/migrate.ts` 的 `REPO_ROOT` 解析到主仓库，global setup 不会应用本 worktree 的新迁移；本次在 5433 模板库直接调用 `runMigrations(process.cwd())` 应用 0163 后再跑 DB 测试。
 
+## 11-20 后全量样本与职族口径（2026-11-20）
+
+- 引用来源：完整口径见 `career-collector-roadmap.md` 的「LLM 归一化兜底与职族精度（2026-11-20）」节（`llm-0.1` → `llm-0.2` → `llm-0.3` 三次落地、回填对账与 `90494b8` 的 ASCII 词边界修复；该节已按最终值 120/63.8% 更新）；本节只登记引用规则，不复制该节的过程数字。
+- 样本（2026-11-20 23:5x～11-21 00:0x CST，库内只读复核）：`career_jobs` **188** 行、`career_job_observations` **440** 行、`career_policies` 6、`career_briefs` 1；观测日 2（CST 日粒度）；`data_origin` 全部 `live`（188/188）。
+- 职族（分母 188，unknown 单列）：11-20 批（PR #16 合入 main 时）为 `unknown` **121/188 = 64.4%**、`ai_application_development` 33、`ai_product_operations` 17、`data` 10、`ai_algorithm` 7；此后本分支 `90494b8`（未进 main）定向修复 1 行（「AI Agent 产品经理」误降）→ `ai_product_operations` 18、`unknown` **120/188 = 63.8%**。无论取哪一版，unknown 都是「宁可未分类也不误判」的口径，**不代表** 63.8%～64.4% 的岗位与 AI 无关；方向占比、技能趋势只能使用已分类子集，且必须同段写分母、把 unknown 单列。
+- 归一化版本（分母 188）：`llm-0.3` 132、`llm-0.1` 31、`0.3.0` 23、`llm-0.2` 2；`llm-*` 按当前版本计（`3b12577`），`summary` 不再报 `stale_data`。
+- 其它分布（分母 188）：`student_friendly` no 163 / unknown 21 / yes 4；空 `skills` 45/188 = 23.9%，`summary` 与 `/daily` 的 `unknown_ratio` 均为 45/188 口径（技能 unknown，不是职族 unknown）。
+- 引用纪律：任何占比必须带分母与 unknown 单列；30 行历史快照、40 行权威全表、74 行扩采窗口三层仍按「样本演进与口径分层（2026-11-19）」使用，**不得**与 188 行全量口径混用或互相换算。
+
 ## 最近更新
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`。
 - 本次同步：新增「样本演进与口径分层」——30 行历史快照、40 行权威全表（1 页/源）、74 行扩采窗口基线（2 页/源）三层交叉说明；`current_metrics` 30 行快照属历史，不得与全表混用。既有 C1–C3 与 0.2.0 的历史结论保持不变。
+- **2026-11-20**：新增「11-20 后全量样本与职族口径」：`career_jobs` 188 行、`career_job_observations` 440 行；职族 `unknown` 在 PR #16 合入时为 121/188 = 64.4%，本分支 `90494b8` 修复 1 行后为 120/188 = 63.8%（collector 路线图同节已按后者更新）。按「宁可未分类也不误判」引用；任何占比必须带分母与 unknown 单列，30/40/74 三层旧口径继续有效、不得与 188 行混用。
