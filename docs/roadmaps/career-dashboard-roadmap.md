@@ -224,6 +224,9 @@
 - **已知限制 / 待办（L4 收口）**：置信度文案首页「低/中/高」与洞察页「低置信」待统一；`CareerDashboard.tsx` 与 `CareerSignals` 旧包装已无线上入口（死代码待清）；`modules/career-insights/web/README.md` 与 E8 的「8 区块/七段」口径已被本节取代。
 
 
+- **E9 四次调整（2026-11-21 下午）**：
+  - **收藏岗位显示可能已下架（1cf92be）**：新增只读批量接口 /api/site/career-insights/jobs/availability?ids=（≤200、UUID、visible/missing、no-store，与岗位详情可见性一致）；/starred 的「收藏的岗位」对 missing 行显示「可能已下架（仍可移除）」，链接与移除保留，接口失败静默降级；SSR 首帧无徽标。
+  - **网站改名 THEWIND（655a930）**：用户可见品牌统一（站名/标题/结构化数据/RSS/og/后台/关于页），去掉上游 AIHOT 页脚与外链；公开技术标识 mcpPrefix myhot→thewind、interfaceVersion 4.0.0→5.0.0（分享/导出文件名同步）；基础设施标识（包名/DB/compose/env/localStorage/cookie/links.aihot）保持。详见 docs/specs/brand-rename-2026-11-21.md。
 - **E9 三次调整（2026-11-21 中午，用户反馈）**：
   - **岗位收藏（`a07693b`）**：收藏栏此前只用于文章，现在也用于职业岗位。存储为**浏览器本地收藏**（`aihot-starred-jobs`，上限 200，与文章收藏 `aihot-starred-items` 互不影响；保存岗位快照，下架后仍可回看）；入口在热门岗位列表行与职位详情标题区（`JobStarButton`，`aria-pressed`/`data-job-star`），`/starred` 新增「收藏的岗位」区块（中文职族/公司/城市/收藏时间/移除/跳详情 + 空态引导）。SSR/hydration 首帧为未收藏态、挂载后恢复（`useSyncExternalStore` server snapshot），跨标签 storage 事件同步；不可解析/不可显示日期会被安全替换，不会让 `/starred` 崩；**无后端/表/契约改动**（设备本地数据，换浏览器不迁移；导出/导入目前只含文章收藏，岗位收藏仅存在本浏览器，页面文案已说明）。
   - **筛选/翻页不再重置滚动（`20cd1b0` + 回归 `f3a8f38`）**：React Router 的 `ScrollRestoration` 会为新 location 滚到页顶；给筛选 chips、清除筛选、方向/职位证据、上一页/下一页的 Link 加 `preventScrollReset`。浏览器回归（chromium）实测：点筛选后 `scrollY` 保持（478）、点下一页后落到岗位明细（3006→1336）而非页顶；变异验证（去掉 preventScrollReset / 去掉锚点）会让测试失败。
