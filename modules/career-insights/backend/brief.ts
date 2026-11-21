@@ -43,14 +43,18 @@ const YEAR_MAX = 2100;
 const SYSTEM_PROMPT = [
   "你是学生就业数据研判助手。输入是一份中文 JSON 聚合统计：数据截止、观察窗天数、样本量、观测日数、方向、职位、技能、技能占比分母，以及可引用证据；所有名称都是中文展示值。",
   "只输出一个 JSON 对象，字段为 facts、inferences、actions、limitations、confidence、evidence，不要输出 JSON 之外的文字。",
-  "输出必须全部使用中文，不得出现任何内部 ID、英文标识或英文字段名（例如 role_family、skills、share、ai_application_development、data_analysis 都不得出现在正文里）；引用职族或技能必须使用输入里的中文名称；引用技能占比必须写成百分比并在同一处说明分母（例如「占 166 个有技能岗位的 43.4%」），不要单独写百分比、不要写小数或 share；facts、inferences、actions、limitations 都适用。",
+  "正文（facts、inferences、actions、limitations 的文本）必须全部使用中文，不得出现任何内部 ID、英文标识或英文字段名（例如 role_family、skills、share、ai_application_development、data_analysis 都不得出现在正文里）；JSON 字段名（facts、inferences、actions、limitations、confidence、evidence）、枚举值（job/policy、low/medium/high）与证据编号（UUID）属于接口格式，不在此限。引用职族或技能必须使用输入里的中文名称；引用技能占比必须写成百分比并在同一处说明分母（例如「占 166 个有技能岗位的 43.4%」），不要单独写百分比、不要写小数或 share；facts、inferences、actions、limitations 都适用。",
   "facts：只陈述输入中已有的事实，每条只写一件事（不要在一句里罗列多个方向或技能），每条不超过 60 个字；inferences：趋势推断，必须写明观察窗或置信度措辞；actions：给学生可执行的准备建议；limitations：数据与方法的限制。",
   `只能使用输入中已经出现的数字，禁止编造或自行推算新数字（facts 每条${MAX_TOKENS_HINT}）。`,
   "evidence：只能引用输入「可引用证据」中已有的编号；输出时 kind 取 job（对应类型 岗位）或 policy（对应类型 政策），id 填该编号，title 原样返回；没有可引用项时给空数组。",
   "confidence：low、medium、high 之一。观测日不足两个时不要写增长、下降、走势一类判断。",
 ].join("\n");
 
-/** 模型输出里常见但用户不该看到的英文字段名 → 中文说法。 */
+/**
+ * 正文里常见的 snake_case 字段名 → 中文说法。只收 snake_case 形态：share、skills 这类单词字段
+ * 与 confidence 取值（low/medium/high）不做无条件替换，否则 high-paying、medium-sized 这类
+ * 普通英文词会被误伤（换模型后正文里可能出现英文描述）。
+ */
 const FIELD_NAME_TERMS: ReadonlyArray<readonly [string, string]> = [
   ["role_family", "职族"],
   ["top_skills", "主要技能"],
@@ -69,34 +73,12 @@ const FIELD_NAME_TERMS: ReadonlyArray<readonly [string, string]> = [
   ["as_of", "数据截止"],
   ["contract_version", "契约版本"],
   ["generated_at", "生成时间"],
-  ["directions", "方向"],
-  ["titles", "职位"],
-  ["title", "标题"],
-  ["skills", "技能"],
-  ["skill", "技能"],
-  ["share", "占比"],
-  ["unknown", "未归类"],
-  ["jobs", "岗位"],
-  ["job", "岗位"],
-  ["policies", "政策"],
-  ["policy", "政策"],
-  ["evidence", "证据"],
-  ["inferences", "推断"],
-  ["limitations", "限制"],
-  ["actions", "建议"],
-  ["facts", "事实"],
-  ["confidence", "置信度"],
-  ["medium", "中"],
-  ["high", "高"],
-  ["low", "低"],
-  ["kind", "类型"],
-  ["id", "编号"],
 ];
 
 /**
- * 中文化替换表：职族 id、全部技能 id、常见英文字段名。按 id 长度降序拼成一个正则，
- * 保证 data_analysis 先于 data、skills 先于 skill 命中；两侧用词边界，避免把 Google、
- * email、metadata、database 这类普通英文词拆开。词典里没有的技能不展示（宁可不出现内部 id）。
+ * 中文化替换表：职族 id、全部技能 id、snake_case 字段名。按 id 长度降序拼成一个正则，
+ * 保证 data_analysis 先于 data 命中；两侧用词边界，避免把 Google、email、metadata、
+ * database 这类普通英文词拆开。词典里没有的技能不展示（宁可不出现内部 id）。
  */
 const DOMAIN_TERM_ENTRIES: ReadonlyArray<readonly [string, string]> = [
   ...Object.entries(ROLE_FAMILY_LABELS),
@@ -121,8 +103,18 @@ const DOMAIN_TERM_SOURCE =
   ")(?![A-Za-z0-9_])";
 
 const DOMAIN_TERM_PATTERN = new RegExp(DOMAIN_TERM_SOURCE, "giu");
-/** 残留校验用大小写敏感版：Python、SQL 这类展示名是词典认可的写法，不算内部 id。 */
-const DOMAIN_TERM_RESIDUAL_PATTERN = new RegExp(DOMAIN_TERM_SOURCE, "u");
+
+/**
+ * 残留兜底用的「内部标识形态」：snake_case（至少两段、全小写字母/数字/下划线、长度 ≥4）。
+ * 与替换表相互独立，因此替换表之外的新 id（如 rust_engineer、latest_published_at）也能被判不合规，
+ * 而不是静默漏过；词典展示名（Python、SQL 等）不是 snake_case，天然放行。
+ */
+const INTERNAL_IDENTIFIER_PATTERN = /(?<![A-Za-z0-9_])([a-z][a-z0-9]*(?:_[a-z0-9]+)+)(?![A-Za-z0-9_])/gu;
+const MIN_INTERNAL_IDENTIFIER_CHARS = 4;
+const DISPLAY_NAME_WHITELIST: ReadonlySet<string> = new Set([
+  ...Object.values(SKILL_LABELS),
+  ...Object.values(ROLE_FAMILY_LABELS),
+]);
 
 export type CareerBriefEvidenceV1 = CareerBriefV1["evidence"][number];
 
@@ -337,16 +329,20 @@ function localizeDomainTerms(text: string): string {
 }
 
 /**
- * 兜底校验：清洗后仍出现已知内部标识就判模型输出不合规（而不是静默放过）。
- * 大小写敏感，因为词典里的 Python、SQL 等展示名本身就是允许的写法。
+ * 兜底校验：正文里出现任何 snake_case 形态的内部标识就判模型输出不合规（而不是静默放过）。
+ * 中文化替换表负责已知 id，这里负责替换表之外的未知 id：两者用不同的判定依据，互相独立，
+ * 所以断言是可达的（删掉它，含 rust_engineer 的输出会从「失败」变成「写库」，测试会红）。
  */
 function assertNoInternalTerms(texts: readonly string[]): void {
   for (const text of texts) {
-    const match = DOMAIN_TERM_RESIDUAL_PATTERN.exec(text);
-    if (match === null) continue;
-    throw new CareerBriefValidationError(
-      `Model output still contains an internal identifier after localization: ${match[0]} (context: ${text.slice(0, CONTEXT_CHARS)}).`,
-    );
+    for (const match of text.matchAll(INTERNAL_IDENTIFIER_PATTERN)) {
+      const identifier = match[1]!;
+      if (identifier.length < MIN_INTERNAL_IDENTIFIER_CHARS) continue;
+      if (DISPLAY_NAME_WHITELIST.has(identifier)) continue;
+      throw new CareerBriefValidationError(
+        `Model output contains an internal identifier: ${identifier} (context: ${text.slice(0, CONTEXT_CHARS)}).`,
+      );
+    }
   }
 }
 
@@ -364,9 +360,11 @@ function textItems(value: unknown, field: string): string[] {
   });
 }
 
+/** facts 超过 60 字时截断，并用省略号标出被切开的位置（避免在半句或数字中间无声硬切）。 */
 function clampFact(text: string): string {
   const characters = [...text];
-  return characters.length <= MAX_FACT_CHARS ? text : characters.slice(0, MAX_FACT_CHARS).join("");
+  if (characters.length <= MAX_FACT_CHARS) return text;
+  return characters.slice(0, MAX_FACT_CHARS - 1).join("") + "…";
 }
 
 interface NumberToken {

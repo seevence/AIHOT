@@ -8,6 +8,7 @@ import { closeDb, sql } from "@aihot/backend/db";
 import type { NormalizedJobV1 } from "../contracts/index.ts";
 import type { CareerBriefV1 } from "../contracts/insights.ts";
 import {
+  CAREER_BRIEF_PROMPT_VERSION,
   CareerBriefValidationError,
   buildCareerBriefPrompt,
   composeCareerBrief,
@@ -19,6 +20,7 @@ import {
 import { registerCareerHttp } from "../backend/http.ts";
 import { ingestBatch } from "../backend/ingest.ts";
 import type { CareerRepository } from "../backend/repository.ts";
+import { SKILL_ALIASES, SKILL_LABELS } from "../data/dictionaries.ts";
 import { NORMALIZER_VERSION } from "../data/normalize.ts";
 
 const JOB_ID = "11111111-1111-1111-1111-111111111111";
@@ -138,12 +140,27 @@ test("the composed brief keeps the contract shape and rewrites evidence titles f
   assert.deepEqual(record.evidence, [{ kind: "job", id: JOB_ID, title: "算法工程师" }]);
 });
 
-test("facts are cut to 60 characters", () => {
+test("facts are cut to 60 characters and marked with an ellipsis", () => {
   const record = composeCareerBrief(input(), draft({ facts: ["数".repeat(80)] }), {
     generated_at: "2026-11-20T01:00:00.000Z",
   });
 
   assert.equal([...record.facts[0]!].length, 60);
+  assert.ok(record.facts[0]!.endsWith("…"));
+});
+
+test("a truncated percentage fact still shows the percentage and an ellipsis", () => {
+  const record = composeCareerBrief(
+    shareInput(),
+    draft({
+      facts: ["data_analysis 占 12 个有技能岗位的 42.7%，" + "后续仍需更长观察窗确认走势".repeat(3)],
+    }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.equal([...record.facts[0]!].length, 60);
+  assert.ok(record.facts[0]!.endsWith("…"));
+  assert.ok(record.facts[0]!.includes("42.7%"));
 });
 
 function shareInput(overrides: Partial<CareerBriefInputV1> = {}): CareerBriefInputV1 {
@@ -224,15 +241,16 @@ test("digit runs in other input strings pass too, but numbers absent from the in
     ],
   });
 
+  // 输出里只引用数字片段（不把内部 id 本身写进正文），片段来自输入字符串即可算是 grounded。
   const record = composeCareerBrief(
     withSkillIds,
-    draft({ facts: ["技能 skill_2024 与 track_202445 都在输入里"] }),
+    draft({ facts: ["输入编号 2024 与 202445 都可引用"] }),
     { generated_at: "2026-11-20T01:00:00.000Z" },
   );
-  assert.equal(record.facts[0], "技能 skill_2024 与 track_202445 都在输入里");
+  assert.equal(record.facts[0], "输入编号 2024 与 202445 都可引用");
 
   assert.throws(
-    () => composeCareerBrief(withSkillIds, draft({ facts: ["技能 skill_2024000 不在输入里"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
+    () => composeCareerBrief(withSkillIds, draft({ facts: ["输入编号 2024000 不在输入里"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
     (error: unknown): boolean => error instanceof CareerBriefValidationError && error.message.includes("2024000"),
   );
 });
@@ -301,25 +319,51 @@ test("the prompt input uses Chinese display names and percentages instead of int
   assert.ok(user.includes("可引用证据"));
 });
 
-test("the composed brief replaces internal ids and English field names in every text field", () => {
+test("the default prompt version is career-brief/2", () => {
+  const record = composeCareerBrief(input(), draft(), { generated_at: "2026-11-20T01:00:00.000Z" });
+
+  assert.equal(record.prompt_version, CAREER_BRIEF_PROMPT_VERSION);
+  assert.equal(record.prompt_version, "career-brief/2");
+});
+
+test("the system prompt keeps the Chinese-only, Chinese-name and percentage constraints", () => {
+  const { system } = buildCareerBriefPrompt(input());
+
+  for (const constraint of [
+    "正文（facts、inferences、actions、limitations 的文本）必须全部使用中文",
+    "不得出现任何内部 ID、英文标识或英文字段名",
+    "JSON 字段名（facts、inferences、actions、limitations、confidence、evidence）、枚举值（job/policy、low/medium/high）与证据编号（UUID）属于接口格式，不在此限",
+    "引用职族或技能必须使用输入里的中文名称",
+    "引用技能占比必须写成百分比并在同一处说明分母",
+  ]) {
+    assert.ok(system.includes(constraint), constraint);
+  }
+});
+
+test("every skill alias maps to a skill with a display label", () => {
+  const unlabeled = Object.values(SKILL_ALIASES).filter((skill) => !(skill in SKILL_LABELS));
+  assert.deepEqual(unlabeled, []);
+});
+
+test("the composed brief replaces internal ids and snake_case field names in every text field", () => {
   const record = composeCareerBrief(
     shareInput({ skills_sample_size: 166 }),
     draft({
       facts: ["data_analysis 占比 42.7%，分母为 166 个有技能岗位"],
-      inferences: ["ai_application_development 方向的 share 在观察窗内保持 0.4266"],
+      inferences: ["ai_application_development 方向的 job_count 在观察窗内保持 0.4266"],
       actions: ["先补齐 data_analysis 与 python 的项目经历"],
-      limitations: ["role_family 与 skills 均为中文展示值"],
+      limitations: ["role_family 与 student_friendly 均为中文展示值"],
     }),
     { generated_at: "2026-11-20T01:00:00.000Z" },
   );
 
   assert.equal(record.facts[0], "数据分析 占比 42.7%，分母为 166 个有技能岗位");
-  assert.equal(record.inferences[0], "软件 / AI 应用开发 方向的 占比 在观察窗内保持 0.4266");
+  assert.equal(record.inferences[0], "软件 / AI 应用开发 方向的 岗位数 在观察窗内保持 0.4266");
   assert.equal(record.actions[0], "先补齐 数据分析 与 Python 的项目经历");
-  assert.equal(record.limitations[0], "职族 与 技能 均为中文展示值");
+  assert.equal(record.limitations[0], "职族 与 学生友好 均为中文展示值");
 
   const serialized = JSON.stringify(record);
-  for (const internal of ["data_analysis", "ai_application_development", "role_family", "skills", "share"]) {
+  for (const internal of ["data_analysis", "ai_application_development", "role_family", "student_friendly", "job_count"]) {
     assert.equal(serialized.includes(internal), false, internal);
   }
 });
@@ -338,6 +382,42 @@ test("localization keeps ordinary English words intact and only replaces exact i
   assert.equal(record.inferences[0], "数据 方向与 AI 算法方向都需要数据分析");
 });
 
+test("localization leaves hyphenated English words and confidence words alone", () => {
+  const record = composeCareerBrief(
+    input(),
+    draft({ facts: ["high-paying 与 medium-sized 只是普通英文描述"] }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.equal(record.facts[0], "high-paying 与 medium-sized 只是普通英文描述");
+});
+
+test("an unknown snake_case identifier in the model output rejects the draft", () => {
+  for (const [text, identifier] of [
+    ["模型提到 rust_engineer 方向", "rust_engineer"],
+    ["输入里没有 latest_published_at 字段", "latest_published_at"],
+  ] as const) {
+    assert.throws(
+      () => composeCareerBrief(input(), draft({ limitations: [text] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
+      (error: unknown): boolean => error instanceof CareerBriefValidationError && error.message.includes(identifier),
+    );
+  }
+});
+
+test("the identifier fallback accepts job numbers, RAG, A/B and Go", () => {
+  const withJobId = input({
+    evidence_candidates: [{ kind: "job", id: JOB_ID, title: "大客户服务经理 TAM（J107214）" }],
+  });
+
+  const record = composeCareerBrief(
+    withJobId,
+    draft({ facts: ["J107214 岗位要求 RAG、A/B 测试与 Go 语言"] }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.equal(record.facts[0], "J107214 岗位要求 RAG、A/B 测试与 Go 语言");
+});
+
 test("evidence ids outside the input candidates are dropped silently", () => {
   const record = composeCareerBrief(
     input(),
@@ -351,6 +431,23 @@ test("evidence ids outside the input candidates are dropped silently", () => {
   );
 
   assert.deepEqual(record.evidence, []);
+});
+
+test("an unknown internal identifier from the model fails generation and writes nothing", async () => {
+  await seedDay("2026-11-20T10:00:00.000Z");
+
+  await assert.rejects(
+    () =>
+      generateCareerBrief(
+        sql,
+        async () => ({ draft: draft({ facts: ["岗位要求 rust_engineer 经验"] }) }),
+        { limit: 6, window_days: 30, now: () => new Date("2026-11-20T12:00:00.000Z") },
+      ),
+    (error: unknown): boolean => error instanceof CareerBriefValidationError && error.message.includes("rust_engineer"),
+  );
+
+  const counts = await sql<{ count: number }[]>`SELECT COUNT(*)::int AS count FROM career_briefs`;
+  assert.equal(counts[0]!.count, 0);
 });
 
 test("a single observation day forces low confidence and removes trend claims", () => {
