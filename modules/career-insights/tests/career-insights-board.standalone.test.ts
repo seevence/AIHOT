@@ -114,6 +114,9 @@ const CATALOG: CareerCatalogResponseV1 = {
   as_of: AS_OF,
   window_days: 30,
   sample_size: 12,
+  unclassified_job_count: 4,
+  unclassified_student_friendly_count: 1,
+  unclassified_ratio: 4 / 12,
   directions: [
     {
       role_family: "ai_algorithm",
@@ -542,6 +545,35 @@ test("skill trend states the counting rule and keeps the unknown share visible",
   assert.match(section.text(), /方向内高频技能组合/);
 });
 
+test("skill trend falls back to a per-skill metric when the summary has no global skill metric", () => {
+  // 有已识别技能时聚合侧只发维度指标；每条都带全局 unknown_count/unknown_ratio，页面不能显示「暂无数据」。
+  const perSkillOnly: SummaryResponseV1 = {
+    ...SUMMARY,
+    metrics: [
+      {
+        metric_id: "skill_demand_share",
+        version: "1.0",
+        label: "技能需求占比",
+        unit: "ratio",
+        status: "ok",
+        value: 0.8,
+        numerator_count: 8,
+        denominator_count: 10,
+        sample_size: 10,
+        as_of: AS_OF,
+        dimension: { skill_id: "python" },
+        unknown_count: 2,
+        unknown_ratio: 0.2,
+        evidence: [],
+        disclaimer: "基于公开样本。",
+      },
+      SUMMARY.metrics[1]!,
+    ],
+  };
+  const html = board(perSkillOnly, CATALOG);
+  assert.equal(html("[data-skill-unknown]").text(), "未识别技能岗位 2 个 · 占比 20.0%");
+});
+
 test("the brief section appends student advice after actions, with directions, skills and job evidence links", () => {
   const html = board(SUMMARY, CATALOG);
   const brief = html("[data-insight-section='career-brief']");
@@ -677,7 +709,16 @@ test("the method section says 窗口未知 instead of inventing a window when ca
 });
 
 test("an empty catalog asks to keep observing instead of inventing trends", () => {
-  const empty: CareerCatalogResponseV1 = { ...CATALOG, sample_size: 0, directions: [], titles: [], skills: [] };
+  const empty: CareerCatalogResponseV1 = {
+    ...CATALOG,
+    sample_size: 0,
+    unclassified_job_count: 0,
+    unclassified_student_friendly_count: 0,
+    unclassified_ratio: null,
+    directions: [],
+    titles: [],
+    skills: [],
+  };
   const html = board(SUMMARY, empty);
   assert.match(html("[data-job-trend-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
   assert.match(html("[data-insight-section='career-brief'] [data-advice-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
@@ -716,8 +757,18 @@ test("student-friendly and city filters drive ranking and links", () => {
 });
 
 test("an empty catalog page says 继续积累观测", () => {
-  const empty: CareerCatalogResponseV1 = { ...CATALOG, sample_size: 0, directions: [], titles: [], skills: [] };
+  const empty: CareerCatalogResponseV1 = {
+    ...CATALOG,
+    sample_size: 0,
+    unclassified_job_count: 0,
+    unclassified_student_friendly_count: 0,
+    unclassified_ratio: null,
+    directions: [],
+    titles: [],
+    skills: [],
+  };
   const html = render(createElement(JobsCatalogBoard, { catalog: empty, jobs: { ...JOBS, items: [], total: 0 }, filters: FILTERS }));
+  assert.equal(html("[data-direction-unclassified]").length, 0, "no unclassified line without a sample");
   assert.equal(html("[data-catalog-empty]").text(), CATALOG_EMPTY_TEXT);
   assert.equal(sectionIds(html).length, 0);
 });
@@ -736,15 +787,44 @@ test("the jobs catalog page puts the filter block between the direction ranking 
   assert.deepEqual(order, ["catalog-directions", "catalog-filters", "catalog-jobs"]);
 });
 
-test("the direction ranking explains its full-catalog scope and the student-friendly re-ranking", () => {
+test("the direction ranking states its classified scope and discloses the unclassified jobs", () => {
   const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: FILTERS }));
   const note = html("[data-section='direction-ranking'] [data-direction-scope]");
   assert.equal(note.length, 1);
-  assert.match(note.text(), /全量岗位/);
+  assert.match(note.text(), /只统计已归类的 66\.7% 岗位/, "8 of 12 jobs are classified");
+  assert.match(note.text(), /未归类岗位在下方明细单列/);
   assert.match(note.text(), /仅学生友好/);
   assert.match(note.text(), /按学生友好岗位数排序/);
   assert.match(note.text(), /城市等筛选不影响本榜/);
+  assert.doesNotMatch(note.text(), /全量岗位/);
   assert.doesNotMatch(note.text(), /不随下方筛选变化/);
+
+  const disclosure = html("[data-section='direction-ranking'] [data-direction-unclassified]");
+  assert.equal(disclosure.length, 1);
+  assert.equal(disclosure.text(), "另有 4 个岗位未归类（33.3%），单列在岗位明细，不进入方向榜。");
+  assert.equal(disclosure.prev().is("ul"), true, "the disclosure follows the ranking list");
+});
+
+test("the unclassified disclosure follows the student-friendly scope and degrades when the API omits it", () => {
+  const studentFilters: JobFiltersV1 = { ...FILTERS, student_friendly: "yes" };
+  const studentHtml = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: studentFilters }));
+  const studentDisclosure = studentHtml("[data-section='direction-ranking'] [data-direction-unclassified]");
+  assert.equal(studentDisclosure.length, 1);
+  assert.equal(
+    studentDisclosure.text(),
+    "另有 1 个学生友好岗位未归类，单列在岗位明细，不进入方向榜。",
+    "the one unknown student-friendly job explains 5 in the ranking vs 6 in the list",
+  );
+
+  const legacy: CareerCatalogResponseV1 = { ...CATALOG };
+  delete legacy.unclassified_job_count;
+  delete legacy.unclassified_student_friendly_count;
+  delete legacy.unclassified_ratio;
+  const legacyHtml = render(createElement(JobsCatalogBoard, { catalog: legacy, jobs: JOBS, filters: FILTERS }));
+  assert.equal(legacyHtml("[data-direction-unclassified]").length, 0);
+  const legacyNote = legacyHtml("[data-section='direction-ranking'] [data-direction-scope]");
+  assert.match(legacyNote.text(), /只统计已归类的岗位/);
+  assert.doesNotMatch(legacyNote.text(), /全量岗位/);
 });
 
 test("the filter chips link to the filtered catalog with page reset to one", () => {

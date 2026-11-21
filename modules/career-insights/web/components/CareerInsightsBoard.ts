@@ -120,15 +120,21 @@ function skillChips(skills: readonly { skill: string; count: number }[]): ReactE
   );
 }
 
-/** 技能未识别口径取自 summary 的全局 skill_demand_share 指标；维度指标不是全局口径。 */
+/**
+ * 技能未识别口径优先取 summary 的全局 skill_demand_share 指标（dimension 为空）。
+ * 有已识别技能时聚合侧只发按 skill_id 的维度指标，每条都带同一组全局 unknown_count/unknown_ratio，
+ * 此时从维度指标取这组口径，避免把有值的未识别比例误显示成「暂无数据」。
+ */
 export function unknownSkillMetric(summary: SummaryResponseV1 | null): MetricResultV1 | undefined {
-  return summary?.metrics.find(
+  if (summary === null) return undefined;
+  const skillMetrics = summary.metrics.filter((metric) => metric.metric_id === "skill_demand_share");
+  const global = skillMetrics.find(
     (metric) =>
-      metric.metric_id === "skill_demand_share" &&
       metric.dimension.skill_id === undefined &&
       metric.dimension.role_family === undefined &&
       metric.dimension.theme_id === undefined,
   );
+  return global ?? skillMetrics.find((metric) => metric.unknown_count !== undefined);
 }
 
 /** 未分类职位的口径来自 job_family_share 的 unknown 维度。 */
@@ -279,7 +285,7 @@ function SignalsSection({ signals }: { signals: CareerSignalsResponseV1 | null }
     h(
       "p",
       { "data-signals-as-of": signals.generated_at, className: `mt-1 ${MUTED_CLASS}` },
-      `观察窗 ${signals.window_days} 天 · 生成于 `,
+      `观察窗 ${signals.window_days} 天 · 数据截至 `,
       h(CareerTime, { value: signals.generated_at }),
     ),
     h(CareerSignalItems, { signals: signals.signals, skipped: signals.skipped }),

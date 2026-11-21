@@ -50,18 +50,21 @@ export interface CareerDailyResponseV1 {
   policies_total: number;
   unknown_ratio: number | null;
   sample_size: number;
+  /** 数据截止时间（全库最后一次岗位观测，稳定值用于缓存/ETag）；无岗位时为 1970-01-01T00:00:00.000Z。 */
   generated_at: string;
 }
 /**
  * 异常信号规则：
  * - cross_industry：算法/AI 族占多数的公司出现机械/硬件等非 AI 岗位；
- * - new_family：公司在近 window_days 天内首次出现某职族（此前无该族）；
+ * - new_family：公司在近 window_days 天内首次出现某职族（此前无该族）；数据覆盖不足 window_days 时
+ *   只描述「本站观察到首次出现」，confidence=low，不断言近 N 天首次；
  * - surge：最近 24h 新岗位 ≥5 且达到历史日均 3 倍；
  * - skill_mismatch：算法/大模型类标题的岗位要求机械/硬件类技能。
  */
 export type CareerSignalRule = "cross_industry" | "new_family" | "surge" | "skill_mismatch";
 
-export type CareerSignalConfidence = "high" | "medium";
+/** 数据覆盖不足 window_days 时 new_family 记 low：只能说明「本站观察到」，不能断言「近 N 天首次」。 */
+export type CareerSignalConfidence = "high" | "medium" | "low";
 
 /** 每条信号都带可复算的数字依据；未用于该规则的字段不出现。 */
 export interface CareerSignalEvidenceV1 {
@@ -73,11 +76,13 @@ export interface CareerSignalEvidenceV1 {
   matched_terms?: string[];
   matched_title_terms?: string[];
   matched_skill_terms?: string[];
-  /** new_family：新职族、该族岗位数、窗口天数、该族最早出现时间。 */
+  /** new_family：新职族、该族岗位数、窗口天数、该族最早出现时间、全站数据覆盖天数。 */
   role_family?: RoleFamily;
   family_job_count?: number;
   window_days?: number;
   earliest_first_seen_at?: string;
+  /** new_family：全站最早一次观测至今覆盖的天数；小于 window_days 时 confidence 为 low。 */
+  data_coverage_days?: number;
   /** surge：24h 内新岗位数、历史天数、历史日均、倍数；历史日均 0 时倍数为 null。 */
   last_24h_jobs?: number;
   history_days?: number;
@@ -116,9 +121,10 @@ export interface CareerSignalsResponseV1 {
   window_days: number;
   signals: CareerSignalV1[];
   skipped: CareerSignalSkippedV1[];
+  /** 数据截止时间（全库最后一次岗位观测，稳定值用于缓存/ETag）；无岗位时为 1970-01-01T00:00:00.000Z。 */
   generated_at: string;
 }
-/** 方向榜：按 role_family 聚合，unknown 单列在 summary，不进入榜单。 */
+/** 方向榜：按 role_family 聚合，unknown 不进入榜单，未归类数量与占比由 catalog 的 unclassified_* 字段单列披露。 */
 export interface CareerDirectionV1 {
   role_family: RoleFamily;
   job_count: number;
@@ -150,6 +156,8 @@ export interface CareerSkillV1 {
 /**
  * 岗位目录：方向榜、职位榜、技能榜共用一次全库快照。
  * directions 与 titles 各受 limit 限制；skills 固定取前 10。空表时三个数组都为空。
+ * 方向榜只统计已归类（role_family != unknown）的岗位，未归类岗位的数量与占比单独披露，
+ * 页面据此说明榜单口径，并解释「仅学生友好」时方向榜合计与岗位明细的差额。
  */
 export interface CareerCatalogResponseV1 {
   contract_version: "0.1";
@@ -157,6 +165,12 @@ export interface CareerCatalogResponseV1 {
   as_of: string;
   window_days: number;
   sample_size: number;
+  /** 未归类（role_family=unknown）的岗位数；方向榜不含这些岗位。 */
+  unclassified_job_count?: number;
+  /** 未归类岗位中学生友好（student_friendly=yes）的岗位数；方向榜的学生友好口径同样不含它们。 */
+  unclassified_student_friendly_count?: number;
+  /** 未归类岗位占 sample_size 的比例；空表为 null。 */
+  unclassified_ratio?: number | null;
   directions: CareerDirectionV1[];
   titles: CareerTitleV1[];
   skills: CareerSkillV1[];

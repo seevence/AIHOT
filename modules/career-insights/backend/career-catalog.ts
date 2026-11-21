@@ -193,9 +193,15 @@ export async function loadCareerCatalog(db: Db, options: CareerCatalogOptions): 
 
   const origins = { live: 0, verified_import: 0, synthetic_fixture: 0 };
   let asOf = 0;
+  let unclassifiedJobCount = 0;
+  let unclassifiedStudentFriendlyCount = 0;
   for (const row of rows) {
     origins[row.data_origin] += 1;
     asOf = Math.max(asOf, new Date(row.last_seen_at).getTime());
+    // 方向榜只统计已归类岗位；未归类数量单独披露，页面据此说明榜单口径与「仅学生友好」的差额。
+    if (row.role_family !== "unknown") continue;
+    unclassifiedJobCount += 1;
+    if (row.student_friendly === "yes") unclassifiedStudentFriendlyCount += 1;
   }
 
   const windowStart = Date.now() - options.window_days * DAY_MS;
@@ -205,6 +211,9 @@ export async function loadCareerCatalog(db: Db, options: CareerCatalogOptions): 
     as_of: rows.length === 0 ? EPOCH_ISO : new Date(asOf).toISOString(),
     window_days: options.window_days,
     sample_size: rows.length,
+    unclassified_job_count: unclassifiedJobCount,
+    unclassified_student_friendly_count: unclassifiedStudentFriendlyCount,
+    unclassified_ratio: rows.length === 0 ? null : unclassifiedJobCount / rows.length,
     directions: directions(rows, windowStart, options.limit),
     titles: titles(rows, options.limit),
     skills: skills(rows),

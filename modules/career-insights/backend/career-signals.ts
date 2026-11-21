@@ -1,4 +1,5 @@
 import { sql, type Db } from "@aihot/backend/db";
+import { beijingDate } from "@aihot/contracts/time";
 import type {
   CareerSignalEvidenceV1,
   CareerSignalSkippedV1,
@@ -16,6 +17,7 @@ export const DEFAULT_SIGNAL_WINDOW_DAYS = 30;
 export const MAX_SIGNAL_WINDOW_DAYS = 365;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+const EPOCH_ISO = "1970-01-01T00:00:00.000Z";
 const SURGE_WINDOW_MS = DAY_MS;
 const SURGE_MIN_JOBS = 5;
 const SURGE_MULTIPLIER = 3;
@@ -103,6 +105,7 @@ interface SignalJobRow {
   source_key: string;
   official_url: string;
   first_seen_at: Date;
+  last_seen_at: Date;
   data_origin: DataOrigin;
 }
 
@@ -197,11 +200,22 @@ function crossIndustry(
   return drafts;
 }
 
-/** 某公司在 window_days 内首次出现的职族：该族最早的 first_seen_at 落在窗口内，即此前没有该族。 */
+/** 全站数据覆盖：最早一次观测至今多少天，以及最早观测的北京时间日期。 */
+interface DataCoverage {
+  days: number;
+  startDate: string;
+}
+
+/**
+ * 某公司在 window_days 内首次出现的职族：该族最早的 first_seen_at 落在窗口内。
+ * 数据覆盖不足 window_days 时，窗口内「最早」只能说明本站观察到，不能断言近 N 天首次：
+ * 措辞改为「本站自 YYYY-MM-DD 起观察到…」，不写「此前无该族招聘记录」，confidence 降为 low。
+ */
 function newFamilies(
   jobs: SignalJobRow[],
   windowStart: number,
   windowDays: number,
+  coverage: DataCoverage,
 ): SignalDraft[] {
   const groups = new Map<string, SignalJobRow[]>();
   for (const job of jobs) {
@@ -216,6 +230,7 @@ function newFamilies(
     const earliest = Math.min(...familyJobs.map((job) => new Date(job.first_seen_at).getTime()));
     if (earliest < windowStart) continue;
     const latest = familyJobs[0]!;
+    const insufficientCoverage = coverage.days < windowDays;
     drafts.push(draft(
       "new_family",
       latest,
@@ -224,9 +239,12 @@ function newFamilies(
         family_job_count: familyJobs.length,
         window_days: windowDays,
         earliest_first_seen_at: iso(new Date(earliest)),
+        data_coverage_days: round2(coverage.days),
       },
-      `该公司近 ${windowDays} 天首次出现「${FAMILY_LABELS[family as RoleFamily]}」职族岗位，窗口内 ${familyJobs.length} 个，此前无该族招聘记录。`,
-      familyJobs.length >= 2 ? "high" : "medium",
+      insufficientCoverage
+        ? `本站自 ${coverage.startDate} 起观察到该公司首次出现「${FAMILY_LABELS[family as RoleFamily]}」职族岗位，窗口内 ${familyJobs.length} 个；数据仅覆盖 ${round2(coverage.days)} 天（不足 ${windowDays} 天），不代表近 ${windowDays} 天首次出现。`
+        : `该公司近 ${windowDays} 天首次出现「${FAMILY_LABELS[family as RoleFamily]}」职族岗位，窗口内 ${familyJobs.length} 个，此前无该族招聘记录。`,
+      insufficientCoverage ? "low" : familyJobs.length >= 2 ? "high" : "medium",
     ));
   }
   return drafts;
@@ -348,7 +366,8 @@ export async function loadCareerSignals(db: Db, options: CareerSignalsOptions): 
   }
 
   const rows = await db<SignalJobRow[]>`
-    SELECT id, company_name, title, role_family, skills, source_key, official_url, first_seen_at, data_origin
+    SELECT id, company_name, title, role_family, skills, source_key, official_url,
+           first_seen_at, last_seen_at, data_origin
     FROM career_jobs
     ORDER BY first_seen_at DESC, id ASC`;
 
@@ -356,11 +375,23 @@ export async function loadCareerSignals(db: Db, options: CareerSignalsOptions): 
   const windowDays = options.window_days;
   const windowStart = now - windowDays * DAY_MS;
 
+  // 数据覆盖天数决定 new_family 能不能断言「近 N 天首次」；generated_at 取最新一次观测，
+  // 同一份数据下保持稳定，公开缓存 / ETag 才能命中 304。
+  let earliestFirstSeen = Number.POSITIVE_INFINITY;
+  let latestLastSeen = Number.NEGATIVE_INFINITY;
+  for (const row of rows) {
+    earliestFirstSeen = Math.min(earliestFirstSeen, new Date(row.first_seen_at).getTime());
+    latestLastSeen = Math.max(latestLastSeen, new Date(row.last_seen_at).getTime());
+  }
+  const coverage: DataCoverage = rows.length === 0
+    ? { days: 0, startDate: beijingDate(new Date(now)) }
+    : { days: (now - earliestFirstSeen) / DAY_MS, startDate: beijingDate(new Date(earliestFirstSeen)) };
+
   const drafts: SignalDraft[] = [];
   const skipped: CareerSignalSkippedV1[] = [];
   for (const [company, jobs] of byCompany(rows)) {
     drafts.push(...crossIndustry(company, jobs));
-    drafts.push(...newFamilies(jobs, windowStart, windowDays));
+    drafts.push(...newFamilies(jobs, windowStart, windowDays, coverage));
     const surge = surges(company, jobs, now);
     drafts.push(...surge.drafts);
     skipped.push(...surge.skipped);
@@ -379,6 +410,6 @@ export async function loadCareerSignals(db: Db, options: CareerSignalsOptions): 
     window_days: windowDays,
     signals,
     skipped: skipped.sort((left, right) => left.company.localeCompare(right.company)),
-    generated_at: new Date(now).toISOString(),
+    generated_at: rows.length === 0 ? EPOCH_ISO : iso(new Date(latestLastSeen)),
   };
 }

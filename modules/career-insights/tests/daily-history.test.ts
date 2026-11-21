@@ -235,6 +235,26 @@ test("an empty database answers an empty page instead of an error", async () => 
   });
 });
 
+test("a day's sample counts distinct jobs even when one job leaves several observation rows", async () => {
+  await seedJobs(FETCHED_ONE, [job("dup-1"), job("dup-2")]);
+  // 同一岗位当天被改写：内容哈希不同会在同一天再留一条观测，观测行数因此多于岗位数。
+  await seedJobs("2026-11-19T10:00:00.000Z", [
+    { ...job("dup-1"), title: "算法工程师（更新）", raw_text: "岗位文本（更新）", content_hash: digest("dup-1-v2") },
+  ]);
+
+  const [observed] = await sql<{ observation_rows: number; distinct_jobs: number }[]>`
+    SELECT COUNT(*)::int AS observation_rows, COUNT(DISTINCT job_id)::int AS distinct_jobs
+    FROM career_job_observations
+    WHERE (observed_at AT TIME ZONE 'Asia/Shanghai')::date = ${DAY_ONE}::date`;
+  assert.deepEqual(observed, { observation_rows: 3, distinct_jobs: 2 }, "the fixture leaves three rows for two jobs");
+
+  const history = await loadCareerDailyHistory(sql, { page: 1, page_size: 20 });
+  const day = history.entries.find((entry) => entry.date === DAY_ONE);
+  assert.ok(day !== undefined);
+  assert.equal(day.sample_size, 2, "the archived sample is the distinct job count, not the observation row count");
+  assert.equal(day.new_jobs, 2);
+});
+
 test("a day whose observations were cleaned up after 180 days still lists, from its first-seen counts", async () => {
   await seedThreeDays();
   await sql`DELETE FROM career_job_observations WHERE (observed_at AT TIME ZONE 'Asia/Shanghai')::date = ${DAY_ONE}::date`;

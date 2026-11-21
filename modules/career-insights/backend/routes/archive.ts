@@ -116,7 +116,9 @@ const HISTORY_DAY_SOURCES = sql`
     FROM career_daily_comments
   ),
   observed AS (
-    SELECT (observed_at AT TIME ZONE ${BEIJING_TIMEZONE})::date AS day, COUNT(*)::int AS sample_size
+    -- 同一天同一岗位可能留下多条内容哈希不同的观测（职位被改写）；日报样本按去重岗位数计，
+    -- 与 career_jobs 的当日新增口径一致，不把观测行数当成岗位数。
+    SELECT (observed_at AT TIME ZONE ${BEIJING_TIMEZONE})::date AS day, COUNT(DISTINCT job_id)::int AS sample_size
     FROM career_job_observations
     GROUP BY 1
   ),

@@ -52,6 +52,7 @@ interface DailyJobRow {
   live_count: number;
   import_count: number;
   synthetic_count: number;
+  as_of: Date | null;
 }
 
 interface DailyPolicyRow {
@@ -177,7 +178,8 @@ export async function loadCareerDaily(db: Db): Promise<CareerDailyResponseV1> {
              COUNT(*) FILTER (WHERE COALESCE(skills, '[]'::jsonb) = '[]'::jsonb)::int AS unknown_skill_count,
              COUNT(*) FILTER (WHERE data_origin = 'live')::int AS live_count,
              COUNT(*) FILTER (WHERE data_origin = 'verified_import')::int AS import_count,
-             COUNT(*) FILTER (WHERE data_origin = 'synthetic_fixture')::int AS synthetic_count
+             COUNT(*) FILTER (WHERE data_origin = 'synthetic_fixture')::int AS synthetic_count,
+             MAX(last_seen_at) AS as_of
       FROM career_jobs`,
     db<DailyPolicyRow[]>`
       SELECT COUNT(*)::int AS policies_total,
@@ -225,6 +227,7 @@ export async function loadCareerDaily(db: Db): Promise<CareerDailyResponseV1> {
     policies_total: policy.policies_total,
     unknown_ratio: job.sample_size === 0 ? null : job.unknown_skill_count / job.sample_size,
     sample_size: job.sample_size,
-    generated_at: new Date().toISOString(),
+    // 数据截止时间（最新一次岗位观测）而不是请求时间：同一份数据下保持稳定，ETag 才能命中 304。
+    generated_at: isoOrEpoch(job.as_of),
   };
 }

@@ -119,6 +119,32 @@ test("a company that gains a role family it never had inside the window reports 
   assert.equal(familySignals[0]!.evidence.window_days, 30);
   assert.equal(familySignals[0]!.confidence, "high");
   assert.match(familySignals[0]!.reason_text, /首次出现「数据」职族/);
+  assert.match(familySignals[0]!.reason_text, /此前无该族招聘记录/, "a fully covered window keeps the original wording");
+  assert.ok((familySignals[0]!.evidence.data_coverage_days ?? 0) >= 30, "the fixture covers the whole window");
+});
+
+test("new_family downgrades to low and drops the first-time claim when the data covers less than the window", async () => {
+  // 数据只覆盖 3 天：窗口内最早也只能说明「本站观察到」，不能断言近 30 天首次。
+  await seed(
+    job({ job_key: "short-1", company_name: "短片公司", title: "算法工程师", role_family: "ai_algorithm" }),
+    job({ job_key: "short-2", company_name: "短片公司", title: "数据工程师", role_family: "data" }),
+    job({ job_key: "short-3", company_name: "短片公司", title: "数据分析师", role_family: "data" }),
+  );
+  await ageJob("short-1", 3);
+
+  const result = await loadCareerSignals(sql, { limit: 10, window_days: 30 });
+  const familySignals = result.signals.filter((entry) => entry.rule === "new_family");
+
+  assert.ok(familySignals.length >= 2, "both families are still reported, just with weaker wording");
+  for (const signal of familySignals) {
+    assert.equal(signal.confidence, "low", "insufficient coverage can never be high confidence");
+    assert.match(signal.reason_text, /^本站自 \d{4}-\d{2}-\d{2} 起观察到该公司首次出现/);
+    assert.match(signal.reason_text, /不足 30 天/);
+    assert.match(signal.reason_text, /不代表近 30 天首次/);
+    assert.doesNotMatch(signal.reason_text, /此前无该族招聘记录/, "no universal claim without 30 days of history");
+    assert.ok(typeof signal.evidence.data_coverage_days === "number");
+    assert.ok(signal.evidence.data_coverage_days! < 30);
+  }
 });
 
 test("a company with less than two days of history is skipped as insufficient_history", async () => {
@@ -206,8 +232,42 @@ test("the signals route enforces limit bounds, a public cache, and answers an em
   assert.deepEqual(empty.json().signals, []);
   assert.deepEqual(empty.json().skipped, []);
   assert.equal(empty.json().window_days, 30);
-  assert.ok(Number.isFinite(Date.parse(empty.json().generated_at)));
+  assert.equal(empty.json().generated_at, "1970-01-01T00:00:00.000Z", "no data means the epoch cutoff, not the request time");
+  const notModified = await app.inject({
+    url: "/api/site/career-insights/signals",
+    headers: { "if-none-match": String(empty.headers.etag) },
+  });
+  assert.equal(notModified.statusCode, 304, "a stable generated_at lets the ETag hit");
   await app.close();
+});
+
+test("signals report a stable data cutoff, so the public ETag answers 304", async () => {
+  const fetchedAt = nowIso();
+  await seed(
+    job({ job_key: "cutoff-1", company_name: "稳定公司", fetched_at: fetchedAt }),
+    job({ job_key: "cutoff-2", company_name: "稳定公司", title: "数据工程师", role_family: "data", fetched_at: fetchedAt }),
+  );
+
+  const first = await loadCareerSignals(sql, { limit: 10, window_days: 30 });
+  const second = await loadCareerSignals(sql, { limit: 10, window_days: 30 });
+  assert.equal(first.generated_at, fetchedAt, "generated_at is the latest observation, not the request time");
+  assert.equal(second.generated_at, first.generated_at);
+
+  const app = Fastify();
+  registerCareerHttp(app, repository);
+  await app.ready();
+  try {
+    const response = await app.inject({ url: "/api/site/career-insights/signals" });
+    assert.equal(response.statusCode, 200);
+    const notModified = await app.inject({
+      url: "/api/site/career-insights/signals",
+      headers: { "if-none-match": String(response.headers.etag) },
+    });
+    assert.equal(notModified.statusCode, 304);
+    assert.equal(notModified.body, "");
+  } finally {
+    await app.close();
+  }
 });
 
 test("limit caps the returned signals", async () => {

@@ -6,7 +6,7 @@ import type { JobFiltersV1, JobListResponseV1 } from "@aihot/career-insights/con
 import type { LocalStarredJob } from "../job-favorites.ts";
 import type { CareerCatalogResponseV1, CareerDirectionV1, CareerTitleV1 } from "../../contracts/index.ts";
 import { buildJobHref, serializeJobFilters, withJobsListAnchor } from "../filters.ts";
-import { publishedAtText } from "../feeds.ts";
+import { formatRatioPercent, publishedAtText } from "../feeds.ts";
 import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS, skillLabel } from "../labels.ts";
 import { CareerTime } from "../time.ts";
 
@@ -168,14 +168,32 @@ function FilterBar({ catalog, filters }: { catalog: CareerCatalogResponseV1; fil
   );
 }
 
+/** 方向榜下方的未归类披露；与洞察页「未分类单列」同一口径，不改方向排序。 */
+function unclassifiedNote(catalog: CareerCatalogResponseV1, studentOnly: boolean): string | null {
+  const count = studentOnly ? catalog.unclassified_student_friendly_count : catalog.unclassified_job_count;
+  if (count === undefined || count === 0) return null;
+  if (studentOnly) return `另有 ${count} 个学生友好岗位未归类，单列在岗位明细，不进入方向榜。`;
+  const ratio = catalog.unclassified_ratio;
+  return ratio === undefined || ratio === null
+    ? `另有 ${count} 个岗位未归类，单列在岗位明细，不进入方向榜。`
+    : `另有 ${count} 个岗位未归类（${formatRatioPercent(ratio)}），单列在岗位明细，不进入方向榜。`;
+}
+
 function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponseV1; filters: JobFiltersV1 }): ReactElement {
   const ranked = sortDirections(catalog.directions, filters);
+  const studentOnly = filters.student_friendly === "yes";
+  const unclassifiedRatio = catalog.unclassified_ratio;
+  const classifiedShare = unclassifiedRatio === undefined || unclassifiedRatio === null
+    ? null
+    : formatRatioPercent(1 - unclassifiedRatio);
+  const scopeText = `${classifiedShare === null ? "方向榜只统计已归类的岗位" : `方向榜只统计已归类的 ${classifiedShare} 岗位`}；未归类岗位在下方明细单列，不进入方向榜。选「仅学生友好」时按学生友好岗位数排序并按该口径计数，城市等筛选不影响本榜。`;
+  const unclassifiedText = unclassifiedNote(catalog, studentOnly);
   return h(
     "section",
     { "aria-labelledby": "catalog-directions", "data-section": "direction-ranking", className: CARD_CLASS },
     h("h2", { id: "catalog-directions", className: "text-[16px] font-semibold text-ink" }, "方向榜"),
     h("p", { className: MUTED_CLASS }, `按职族聚合当前有效岗位；观察窗 ${catalog.window_days} 天。`),
-    h("p", { "data-direction-scope": "", className: `mt-1 ${MUTED_CLASS}` }, "方向榜取全量岗位；选「仅学生友好」时按学生友好岗位数排序并按该口径计数，城市等筛选不影响本榜。"),
+    h("p", { "data-direction-scope": "", className: `mt-1 ${MUTED_CLASS}` }, scopeText),
     ranked.length === 0
       ? h("p", { "data-directions-empty": "", role: "status", className: "mt-3 text-[14px] font-medium text-ink-2" }, CATALOG_EMPTY_TEXT)
       : h(
@@ -220,6 +238,9 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
             ),
           ),
         ),
+    unclassifiedText === null
+      ? null
+      : h("p", { "data-direction-unclassified": "", className: `mt-3 ${MUTED_CLASS}` }, unclassifiedText),
   );
 }
 
