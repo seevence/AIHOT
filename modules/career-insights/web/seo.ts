@@ -72,6 +72,16 @@ function plainText(value: string, limit: number): string {
     .slice(0, limit);
 }
 
+/** 事实短语里只放短值：抓取到的整句（含标点/换行/超长）不当作学历或经验写进 meta。 */
+const FACT_MAX_CHARS = 16;
+function shortFact(value: string | null | undefined): string | null {
+  if (!value) return null;
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length === 0 || text.length > FACT_MAX_CHARS) return null;
+  if (/[。；;，,、！!？?\n]/.test(text)) return null;
+  return text;
+}
+
 /** 岗位已知字段拼成的事实短语：只写库里有的值，缺的、unknown 的不编。 */
 function jobFacts(job: JobDetailV1): string[] {
   const facts: string[] = [];
@@ -79,8 +89,10 @@ function jobFacts(job: JobDetailV1): string[] {
   if (job.role_family !== "unknown") facts.push(`职位类别：${ROLE_FAMILY_LABELS[job.role_family]}`);
   if (job.employment_type !== "unknown") facts.push(`用工类型：${EMPLOYMENT_TYPE_LABELS[job.employment_type]}`);
   if (job.student_friendly !== "unknown") facts.push(`学生友好：${STUDENT_FRIENDLY_LABELS[job.student_friendly]}`);
-  if (job.degree_raw) facts.push(`学历：${job.degree_raw}`);
-  if (job.experience_raw) facts.push(`经验：${job.experience_raw}`);
+  const degree = shortFact(job.degree_raw);
+  if (degree) facts.push(`学历：${degree}`);
+  const experience = shortFact(job.experience_raw);
+  if (experience) facts.push(`经验：${experience}`);
   const skills = job.skills.slice(0, 6).map(skillLabel);
   if (skills.length > 0) facts.push(`技能：${skills.join("、")}`);
   return facts;
@@ -89,7 +101,7 @@ function jobFacts(job: JobDetailV1): string[] {
 /** 搜索结果的描述：公司与职位名加上库里的城市/职族/用工类型/学生友好等事实，不写没有依据的判断。 */
 export function jobDescription(job: JobDetailV1): string {
   const facts = jobFacts(job);
-  return `${job.company_name}招聘「${job.title}」${facts.length > 0 ? `：${facts.join("；")}` : ""}。岗位信息来自 ${job.source_key} 官方招聘页的公开观测，以原文为准。`;
+  return `${job.company_name}招聘「${job.title}」${facts.length > 0 ? `：${facts.join("；")}` : ""}。岗位信息来自该公司的官方招聘页的公开观测，以原文为准。`;
 }
 
 /** schema.org 的用工类型：只知道笼统方向的不猜。 */
@@ -118,6 +130,16 @@ export function jobPostingDescription(detail: JobDetailResponseV1): string {
   return plainText(`${heading}\n\n${excerpt ?? ""}`, 800);
 }
 
+/** 发布日期优先用来源给的可信 published_at（未来/不可解析时退回首次观测时间）。 */
+function jobPublishedDate(job: JobDetailV1): string {
+  const published = job.published_at;
+  if (published) {
+    const ms = Date.parse(published);
+    if (!Number.isNaN(ms) && ms <= Date.now() + 86_400_000) return published;
+  }
+  return job.first_seen_at;
+}
+
 /**
  * 岗位详情页的 JobPosting 结构化数据；联调样例（synthetic_fixture）是虚构职位，返回 null 不输出。
  * 不写 validThrough：岗位是否仍在招以最近一次观测为准，写一个过期日会误导搜索引擎与读者。
@@ -131,7 +153,7 @@ export function jobPostingLd(detail: JobDetailResponseV1): Record<string, unknow
     "@type": "JobPosting",
     "@id": `${siteUrl()}${jobDetailPath(job.id)}#jobposting`,
     title: job.title,
-    datePosted: job.first_seen_at,
+    datePosted: jobPublishedDate(job),
     hiringOrganization: { "@type": "Organization", name: job.company_name },
     jobLocation: jobLocation(job.locations),
     ...(employmentType ? { employmentType } : {}),
@@ -261,7 +283,9 @@ export function careerJobsMeta(input: CareerJobsMetaInput = {}): MetaDescriptor[
         ? `「${keyword}」相关岗位：按职位名、公司、技能与城市搜索当前有效岗位，每条岗位附官方原文链接。`
         : "按职族与职位聚合的当前有效岗位，可按关键词、学生友好与城市筛选，每条岗位附官方原文链接。",
       path: JOBS_PATH,
-      jsonLd: jsonLdOf(jobsItemListLd(input.jobs), careerBreadcrumbLd({ name: "热门岗位", path: JOBS_PATH })),
+      // 搜索结果是同一列表页的视图，不登记成独立页面；ItemList 只放在无关键词的干净列表上。
+      noindex: Boolean(keyword),
+      jsonLd: jsonLdOf(keyword ? null : jobsItemListLd(input.jobs), careerBreadcrumbLd({ name: "热门岗位", path: JOBS_PATH })),
     }),
     careerFeedLink("jobs"),
   ];

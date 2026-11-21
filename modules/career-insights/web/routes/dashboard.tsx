@@ -52,7 +52,8 @@ export async function loader({ request }: LoaderArgs) {
 }
 
 export function headers() {
-  return { "Cache-Control": "no-store" };
+  // 数据分钟级更新：允许浏览器与共享缓存 60 秒，别再让每个 career 页都 no-store。
+  return { "Cache-Control": "public, s-maxage=60" };
 }
 
 export const handle: Screen = { tab: "insights", name: "职业洞察" };

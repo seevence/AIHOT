@@ -17,7 +17,8 @@ export async function loader({ params, request }: LoaderArgs) {
 }
 
 export function headers() {
-  return { "Cache-Control": "no-store" };
+  // 数据分钟级更新：允许浏览器与共享缓存 60 秒，别再让每个 career 页都 no-store。
+  return { "Cache-Control": "public, s-maxage=60" };
 }
 
 /** 职位名 + 库里的公司/城市/职族等事实（见 web/seo.ts），canonical 带 id；加载失败时不索引。 */

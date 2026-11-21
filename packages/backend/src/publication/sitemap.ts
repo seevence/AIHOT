@@ -62,11 +62,11 @@ export async function loadDiscoveryEntries(at = new Date(), limits?: { urls: num
   const reportRevision = (kind: string) => sha256(stableJson(reports.filter((r) => r.kind === kind)));
   const topics = await topicPageCounts(at, !limits);
   // /all 与 /topics 已改成占位页并 noindex：路由还在，但不进 sitemap。
+  // /daily/archive 现在是有内容的往期页但仍 noindex（历史数据量小、避免重复），所以也不进 sitemap。
   entries.push(
     { loc: "/", revision: activity?.selected ?? "", changefreq: "hourly", priority: 1 },
     { loc: "/daily", revision: reportRevision("daily"), changefreq: "daily", priority: 0.9 },
     { loc: "/hot", revision: limits ? undefined : sha256(stableJson((await latestHotRanking())?.entries ?? [])), changefreq: "hourly", priority: 0.9 },
-    { loc: "/daily/archive", revision: reportRevision("daily"), changefreq: "daily", priority: 0.7 },
     { loc: "/agent", revision: sha256(stableJson([SITE, ACCESS, AGENT])), changefreq: "weekly", priority: 0.7 },
     { loc: "/about", revision: sha256(stableJson(ABOUT)), changefreq: "monthly", priority: 0.5 },
     { loc: "/terms", revision: sha256(stableJson([POLICY.terms, await readFile(path.join(REPO_ROOT, "site/pages/terms.md"), "utf8")])), changefreq: "monthly", priority: 0.4 },
