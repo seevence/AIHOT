@@ -684,17 +684,12 @@ test("an empty catalog asks to keep observing instead of inventing trends", () =
   assert.match(html("[data-skill-trend-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
 });
 
-test("the catalog page ranks directions and titles and links evidence", () => {
+test("the catalog page ranks directions and links their evidence", () => {
   const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: FILTERS }));
   const directions = html("[data-catalog-direction]").map((_, element) => html(element).attr("data-catalog-direction")).get();
   assert.deepEqual(directions, ["ai_algorithm", "data"]);
 
-  const titles = html("[data-catalog-title]").map((_, element) => html(element).attr("data-catalog-title")).get();
-  assert.deepEqual(titles, ["算法工程师", "社招算法专家"]);
-
   assert.equal(html("[data-direction-evidence='ai_algorithm']").attr("href"), "/career-insights/jobs?role_family=ai_algorithm&page=1&page_size=20#catalog-jobs");
-  assert.equal(html("[data-title-evidence='算法工程师']").attr("href"), "/career-insights/jobs?skill=python&page=1&page_size=20#catalog-jobs");
-  assert.equal(html("[data-catalog-title='算法工程师'] [data-rank-count]").text(), "4 个岗位");
   assert.equal(html("[data-catalog-job='job-1'] [data-job-evidence]").attr("href"), "https://careers.example/jobs/1");
 });
 
@@ -732,13 +727,13 @@ test("the jobs catalog route is registered by the module", () => {
   assert.match(source, /path: "career-insights\/jobs", file: "web\/routes\/jobs-catalog\.tsx"/);
 });
 // 岗位目录页（热门岗位）的版面顺序、方向榜口径说明、筛选链接与分页锚点。
-test("the jobs catalog page puts the filter block between the direction ranking and the title ranking", () => {
+test("the jobs catalog page puts the filter block between the direction ranking and the job list", () => {
   const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: FILTERS }));
   // 按 DOM 顺序取四个区块的 id，而不是在全文里找标题文本。
-  const order = html("[id='catalog-directions'], [id='catalog-filters'], [id='catalog-titles'], [id='catalog-jobs']")
+  const order = html("[id='catalog-directions'], [id='catalog-filters'], [id='catalog-jobs']")
     .map((_, element) => html(element).attr("id"))
     .get();
-  assert.deepEqual(order, ["catalog-directions", "catalog-filters", "catalog-titles", "catalog-jobs"]);
+  assert.deepEqual(order, ["catalog-directions", "catalog-filters", "catalog-jobs"]);
 });
 
 test("the direction ranking explains its full-catalog scope and the student-friendly re-ranking", () => {
@@ -761,16 +756,6 @@ test("the filter chips link to the filtered catalog with page reset to one", () 
   const beijing = html("[data-filter-city]").filter((_, element) => html(element).text() === "北京");
   assert.equal(beijing.length, 1);
   assert.equal(beijing.attr("href"), "/career-insights/jobs?city=%E5%8C%97%E4%BA%AC&page=1&page_size=20");
-});
-
-test("the filters actually narrow the title ranking rows", () => {
-  assert.deepEqual(filterTitles(CATALOG.titles, FILTERS).map((title) => title.title_key), ["算法工程师", "社招算法专家"]);
-  assert.deepEqual(filterTitles(CATALOG.titles, { ...FILTERS, student_friendly: "yes" }).map((title) => title.title_key), ["算法工程师"]);
-  assert.deepEqual(filterTitles(CATALOG.titles, { ...FILTERS, city: "北京" }).map((title) => title.title_key), ["算法工程师"]);
-
-  assert.equal(render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: FILTERS }))("[data-catalog-title]").length, 2);
-  assert.equal(render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: { ...FILTERS, student_friendly: "yes" } }))("[data-catalog-title]").length, 1);
-  assert.equal(render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: { ...FILTERS, city: "北京" } }))("[data-catalog-title]").length, 1);
 });
 
 test("pager links keep the job list anchor while filter links do not", () => {
@@ -836,7 +821,7 @@ test("the current keyword shows in the title area and clears without dropping th
   assert.equal(plain("[data-search-summary]").length, 0);
   assert.equal(plain("[data-search-current]").length, 0);
   assert.equal(plain("[data-search-clear]").length, 0);
-  assert.equal(plain("[data-search-hint]").text().includes("也可以点方向/职位榜进入对应筛选"), true);
+  assert.equal(plain("[data-search-hint]").text().includes("也可以点方向进入对应筛选"), true);
   assert.equal(plain("[data-search-input]").attr("value"), "");
 });
 

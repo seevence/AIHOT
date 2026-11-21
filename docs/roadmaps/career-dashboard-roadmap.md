@@ -242,6 +242,8 @@
   - **P1 运营可观测**：`/admin/career` 就业数据视图（采集 run/来源健康/LLM 兜底/研判/评论/数据规模，API `GET /api/admin/career` 管理员会话保护，单段失败降级）；career 三步模型注册（`career.brief`/`career.daily-comment`/`career.llm-normalize`，后台模型页可见可切换）；retention（observations 180 天 / ingest_runs 90 天，模块 socket 接线）；就业日报归档（`/api/site/career-insights/daily/history` + `/daily/archive` 真实列表、点击看当天评论）；出刊时间文案统一为 06:10（与采集 cron 对齐）；`/hot` 放出导航（「就业热点」）；底座 7 个空转 cron 清退（`reports.compose` 不再刷失败）；本地备份/恢复脚本（`scripts/backup-local.ts`/`restore-local.ts`，演练通过）；就业日报/新增岗位推送（默认关闭，配 `CAREER_PUSH_ENABLED`+`CAREER_PUSH_WEBHOOK_URL` 生效）。
   - **P2 分发与性能**：公开 API v1 `/api/v1/career/{jobs,jobs/:id,policies,insights}`（匿名、公开字段、ETag+304、public 缓存）；MCP 能力（`agent.abilities`：search_jobs/get_job/list_policies/get_insights，工具名 `thewind_*`）；llms.txt 补岗位/政策能力；就业 RSS（`/feed/jobs.xml`、`/feed/policies.xml`、`/feed/career-daily.xml` + 页面 alternate）；结构化数据补充（岗位/政策 ItemList、BreadcrumbList）；/all、/topics 退出 sitemap（已 noindex），IndexNow/百度开关开启后自动覆盖 career sitemap；career API 缓存分级（公开内容 ETag+max-age=60/swr=300，availability/admin 保持 no-store）。
   - **顺带修复**：方向榜「查看该方向岗位」与职位榜「查看证据」改为带 `#catalog-jobs` 跳转（之前只改 URL 不移动视口，读者以为没反应），并补浏览器回归。
+- **E9 五次调整（2026-11-21 傍晚，用户反馈）**：热门岗位页去掉「职位榜」（只保留方向榜 → 筛选岗位 → 岗位明细，职位证据链接随之移除，方向证据仍带 `#catalog-jobs` 跳转）；左侧主导航顺序调整——「就业热点」紧跟「热门岗位」，「收藏」移到主导航最下面（内容区不再重复出现）。
+
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）
 
 | # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |
