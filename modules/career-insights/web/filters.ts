@@ -83,9 +83,15 @@ export function buildJobHref(jobId: string, back: string): string {
   return `/career-insights/jobs/${encodeURIComponent(jobId)}?back=${encodeURIComponent(back)}`;
 }
 
+/**
+ * 详情页「返回职位列表」只接受站内职业洞察路径：洞察页与岗位目录（列表传入的 back 是带筛选的目录 URL，
+ * 见 JobsCatalogBoard 的 buildCatalogHref）。其它 origin、协议相对地址和其它路径一律回退洞察页，
+ * 避免 back 参数被拿来做开放重定向。
+ */
+const CAREER_BACK_PATHS = ["/career-insights", "/career-insights/jobs"] as const;
+
 export function safeBackHref(raw: string | null): string {
-  if (raw === null) return "/career-insights";
-  const isCareerPath = raw === "/career-insights" || raw.startsWith("/career-insights?");
-  if (!isCareerPath || raw.includes("//") || raw.includes(":")) return "/career-insights";
-  return raw;
+  if (raw === null || raw.includes("//") || raw.includes(":")) return "/career-insights";
+  const isCareerPath = CAREER_BACK_PATHS.some((path) => raw === path || raw.startsWith(`${path}?`));
+  return isCareerPath ? raw : "/career-insights";
 }
