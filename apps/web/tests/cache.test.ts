@@ -65,7 +65,7 @@ test("public route subsets produce the same complete navigation data; the home h
     const res = await fetch(`${origin}/_.data${query}`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get("Cache-Control")!, /^public,/);
-    // The workbench home keeps its own minute for the six career reads; it no longer inherits the
+    // The workbench home keeps its own minute for its career reads; it no longer inherits the
     // selected timeline deadline, so the bound is the minute rather than @deadline.
     const expires = res.headers.get("X-Accel-Expires")!;
     assert.match(expires, /^@\d+$/);
@@ -101,7 +101,16 @@ test("HTML and navigation share freshness; cookies do not personalize public res
   const html = await fetch(`${origin}/`);
   assert.equal(html.status, 200);
   assert.match(html.headers.get("X-Accel-Expires")!, /^@\d+$/, "the home keeps its own minute");
-  assert.match(await html.text(), /就业数据工作台/);
+  const home = await html.text();
+  assert.match(home, /就业数据工作台/);
+  // Five blocks only: the signal cards, the Top 6 job list, the skills advice and the latest-job list
+  // now live on the insights and jobs pages, so the home must neither render nor fetch them.
+  for (const id of ["home-overview", "home-brief", "home-indicators", "home-daily", "home-top-directions"]) {
+    assert.match(home, new RegExp(`id="${id}"`), id);
+  }
+  for (const removed of ["值得注意的信号", "热门岗位 Top 6", "热门技能与准备建议", "最新岗位"]) {
+    assert.doesNotMatch(home, new RegExp(removed), removed);
+  }
   // The api's deadline also fixes the result's own expiry, so reads seconds apart compare byte for byte.
   const plain = await fetch(`${origin}/_.data`);
   const signedIn = await fetch(`${origin}/_.data?_routes=root`, { headers: { cookie: "admin_session=private; reader=returning" } });

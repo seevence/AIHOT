@@ -14,7 +14,7 @@ import type { FeedItemSummary, SiteItemDetail } from "@aihot/contracts/site";
 export const FIXTURE_AT = "2026-10-04T08:00:00.000Z";
 
 /**
- * The six career reads the workbench home makes. Answers fixtures a page can render without a block
+ * The career reads the public career pages make. Answers fixtures a page can render without a block
  * falling to "本区块暂时不可用"; `brief` answers 204 (no cached analysis yet), as the api does.
  * Tests that own a deadline can set `X-Accel-Expires` before calling this.
  */

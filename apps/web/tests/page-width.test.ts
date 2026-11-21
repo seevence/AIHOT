@@ -16,11 +16,6 @@ import { FIXTURE_AT as at, fakeApi, feedItem, itemDetail, startWebServer, visit,
 const longText = "查看完整说明 https://example.org/announcements/" + "a".repeat(100) + "。";
 const longTitle = "一条很长的标题".repeat(30);
 const keys = { daily: "2026-10-15", weekly: "2026-W42", monthly: "2026-10" };
-const jobItem = {
-  id: "fixture-job", company_name: "固定企业", title: "固定岗位", role_family: "ai_algorithm",
-  locations: ["北京"], employment_type: "campus", student_friendly: "yes", skills: ["python"],
-  published_at: at, first_seen_at: at, last_seen_at: at, official_url: "https://example.org/job",
-};
 /** The home workbench's data: numbers that let every block render its real layout, not just its fallback. */
 const careerSummary = {
   contract_version: "0.1", data_origin: "live", as_of: at, sample_size: 12, company_count: 3, source_count: 2,
@@ -64,19 +59,6 @@ const api = fakeApi((url) => {
   }
   if (path === "/api/site/career-insights/summary") return careerSummary;
   if (path === "/api/site/career-insights/catalog") return careerCatalog;
-  if (path === "/api/site/career-insights/signals") {
-    return {
-      contract_version: "0.1", data_origin: "live", window_days: 30, skipped: [], generated_at: at,
-      signals: [{
-        rule: "cross_industry", company: "固定企业", job_id: "fixture-job", job_title: "固定岗位", confidence: "high",
-        evidence: { company_job_count: 10, ai_family_job_count: 6, ai_family_ratio: 0.6, matched_terms: ["机械"] },
-        reason_text: longText, source_key: "fixture", official_url: "https://example.org/job", first_seen_at: at,
-      }],
-    };
-  }
-  if (path === "/api/site/career-insights/jobs") {
-    return { contract_version: "0.1", data_origin: "live", items: [jobItem], page: 1, page_size: 20, total: 1, as_of: at, filters: { page: 1, page_size: 20 } };
-  }
   if (path === "/api/site/pool") {
     // The list page's widest line is 同一件事，精选收录的是《…》: an unbroken long title in one row.
     return {
@@ -164,10 +146,11 @@ const PAGES: Array<{ path: string; ready: (page: Page, shell: Shell) => Promise<
   {
     path: "/",
     ready: async (page: Page) => {
-      // The home page is the data workbench now: its blocks, not a feed, fill the first screen.
+      // The home is the five-block workbench now: overview and the brief, not the job/skill boards that
+      // moved to the insights and jobs pages.
       await expect(page.getByRole("heading", { level: 1, name: "就业数据工作台" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 2, name: "今日概览" })).toBeVisible();
       await expect(page.getByRole("heading", { level: 2, name: "AI 就业研判" })).toBeVisible();
-      await expect(page.getByRole("heading", { level: 2, name: "热门岗位 Top 6" })).toBeVisible();
     },
   },
 ];
