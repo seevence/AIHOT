@@ -223,7 +223,7 @@ function StudentAdviceBlock({ catalog }: { catalog: CareerCatalogResponseV1 | nu
             h("span", { "data-advice-direction-friendly": String(direction.student_friendly_count), className: "num text-[12px] text-ink-3 whitespace-nowrap" }, `学生友好 ${direction.student_friendly_count} 个岗位`),
           ),
           h("p", { className: `mt-1 ${MUTED_CLASS}` }, `当前 ${direction.job_count} 个岗位 · 公司 ${direction.company_count} 家 · 近 ${catalog.window_days} 天新增 ${direction.new_in_window}`),
-          h(Link, { to: jobsHref({ role_family: direction.role_family, page: 1 }), className: `mt-1 inline-flex text-[12.5px] ${LINK_CLASS}` }, "看该方向岗位"),
+          h(Link, { to: jobsHref({ role_family: direction.role_family, page: 1 }), className: `mt-1 inline-flex py-2 -my-2 text-[12.5px] ${LINK_CLASS}` }, "看该方向岗位"),
         ),
       ),
     ),
@@ -237,7 +237,7 @@ function StudentAdviceBlock({ catalog }: { catalog: CareerCatalogResponseV1 | nu
               h(
                 Link,
                 Object.assign(
-                  { to: jobsHref({ skill: entry.skill, page: 1 }), className: `inline-flex h-7 items-center rounded-full border border-line-strong px-3 text-[12px] ${LINK_CLASS}` },
+                  { to: jobsHref({ skill: entry.skill, page: 1 }), className: `inline-flex h-9 items-center rounded-full border border-line-strong px-3 text-[12px] sm:h-7 ${LINK_CLASS}` },
                   { "data-advice-skill": entry.skill },
                 ),
                 `${skillLabel(entry.skill)} · ${entry.job_count} 个岗位提及`,

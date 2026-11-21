@@ -8,8 +8,8 @@ export type JobStarButtonProps = Omit<LocalStarredJob, "savedAt"> & {
 };
 
 const BUTTON_CLASS = "inline-flex shrink-0 items-center justify-center rounded-full border font-medium transition-colors";
-const COMPACT_CLASS = `${BUTTON_CLASS} h-7 px-2.5 text-[11.5px]`;
-const DEFAULT_CLASS = `${BUTTON_CLASS} h-9 px-4 text-[13px]`;
+const COMPACT_CLASS = `${BUTTON_CLASS} min-h-11 min-w-11 justify-center px-3 text-[12px] sm:h-7 sm:min-h-0 sm:min-w-0 sm:px-2.5 sm:text-[11.5px]`;
+const DEFAULT_CLASS = `${BUTTON_CLASS} h-11 px-4 text-[13px] sm:h-9`;
 const STARRED_CLASS = "border-accent bg-accent text-accent-contrast";
 const IDLE_CLASS = "border-line-strong bg-surface text-ink-2 hover:border-accent hover:text-accent";
 

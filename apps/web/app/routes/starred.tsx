@@ -141,7 +141,7 @@ export default function StarredPage() {
       (err: Error) => setNotice({ kind: "error", text: err.message }),
     );
 
-  const action = "text-[12.5px] text-ink-3 transition-colors hover:text-accent";
+  const action = "inline-flex min-h-11 items-center text-[12.5px] text-ink-3 transition-colors hover:text-accent";
   const Account = webModules().find((m) => m.account)?.account;
   const localNote = <p className="rounded-tile border border-line bg-surface px-4 py-2.5 text-[12.5px] text-ink-3">不用登录，收藏直接存在这个浏览器里；清除浏览器数据或换设备都不会同步。导出/导入目前只包含文章收藏，岗位收藏只存在这个浏览器里。</p>;
   return (
@@ -220,7 +220,7 @@ export default function StarredPage() {
                       type="button"
                       aria-label={`移除收藏：${job.title}`}
                       onClick={() => removeStarredJob(job.id)}
-                      className="shrink-0 text-[12.5px] text-ink-3 transition-colors hover:text-accent"
+                      className="inline-flex min-h-11 shrink-0 items-center px-2 -mr-2 text-[12.5px] text-ink-3 transition-colors hover:text-accent"
                     >
                       移除
                     </button>

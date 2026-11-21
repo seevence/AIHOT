@@ -25,7 +25,7 @@ export type JobRowStarProps = Omit<LocalStarredJob, "savedAt"> & { compact: bool
 
 const CARD_CLASS = "rounded-card border border-line bg-surface p-5";
 const MUTED_CLASS = "text-[12px] leading-relaxed text-ink-4 break-words";
-const CHIP_CLASS = "inline-flex h-8 items-center rounded-full border px-3 text-[12.5px] font-medium";
+const CHIP_CLASS = "inline-flex h-11 items-center rounded-full border px-3 text-[12.5px] font-medium sm:h-8";
 const CHIP_IDLE_CLASS = `${CHIP_CLASS} border-line-strong text-ink-2`;
 const CHIP_ACTIVE_CLASS = `${CHIP_CLASS} border-accent bg-accent text-accent-contrast`;
 
@@ -83,7 +83,7 @@ function SearchForm({ filters }: { filters: JobFiltersV1 }): ReactElement {
     { className: "mt-3" },
     h(
       "form",
-      { method: "get", action: CATALOG_PATH, role: "search", "data-job-search": "", className: "flex flex-wrap items-center gap-2" },
+      { method: "get", action: `${CATALOG_PATH}#catalog-jobs`, role: "search", "data-job-search": "", className: "flex flex-wrap items-center gap-2" },
       ...SEARCH_KEPT_KEYS.flatMap((key) => {
         const value = filters[key];
         return value === undefined ? [] : [h("input", { key, type: "hidden", name: key, value: String(value) })];
@@ -101,12 +101,12 @@ function SearchForm({ filters }: { filters: JobFiltersV1 }): ReactElement {
         enterKeyHint: "search",
         autoComplete: "off",
         "data-search-input": "",
-        className: "h-10 min-w-0 flex-1 rounded-control border border-line-strong bg-bg px-3 text-[14px] text-ink outline-none placeholder:text-ink-4 focus:border-accent sm:max-w-md",
+        className: "h-11 min-w-0 flex-1 rounded-control border border-line-strong bg-bg px-3 text-[16px] text-ink outline-none placeholder:text-ink-4 focus:border-accent sm:h-10 sm:max-w-md sm:text-[14px]",
       }),
       // 单提交按钮：在输入框里按回车就是提交这个 GET 表单。
       h(
         "button",
-        { type: "submit", "data-search-submit": "", className: "inline-flex h-10 shrink-0 items-center rounded-control bg-accent px-4 text-[13.5px] font-medium text-accent-contrast" },
+        { type: "submit", "data-search-submit": "", className: "inline-flex h-11 shrink-0 items-center rounded-control bg-accent px-4 text-[13.5px] font-medium text-accent-contrast sm:h-10" },
         "搜索",
       ),
     ),
@@ -142,14 +142,14 @@ function FilterBar({ catalog, filters }: { catalog: CareerCatalogResponseV1; fil
     h("h3", { className: "mt-4 text-[12px] text-ink-4" }, "学生友好"),
     h(
       "ul",
-      { className: "mt-1.5 flex flex-wrap gap-2" },
+      { className: "mt-1.5 flex flex-wrap gap-2.5 sm:gap-2" },
       filterChip("全部", buildCatalogHref(filters, { student_friendly: undefined, page: 1 }), !studentOnly, "data-filter-student-friendly", "all"),
       filterChip("仅学生友好", buildCatalogHref(filters, { student_friendly: "yes", page: 1 }), studentOnly, "data-filter-student-friendly", "yes"),
     ),
     h("h3", { className: "mt-4 text-[12px] text-ink-4" }, "城市"),
     h(
       "ul",
-      { className: "mt-1.5 flex flex-wrap gap-2" },
+      { className: "mt-1.5 flex flex-wrap gap-2.5 sm:gap-2" },
       filterChip("全部", buildCatalogHref(filters, { city: undefined, page: 1 }), city === "", "data-filter-city", "all"),
       ...cities.map((option) =>
         filterChip(option, buildCatalogHref(filters, { city: option, page: 1 }), city === option, "data-filter-city", option),
@@ -159,7 +159,7 @@ function FilterBar({ catalog, filters }: { catalog: CareerCatalogResponseV1; fil
       ? h(
           Link,
           Object.assign(
-            { to: CATALOG_PATH, preventScrollReset: true, className: "mt-4 inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium text-ink-2" },
+            { to: CATALOG_PATH, preventScrollReset: true, className: "mt-4 inline-flex h-11 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium text-ink-2 sm:h-8" },
             { "data-filter-clear": "" },
           ),
           "清除筛选",
@@ -230,7 +230,7 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
               h(
                 Link,
                 Object.assign(
-                  { to: withJobsListAnchor(buildCatalogHref(filters, { role_family: direction.role_family, page: 1 })), className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
+                  { to: withJobsListAnchor(buildCatalogHref(filters, { role_family: direction.role_family, page: 1 })), className: "mt-2 inline-flex py-2 -my-2 text-[12.5px] font-medium text-accent hover:underline" },
                   { "data-direction-evidence": direction.role_family },
                 ),
                 "查看该方向岗位",
@@ -251,7 +251,7 @@ function JobRow({ job, back, Star }: { job: JobListResponseV1["items"][number]; 
     h(
       "div",
       { className: "flex items-start justify-between gap-2" },
-      h(Link, { to: buildJobHref(job.id, back), className: "min-w-0 text-[15px] font-semibold text-ink break-words hover:text-accent" }, job.title),
+      h(Link, { to: buildJobHref(job.id, back), className: "min-w-0 py-1.5 -my-1.5 text-[15px] font-semibold text-ink break-words hover:text-accent" }, job.title),
       Star
         ? h(Star, { id: job.id, title: job.title, company: job.company_name, roleFamily: job.role_family, locations: job.locations, compact: true })
         : null,
@@ -281,11 +281,11 @@ function JobPager({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFilt
       "div",
       { className: "flex items-center gap-2" },
       current > 1
-        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), preventScrollReset: true, className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
-        : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "上一页"),
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), preventScrollReset: true, className: "inline-flex h-11 items-center rounded-control border border-line px-3 text-[13px] text-ink-2 sm:h-8" }, { "data-page": "prev" }), "上一页")
+        : h("span", { "aria-disabled": "true", className: "inline-flex h-11 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60 sm:h-8" }, "上一页"),
       current < totalPages
-        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), preventScrollReset: true, className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
-        : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "下一页"),
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), preventScrollReset: true, className: "inline-flex h-11 items-center rounded-control border border-line px-3 text-[13px] text-ink-2 sm:h-8" }, { "data-page": "next" }), "下一页")
+        : h("span", { "aria-disabled": "true", className: "inline-flex h-11 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60 sm:h-8" }, "下一页"),
     ),
   );
 }
@@ -348,10 +348,10 @@ export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
 }): ReactElement {
   return h(
     "div",
-    { className: "space-y-6 pb-10 pt-3" },
+    { className: "flex flex-col gap-6 pb-10 pt-3" },
     h(
       "header",
-      null,
+      { className: "order-1" },
       h("h1", { "data-page-title": "", className: "text-[24px] font-semibold text-ink" }, "热门岗位"),
       filters.q
         ? h(
@@ -361,7 +361,7 @@ export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
             h(
               Link,
               Object.assign(
-                { to: buildCatalogHref(filters, { q: undefined, page: 1 }), preventScrollReset: true, className: "inline-flex text-[12.5px] font-medium text-accent hover:underline" },
+                { to: buildCatalogHref(filters, { q: undefined, page: 1 }), preventScrollReset: true, className: "inline-flex min-h-11 items-center text-[12.5px] font-medium text-accent hover:underline" },
                 { "data-search-clear": "" },
               ),
               "清除搜索",
@@ -381,8 +381,9 @@ export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
           h("p", { className: `mt-1 ${MUTED_CLASS}` }, "样本或观测日不足，先展示已有采集结果，不给出趋势判断。"),
         )
       : null,
-    h(DirectionRanking, { catalog, filters }),
-    h(FilterBar, { catalog, filters }),
-    h(JobListSection, { jobs, filters, Star: starButton }),
+    // 手机上先给搜索/筛选，再给方向榜：读者一进页面就能搜，不用滚过整个方向榜。
+    h("div", { className: "order-2 lg:order-3" }, h(FilterBar, { catalog, filters })),
+    h("div", { className: "order-3 lg:order-2" }, h(DirectionRanking, { catalog, filters })),
+    h("div", { className: "order-4" }, h(JobListSection, { jobs, filters, Star: starButton })),
   );
 }

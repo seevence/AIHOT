@@ -452,6 +452,49 @@
 @keyframes aihot-page-out-right { to { transform: translateX(100%); } }
 @keyframes aihot-page-in-left { from { transform: translateX(-28%); } }
 
+/* A row that scrolls sideways (tables, tab strips) shows a soft edge so the cut-off column reads as scrollable. */
+.scroll-x-hint {
+  position: relative;
+}
+.scroll-x-hint::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 28px;
+  pointer-events: none;
+  border-radius: inherit;
+  background: linear-gradient(to right, transparent, var(--surface));
+}
+
+/* Phones: comfortable taps and legible auxiliary text without changing the desktop layout. */
+@media (hover: none) {
+  a:active,
+  button:active,
+  [role="button"]:active {
+    opacity: 0.72;
+  }
+}
+a,
+button,
+[role="button"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+@media (max-width: 699px) {
+  html {
+    scroll-padding-top: calc(var(--bar-h, 52px) + env(safe-area-inset-top) + 8px);
+    scroll-padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  /* Auxiliary labels were 10.5–11.5px; on a phone they read as grain, not text. */
+  [class*="text-[10.5px]"],
+  [class*="text-[11px]"],
+  [class*="text-[11.5px]"] {
+    font-size: 12px !important;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;
