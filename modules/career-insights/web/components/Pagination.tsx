@@ -1,5 +1,5 @@
 import { Link, useSearchParams } from "react-router";
-import { buildJobsHref, parseDashboardFilters } from "../filters";
+import { buildJobsHref, parseDashboardFilters, withJobsListAnchor } from "../filters";
 
 const ITEM_CLASS = "inline-flex h-8 min-w-8 items-center justify-center rounded-control px-2 text-[13px]";
 
@@ -28,7 +28,7 @@ export function Pagination({ page, pageSize, total, hrefFor, ariaLabel = "职位
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const current = Math.min(Math.max(1, page), totalPages);
 
-  const hrefForPage = hrefFor ?? ((target: number) => buildJobsHref({ ...filters, page: target, page_size: pageSize }));
+  const hrefForPage = hrefFor ?? ((target: number) => withJobsListAnchor(buildJobsHref({ ...filters, page: target, page_size: pageSize })));
 
   return (
     <nav aria-label={ariaLabel} className="mt-4 flex flex-wrap items-center justify-between gap-3">

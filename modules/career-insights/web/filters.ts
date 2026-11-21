@@ -61,6 +61,14 @@ export function buildJobsHref(filters: JobFiltersV1): string {
   return `/career-insights?${serializeJobFilters(filters)}`;
 }
 
+/** 岗位明细区块的锚点：分页链接带上它，换页后停在明细处而不是回到页面顶部；筛选 chip 不带。 */
+export const JOBS_LIST_ANCHOR = "#catalog-jobs";
+
+/** 只给分页链接追加锚点，buildJobsHref / buildCatalogHref 本身的输出保持不变。 */
+export function withJobsListAnchor(href: string): string {
+  return `${href}${JOBS_LIST_ANCHOR}`;
+}
+
 export function parseDirectionView(search: URLSearchParams): { view: DashboardView; roleFamily?: RoleFamily } {
   if (search.get("view") !== "direction") return { view: "overview" };
   const roleFamily = pickEnum(search.get("role_family"), ROLE_FAMILIES);

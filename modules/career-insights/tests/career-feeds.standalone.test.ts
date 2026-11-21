@@ -179,7 +179,7 @@ test("the daily report shows the date, each source and the unknown-skill share",
   assert.match(html.text(), /12\.5%/);
 });
 
-test("the daily report renders the cached AI comment after the day's figures and meta", () => {
+test("the daily report renders the cached AI comment between the day's figures and the source results", () => {
   const comment = dailyComment();
   const html = render(createElement(CareerDailyReport, { daily: FIXTURE_DAILY_V1, comment }));
   const block = html("[data-daily-comment]");
@@ -193,10 +193,12 @@ test("the daily report renders the cached AI comment after the day's figures and
     "生成于 2026年1月1日 08:00 · 中置信 · 当日观测样本 128 个岗位 · 今日新增 15",
     "generated_at is read in Beijing time, the confidence uses the shared label and the counts come from the cache",
   );
-  // The block sits after both the source results and the day's figures, and nothing follows it here.
+  // 今日概况 → AI 评论 → 各来源采集结果：采集结果放在页面最下面。
   const text = html.text();
-  assert.ok(text.indexOf("各来源采集结果") < text.indexOf("AI 评论"));
-  assert.ok(text.indexOf("今日概况") < text.indexOf("AI 评论"));
+  const figuresAt = text.indexOf("今日概况");
+  const commentAt = text.indexOf("AI 评论");
+  assert.ok(figuresAt < commentAt, "the comment follows the day's figures");
+  assert.ok(commentAt < text.indexOf("各来源采集结果"), "the source results sit at the bottom");
 });
 
 test("the daily report hides the AI comment block without a cache and on a failed read", () => {

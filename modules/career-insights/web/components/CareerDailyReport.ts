@@ -105,21 +105,6 @@ export function CareerDailyReport({
       : null,
     h(
       "section",
-      { "aria-labelledby": "career-daily-sources" },
-      h("div", { className: "mb-3 flex items-baseline justify-between px-1" },
-        h("h2", { id: "career-daily-sources", className: "text-[16px] font-semibold text-ink" }, "各来源采集结果"),
-        h("span", { className: "num text-[12px] text-ink-4" }, `共 ${daily.sources.length} 个来源`),
-      ),
-      daily.sources.length === 0
-        ? h("div", { "data-daily-sources-empty": "", className: "rounded-card border border-line bg-surface px-5 py-6 text-center text-[13px] text-ink-4" }, "今天还没有任何来源的采集记录。")
-        : h(
-            "ul",
-            { className: "divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface" },
-            ...daily.sources.map((source) => h(SourceRow, { key: source.source_key, source })),
-          ),
-    ),
-    h(
-      "section",
       { "aria-labelledby": "career-daily-figures", className: "rounded-card border border-line bg-surface p-5" },
       h("h2", { id: "career-daily-figures", className: "text-[16px] font-semibold text-ink" }, "今日概况"),
       h(
@@ -138,5 +123,20 @@ export function CareerDailyReport({
       h("p", { className: "mt-4 text-[12px] text-ink-4" }, `空技能岗位占比按 ${daily.sample_size} 个职位样本计算。`),
     ),
     comment ? h(DailyComment, { comment }) : null,
+    h(
+      "section",
+      { "aria-labelledby": "career-daily-sources" },
+      h("div", { className: "mb-3 flex items-baseline justify-between px-1" },
+        h("h2", { id: "career-daily-sources", className: "text-[16px] font-semibold text-ink" }, "各来源采集结果"),
+        h("span", { className: "num text-[12px] text-ink-4" }, `共 ${daily.sources.length} 个来源`),
+      ),
+      daily.sources.length === 0
+        ? h("div", { "data-daily-sources-empty": "", className: "rounded-card border border-line bg-surface px-5 py-6 text-center text-[13px] text-ink-4" }, "今天还没有任何来源的采集记录。")
+        : h(
+            "ul",
+            { className: "divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface" },
+            ...daily.sources.map((source) => h(SourceRow, { key: source.source_key, source })),
+          ),
+    ),
   );
 }
