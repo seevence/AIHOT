@@ -1,6 +1,7 @@
 // 就业热点三个只读接口（signals / hot / daily）的展示文案与取值口径。
 // 纯函数与常量：不依赖服务端模块，客户端组件与 SSR 断言共用同一份口径。
-import type { CareerDailySourceV1, CareerHotEntryV1, CareerSignalRule } from "../contracts/index.ts";
+import type { CareerDailyCommentResponseV1, CareerDailySourceV1, CareerHotEntryV1, CareerSignalRule } from "../contracts/index.ts";
+import { confidenceLabel } from "./labels.ts";
 import { formatCareerDate, formatCareerDateTime } from "./time.ts";
 
 export const SIGNAL_RULE_LABELS: Record<CareerSignalRule, string> = {
@@ -26,6 +27,15 @@ export const DAILY_SOURCE_STATUS_LABELS: Record<CareerDailySourceV1["status"], s
 
 export const DAILY_NO_RUN_TEXT = "今日尚未采集";
 export const UNKNOWN_RATIO_LABEL = "空技能岗位占比";
+
+/**
+ * 日报 AI 评论的一行元信息：生成时间按北京时间可读化，置信度用全站统一文案，
+ * 样本与新增数直接取缓存字段（数字由后端算好，前端不重算）。
+ */
+export function dailyCommentMeta(comment: CareerDailyCommentResponseV1): string {
+  const generatedAt = formatCareerDateTime(comment.generated_at) ?? comment.generated_at;
+  return `生成于 ${generatedAt} · ${confidenceLabel(comment.confidence)} · 样本 ${comment.sample_size} 个岗位 · 今日新增 ${comment.new_jobs}`;
+}
 
 /** 比率按百分比展示；null 表示样本为空，没有可算的占比。 */
 export function formatRatioPercent(value: number | null): string {

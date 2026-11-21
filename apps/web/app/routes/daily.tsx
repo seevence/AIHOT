@@ -1,19 +1,39 @@
 import { useLoaderData } from "react-router";
+import type { CareerDailyCommentResponseV1 } from "@aihot/career-insights/contracts";
 import type { Route } from "./+types/daily";
 import { cachedPage } from "../lib/api.server";
+import { logError } from "../lib/errors.server";
 import { pageReuse } from "../lib/page-reuse";
 import { pageMeta } from "../lib/seo";
 import { CareerDailyReport } from "../../../../modules/career-insights/web/components/CareerDailyReport.ts";
-import { loadCareerDaily } from "../../../../modules/career-insights/web/feeds.server.ts";
+import {
+  careerDailyCommentPath,
+  loadCareerDaily,
+  loadCareerDailyComment,
+} from "../../../../modules/career-insights/web/feeds.server.ts";
 import type { Screen } from "../components/shell/screens";
 
 export const handle: Screen = { tab: "daily", name: "就业日报" };
 export { pageHeaders as headers } from "../lib/api.server";
 export const { clientLoader, shouldRevalidate } = pageReuse<typeof loader>();
 
+/**
+ * 评论区块单独降级：无缓存(204) 返回 null，请求失败也返回 null 并记一条请求日志，
+ * 页面仍是 200、其它区块照常渲染；读者访问只读缓存，不触发模型调用。
+ */
+async function settledDailyComment(signal: AbortSignal): Promise<CareerDailyCommentResponseV1 | null> {
+  try {
+    return await loadCareerDailyComment<CareerDailyCommentResponseV1>(signal);
+  } catch (error) {
+    if (!signal.aborted) logError(error, { msg: "daily comment block failed", method: "GET", path: careerDailyCommentPath() });
+    return null;
+  }
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
-  const daily = await loadCareerDaily(request.signal);
-  return cachedPage(60, { daily });
+  const signal = request.signal;
+  const [daily, comment] = await Promise.all([loadCareerDaily(signal), settledDailyComment(signal)]);
+  return cachedPage(60, { daily, comment });
 }
 
 export function meta({ loaderData }: Route.MetaArgs) {
@@ -27,6 +47,6 @@ export function meta({ loaderData }: Route.MetaArgs) {
 }
 
 export default function CareerDailyPage() {
-  const { daily } = useLoaderData<typeof loader>();
-  return <CareerDailyReport daily={daily} />;
+  const { daily, comment } = useLoaderData<typeof loader>();
+  return <CareerDailyReport daily={daily} comment={comment} />;
 }

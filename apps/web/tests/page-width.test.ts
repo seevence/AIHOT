@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, webkit, expect, type Browser, type Page } from "@playwright/test";
 import type { ReportDetail, ReportKind } from "@aihot/contracts/site";
-import { FIXTURE_AT as at, fakeApi, feedItem, itemDetail, startWebServer, visit, type WebServer } from "./web-server.ts";
+import { FIXTURE_AT as at, careerDailyCommentFixture, fakeApi, feedItem, itemDetail, startWebServer, visit, type WebServer } from "./web-server.ts";
 
 const longText = "查看完整说明 https://example.org/announcements/" + "a".repeat(100) + "。";
 const longTitle = "一条很长的标题".repeat(30);
@@ -54,6 +54,10 @@ const api = fakeApi((url) => {
       contract_version: "0.1", data_origin: "synthetic_fixture", date: "2026-10-15", sources: [], has_run: true,
       jobs_total: 0, new_jobs_today: 0, new_policies_today: 0, policies_total: 0, unknown_ratio: null, sample_size: 0, generated_at: at,
     };
+  }
+  // The daily page's AI comment carries the widest line it can: generated text with an unbroken URL.
+  if (path === "/api/site/career-insights/daily-comment") {
+    return careerDailyCommentFixture({ comment: longText + longText, confidence: "high" });
   }
   if (path === "/api/site/career-insights/hot") {
     return {

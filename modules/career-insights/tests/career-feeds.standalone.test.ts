@@ -9,7 +9,7 @@ import * as cheerio from "cheerio";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
-import type { CareerDailyResponseV1, CareerHotEntryV1, CareerSignalV1 } from "../contracts/index.ts";
+import type { CareerDailyCommentResponseV1, CareerDailyResponseV1, CareerHotEntryV1, CareerSignalV1 } from "../contracts/index.ts";
 import { FIXTURE_DAILY_V1, FIXTURE_HOT_V1, FIXTURE_SIGNALS_V1 } from "../fixtures/api.ts";
 import { CareerSignalItems } from "../web/components/CareerSignals.ts";
 import { CareerHotList } from "../web/components/CareerHotList.ts";
@@ -136,6 +136,23 @@ test("an empty hot list keeps the site's way into the career insights page", () 
   assert.equal(link.attr("href"), "/career-insights");
 });
 
+/** The cached AI daily comment the /daily page renders; fields a test does not name are fixed. */
+function dailyComment(overrides: Partial<CareerDailyCommentResponseV1> = {}): CareerDailyCommentResponseV1 {
+  return {
+    contract_version: "0.1",
+    date: FIXTURE_DAILY_V1.date,
+    as_of: FIXTURE_DAILY_V1.generated_at,
+    generated_at: FIXTURE_DAILY_V1.generated_at,
+    sample_size: FIXTURE_DAILY_V1.sample_size,
+    new_jobs: FIXTURE_DAILY_V1.new_jobs_today,
+    confidence: "medium",
+    comment: "今日新增 15 个岗位，AI 算法方向占比最高；样本仍以官方招聘页为准。",
+    facts: ["今日新增 15 个岗位"],
+    evidence: [],
+    ...overrides,
+  };
+}
+
 test("the daily report says today has not been collected yet when there was no run", () => {
   const noRun: CareerDailyResponseV1 = { ...FIXTURE_DAILY_V1, has_run: false, sources: [] };
   const html = render(createElement(CareerDailyReport, { daily: noRun }));
@@ -160,4 +177,51 @@ test("the daily report shows the date, each source and the unknown-skill share",
 
   assert.match(html.text(), /空技能岗位占比/);
   assert.match(html.text(), /12\.5%/);
+});
+
+test("the daily report renders the cached AI comment after the day's figures and meta", () => {
+  const comment = dailyComment();
+  const html = render(createElement(CareerDailyReport, { daily: FIXTURE_DAILY_V1, comment }));
+  const block = html("[data-daily-comment]");
+  assert.equal(block.length, 1);
+  assert.equal(block.attr("data-daily-comment-date"), comment.date);
+  assert.equal(block.attr("data-daily-comment-confidence"), "medium");
+  assert.equal(block.find("h2").text(), "AI 评论");
+  assert.equal(html("[data-daily-comment-body]").text(), comment.comment);
+  assert.equal(
+    html("[data-daily-comment-meta]").text(),
+    "生成于 2026年1月1日 08:00 · 中置信 · 样本 128 个岗位 · 今日新增 15",
+    "generated_at is read in Beijing time, the confidence uses the shared label and the counts come from the cache",
+  );
+  // The block sits after both the source results and the day's figures, and nothing follows it here.
+  const text = html.text();
+  assert.ok(text.indexOf("各来源采集结果") < text.indexOf("AI 评论"));
+  assert.ok(text.indexOf("今日概况") < text.indexOf("AI 评论"));
+});
+
+test("the daily report hides the AI comment block without a cache and on a failed read", () => {
+  for (const comment of [undefined, null]) {
+    const html = render(createElement(CareerDailyReport, { daily: FIXTURE_DAILY_V1, comment }));
+    assert.equal(html("[data-daily-comment]").length, 0, "no empty card or placeholder without a cache");
+    assert.doesNotMatch(html.text(), /AI 评论/);
+    // The other blocks are untouched.
+    assert.equal(html("[data-daily-source]").length, 2);
+    assert.match(html.text(), /今日概况/);
+  }
+});
+
+test("the daily comment's confidence label uses the site's three shared tiers", () => {
+  const labels = { low: "低置信", medium: "中置信", high: "高置信" } as const;
+  for (const confidence of ["low", "medium", "high"] as const) {
+    const html = render(createElement(CareerDailyReport, { daily: FIXTURE_DAILY_V1, comment: dailyComment({ confidence }) }));
+    assert.equal(html("[data-daily-comment]").attr("data-daily-comment-confidence"), confidence);
+    assert.match(html("[data-daily-comment-meta]").text(), new RegExp(labels[confidence]));
+  }
+});
+
+test("a long, unbroken comment keeps the block's break convention", () => {
+  const html = render(createElement(CareerDailyReport, { daily: FIXTURE_DAILY_V1, comment: dailyComment({ comment: "数".repeat(400) }) }));
+  const body = html("[data-daily-comment-body]");
+  assert.equal(body.length, 1);
+  assert.match(body.attr("class") ?? "", /\bbreak-words\b/, "generated text may have no spaces to break at");
 });

@@ -9,17 +9,25 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import type { DataRouter } from "react-router";
 import type { FeedItemSummary, SiteItemDetail } from "@aihot/contracts/site";
-import type { CareerBriefV1 } from "@aihot/career-insights/contracts";
+import type { CareerBriefV1, CareerDailyCommentResponseV1 } from "@aihot/career-insights/contracts";
 
 /** When the synthetic reports were published. */
 export const FIXTURE_AT = "2026-10-04T08:00:00.000Z";
 
+/** What /daily-comment answers: the cached fixture, 204 (nothing generated yet), or 500 (the read failed). */
+export type CareerDailyCommentAnswer = "missing" | "error" | CareerDailyCommentResponseV1;
+
+export interface CareerApiOverrides {
+  dailyComment?: CareerDailyCommentAnswer;
+}
+
 /**
  * The career reads the public career pages make. Answers fixtures a page can render without a block
- * falling to "本区块暂时不可用"; `brief` answers 204 (no cached analysis yet), as the api does.
- * Tests that own a deadline can set `X-Accel-Expires` before calling this.
+ * falling to "本区块暂时不可用"; `brief` answers 204 (no cached analysis yet) and `dailyComment`
+ * answers a cached comment, as the api does. Tests that own a deadline can set `X-Accel-Expires` before
+ * calling this.
  */
-export function careerApi(url: URL, res: ServerResponse): unknown {
+export function careerApi(url: URL, res: ServerResponse, overrides: CareerApiOverrides = {}): unknown {
   const at = FIXTURE_AT;
   switch (url.pathname) {
     case "/api/site/career-insights/summary":
@@ -42,6 +50,21 @@ export function careerApi(url: URL, res: ServerResponse): unknown {
         contract_version: "0.1", data_origin: "live", items: [], page: 1, page_size: 20, total: 0, as_of: at,
         filters: { page: 1, page_size: 20 },
       };
+    case "/api/site/career-insights/daily-comment":
+      // The cached comment the daily page reads; without it the block must not render at all.
+      switch (overrides.dailyComment ?? "fixture") {
+        case "missing":
+          res.statusCode = 204;
+          res.end();
+          return undefined;
+        case "error":
+          res.statusCode = 500;
+          return { error: { code: "internal_error", message: "fixture" } };
+        case "fixture":
+          return careerDailyCommentFixture();
+        default:
+          return overrides.dailyComment;
+      }
     case "/api/site/career-insights/brief":
       res.statusCode = 204;
       res.end();
@@ -64,6 +87,17 @@ export function careerBriefFixture(overrides: Partial<CareerBriefV1> = {}): Care
     actions: ["ACTION-1", "ACTION-2", "ACTION-3", "ACTION-4", "ACTION-5"],
     evidence: [{ kind: "job", id: "EVIDENCE-ONLY-IN-INSIGHTS", title: "EVIDENCE-ONLY-IN-INSIGHTS" }],
     limitations: ["LIMITATION-ONLY-IN-INSIGHTS"], confidence: "medium",
+    ...overrides,
+  };
+}
+
+/** A cached daily AI comment (the api's 200 answer) with marker text a page must show only when cached. */
+export function careerDailyCommentFixture(overrides: Partial<CareerDailyCommentResponseV1> = {}): CareerDailyCommentResponseV1 {
+  return {
+    contract_version: "0.1", date: "2026-10-15", as_of: FIXTURE_AT, generated_at: FIXTURE_AT,
+    sample_size: 12, new_jobs: 3, confidence: "medium",
+    comment: "今日新增岗位集中在 AI 应用开发方向，样本仍以官方招聘页为准。",
+    facts: ["今日新增 3 个岗位"], evidence: [],
     ...overrides,
   };
 }

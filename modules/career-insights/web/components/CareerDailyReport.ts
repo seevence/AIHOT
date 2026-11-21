@@ -1,6 +1,12 @@
 import { createElement as h, type ReactElement } from "react";
-import type { CareerDailyResponseV1, CareerDailySourceV1 } from "../../contracts/index.ts";
-import { DAILY_NO_RUN_TEXT, DAILY_SOURCE_STATUS_LABELS, UNKNOWN_RATIO_LABEL, formatRatioPercent } from "../feeds.ts";
+import type { CareerDailyCommentResponseV1, CareerDailyResponseV1, CareerDailySourceV1 } from "../../contracts/index.ts";
+import {
+  DAILY_NO_RUN_TEXT,
+  DAILY_SOURCE_STATUS_LABELS,
+  UNKNOWN_RATIO_LABEL,
+  dailyCommentMeta,
+  formatRatioPercent,
+} from "../feeds.ts";
 
 function Figure({ label, value, note }: { label: string; value: string; note?: string }): ReactElement {
   return h(
@@ -37,7 +43,45 @@ function SourceRow({ source }: { source: CareerDailySourceV1 }): ReactElement {
   );
 }
 
-export function CareerDailyReport({ daily }: { daily: CareerDailyResponseV1 }): ReactElement {
+/**
+ * 后台预生成的 AI 评论：只渲染缓存里的正文与元信息。没有缓存或请求失败时整块不渲染，
+ * 由调用方传 null，页面不出现空卡片或占位。comment 可能很长且没有空格，正文按任意位置断行。
+ */
+function DailyComment({ comment }: { comment: CareerDailyCommentResponseV1 }): ReactElement {
+  return h(
+    "section",
+    {
+      "aria-labelledby": "career-daily-comment",
+      "data-daily-comment": "",
+      "data-daily-comment-date": comment.date,
+      "data-daily-comment-confidence": comment.confidence,
+      className: "rounded-card border border-line bg-surface p-5",
+    },
+    h("h2", { id: "career-daily-comment", className: "text-[16px] font-semibold text-ink" }, "AI 评论"),
+    h(
+      "p",
+      {
+        "data-daily-comment-body": "",
+        className: "mt-3 break-words text-[14px] leading-relaxed text-ink-2 [overflow-wrap:anywhere]",
+      },
+      comment.comment,
+    ),
+    h(
+      "p",
+      { "data-daily-comment-meta": "", className: "mt-3 break-words text-[12px] text-ink-4" },
+      dailyCommentMeta(comment),
+    ),
+  );
+}
+
+export function CareerDailyReport({
+  daily,
+  comment,
+}: {
+  daily: CareerDailyResponseV1;
+  /** 日报 AI 评论缓存；null 表示今天还没生成或请求失败，整块隐藏。 */
+  comment?: CareerDailyCommentResponseV1 | null;
+}): ReactElement {
   return h(
     "div",
     { "data-career-daily": "", className: "space-y-6 pb-10 pt-3" },
@@ -93,5 +137,6 @@ export function CareerDailyReport({ daily }: { daily: CareerDailyResponseV1 }): 
       ),
       h("p", { className: "mt-4 text-[12px] text-ink-4" }, `空技能岗位占比按 ${daily.sample_size} 个职位样本计算。`),
     ),
+    comment ? h(DailyComment, { comment }) : null,
   );
 }
