@@ -243,7 +243,7 @@ const SIGNALS_RULES: CareerSignalsResponseV1 = {
       source_key: "tencent-official-careers",
       official_url: "https://careers.example/jobs/5",
       first_seen_at: AS_OF,
-      confidence: "high",
+      confidence: "medium",
     },
     {
       rule: "surge",
@@ -401,6 +401,7 @@ test("the complete brief renders facts, inferences, actions, limitations and evi
   assert.equal(brief.find("[data-brief-as-of]").attr("data-brief-as-of"), AS_OF);
   assert.match(brief.text(), /数据截至/);
   assert.match(brief.text(), /样本 12 个岗位/);
+  assert.equal(brief.find("[data-brief-confidence]").text(), "低置信");
   assert.match(brief.text(), /低置信/);
   // 行动建议只完整出现在第 1 段，后面不重复。
   assert.equal(html("[data-insight-section='career-student-advice'] [data-brief-action]").length, 0);
@@ -421,6 +422,7 @@ test("unusual signals show numeric evidence and source links, with skipped notic
 
   const crossIndustry = items.first();
   assert.equal(crossIndustry.find("[data-signal-rule]").text(), "跨界组合");
+  assert.equal(crossIndustry.find("[data-signal-confidence]").text(), "高置信");
   assert.match(crossIndustry.find("[data-signal-evidence]").text(), /公司岗位 6 个 · AI 族 5 个 · 占比 83.0%/);
   assert.equal(crossIndustry.find("[data-signal-title]").parent().attr("href"), "/career-insights/jobs/job-2");
   assert.equal(crossIndustry.find("[data-signal-source]").attr("href"), "https://careers.example/jobs/2");
@@ -450,6 +452,7 @@ test("all four signal rules render their own numeric evidence and share one perc
   );
 
   // new_family：职族、窗口内数量、观察窗与最早出现时间。
+  assert.equal(ruleItem("new_family").find("[data-signal-confidence]").text(), "中置信");
   const newFamily = ruleItem("new_family").find("[data-signal-evidence]").text();
   assert.match(newFamily, /新职族：AI 应用开发/);
   assert.match(newFamily, /窗口内 4 个/);
@@ -535,6 +538,8 @@ test("hot jobs keeps only summary cards and one link into the full catalog", () 
   assert.equal(section.find("[data-page]").length, 0);
   assert.equal(section.find("[data-catalog-job]").length, 0);
   assert.doesNotMatch(section.text(), /方向榜|职位榜/);
+  // 热门口径说明只在第 8 段出现，摘要卡不重复整句定义。
+  assert.doesNotMatch(section.text(), new RegExp(HOT_DEFINITION));
 });
 
 test("student advice lists directions, skills and job evidence links into the jobs page", () => {
@@ -587,7 +592,8 @@ test("the method section discloses sources, window, sample, unknown semantics an
   assert.equal(section.find("[data-method-citation]").text(), COLLECTOR_CITATION);
   assert.match(section.text(), /必须随数字一起引用/);
   assert.match(section.text(), /unknown 单列/);
-  assert.match(section.find("[data-method-limitation]").first().text() ?? "", /热门指当前有效岗位数量/);
+  assert.equal(section.find("[data-method-limitation]").first().text(), HOT_DEFINITION);
+  assert.equal(html.text().split(HOT_DEFINITION).length - 1, 1);
 });
 
 test("the method section says 窗口未知 instead of inventing a window when catalog fails", () => {
@@ -609,7 +615,6 @@ test("an empty catalog asks to keep observing instead of inventing trends", () =
   assert.match(html("[data-hot-jobs-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
   assert.match(html("[data-advice-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
   assert.match(html("[data-skill-trend-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
-  assert.match(board(SUMMARY, CATALOG)("[data-hot-definition]").text(), new RegExp(HOT_DEFINITION));
 });
 
 test("the catalog page ranks directions and titles and links evidence", () => {

@@ -6,7 +6,7 @@ import type { JobFiltersV1, MetricResultV1, SummaryResponseV1 } from "@aihot/car
 import type { CareerBriefV1, CareerCatalogResponseV1, CareerSignalsResponseV1 } from "../../contracts/index.ts";
 import { formatRatioPercent, publishedAtText } from "../feeds.ts";
 import { JOB_PAGE_SIZES } from "../filters.ts";
-import { ROLE_FAMILY_LABELS, skillLabel } from "../labels.ts";
+import { confidenceLabel, ROLE_FAMILY_LABELS, skillLabel } from "../labels.ts";
 import { CareerTime } from "../time.ts";
 import { CareerSignalItems } from "./CareerSignals.ts";
 import { CATALOG_PATH, buildCatalogHref } from "./JobsCatalogBoard.ts";
@@ -29,12 +29,6 @@ const MUTED_CLASS = "text-[12px] leading-relaxed text-ink-4 break-words";
 const BODY_CLASS = "mt-2 text-[13px] leading-relaxed text-ink-3 break-words";
 const CHIP_CLASS = "inline-flex h-6 items-center rounded-full border border-line-strong px-2.5 text-[11.5px] text-ink-2";
 const LINK_CLASS = "font-medium text-accent hover:underline";
-
-const CONFIDENCE_LABELS: Record<CareerBriefV1["confidence"], string> = {
-  low: "低置信",
-  medium: "中置信",
-  high: "高置信",
-};
 
 export interface InsightSectionV1 {
   id: string;
@@ -71,23 +65,19 @@ function section(id: string, title: string, children: ReadonlyArray<ReactElement
 
 const UNAVAILABLE_HINT = "请求失败或接口暂不可用；不影响其它区块，可稍后重试。";
 
-/** 样本不足/继续积累观测：带“观测日不足”的归因。 */
-function note(text: string, dataAttr: string): ReactElement {
+/**
+ * 区块级状态提示，两种状态共用一套外壳、只换文案与归因：
+ * - insufficient：样本不足/继续积累观测，带“观测日不足”的归因；
+ * - unavailable：API 失败/降级，只说明本块不可用，不套用样本不足的归因。
+ * 失败态统一 data-section-unavailable；样本不足按区块用各自的 data 属性。
+ */
+function statusNote(kind: "insufficient" | "unavailable", dataAttr: string): ReactElement {
+  const insufficient = kind === "insufficient";
   return h(
     "div",
     { [dataAttr]: "", role: "status", className: "mt-3 rounded-card border border-line-soft bg-bg-sunk px-4 py-4" },
-    h("p", { className: "text-[14px] font-medium text-ink-2" }, text),
-    h("p", { className: "mt-1 text-[12.5px] leading-relaxed text-ink-4 break-words" }, INSUFFICIENT_DATA_HINT),
-  );
-}
-
-/** API 失败/降级：只说明本块不可用，不套用样本不足的归因。 */
-function unavailableNote(): ReactElement {
-  return h(
-    "div",
-    { "data-section-unavailable": "", role: "status", className: "mt-3 rounded-card border border-line-soft bg-bg-sunk px-4 py-4" },
-    h("p", { className: "text-[14px] font-medium text-ink-2" }, BLOCK_UNAVAILABLE_TEXT),
-    h("p", { className: "mt-1 text-[12.5px] leading-relaxed text-ink-4 break-words" }, UNAVAILABLE_HINT),
+    h("p", { className: "text-[14px] font-medium text-ink-2" }, insufficient ? INSUFFICIENT_DATA_TEXT : BLOCK_UNAVAILABLE_TEXT),
+    h("p", { className: "mt-1 text-[12.5px] leading-relaxed text-ink-4 break-words" }, insufficient ? INSUFFICIENT_DATA_HINT : UNAVAILABLE_HINT),
   );
 }
 
@@ -171,7 +161,7 @@ function briefMeta(brief: CareerBriefV1): ReactElement {
   return h(
     "div",
     { className: "mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1" },
-    h("span", { "data-brief-confidence": brief.confidence, className: CHIP_CLASS }, CONFIDENCE_LABELS[brief.confidence]),
+    h("span", { "data-brief-confidence": brief.confidence, className: CHIP_CLASS }, confidenceLabel(brief.confidence)),
     h("span", { "data-brief-as-of": brief.as_of, className: MUTED_CLASS }, "数据截至 ", h(CareerTime, { value: brief.as_of })),
     h("span", { "data-brief-sample": String(brief.sample_size), className: MUTED_CLASS }, `样本 ${brief.sample_size} 个岗位`),
     h("span", { className: MUTED_CLASS }, `观察窗 ${brief.window_days} 天`),
@@ -200,7 +190,7 @@ function BriefSection({ brief }: { brief: CareerBriefV1 | null }): ReactElement 
 
 /** 第 2 段：不同寻常的信号（自首页移入）。skipped 有值才提示，空数组不渲染。 */
 function SignalsSection({ signals }: { signals: CareerSignalsResponseV1 | null }): ReactElement {
-  if (!signals) return section("career-signals", "不同寻常的信号", [unavailableNote()]);
+  if (!signals) return section("career-signals", "不同寻常的信号", [statusNote("unavailable", "data-section-unavailable")]);
 
   return section("career-signals", "不同寻常的信号", [
     mutedLine(SIGNAL_DEFINITION, "data-signal-definition"),
@@ -245,9 +235,9 @@ function jobTrendRows(catalog: CareerCatalogResponseV1): ReactElement {
 
 /** 第 3 段：职族结构与观察窗新增；unknown 单列，不混进方向结构。 */
 function JobTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | null; catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-job-trend", "岗位趋势", [unavailableNote()]);
+  if (!catalog) return section("career-job-trend", "岗位趋势", [statusNote("unavailable", "data-section-unavailable")]);
   if (catalog.directions.length === 0 || catalog.sample_size === 0) {
-    return section("career-job-trend", "岗位趋势", [note(INSUFFICIENT_DATA_TEXT, "data-job-trend-empty")]);
+    return section("career-job-trend", "岗位趋势", [statusNote("insufficient", "data-job-trend-empty")]);
   }
 
   const unknownFamily = unknownFamilyMetric(summary);
@@ -265,7 +255,7 @@ function JobTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | nu
 /** 第 4 段：高频技能与组合，并说明计数口径（提及次数，不是需求概率）。 */
 function SkillTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | null; catalog: CareerCatalogResponseV1 | null }): ReactElement {
   // 高频技能与组合来自 catalog；catalog 失败时本段整体不可用，不用空数据冒充“样本不足”。
-  if (!catalog) return section("career-skill-trend", "技能趋势", [unavailableNote()]);
+  if (!catalog) return section("career-skill-trend", "技能趋势", [statusNote("unavailable", "data-section-unavailable")]);
 
   const skills = catalog.skills;
   const unknownSkill = unknownSkillMetric(summary);
@@ -277,7 +267,7 @@ function SkillTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | 
   if (skills.length === 0) {
     return section("career-skill-trend", "技能趋势", [
       mutedLine(SKILL_DEFINITION, "data-skill-definition"),
-      note(INSUFFICIENT_DATA_TEXT, "data-skill-trend-empty"),
+      statusNote("insufficient", "data-skill-trend-empty"),
     ]);
   }
 
@@ -322,16 +312,15 @@ function SkillTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | 
 
 /** 第 5 段：只放摘要卡与一个入口；完整方向榜/职位榜/筛选/分页都在岗位页。 */
 function HotJobsSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-hot-jobs", "热门岗位", [unavailableNote()]);
+  if (!catalog) return section("career-hot-jobs", "热门岗位", [statusNote("unavailable", "data-section-unavailable")]);
   if (catalog.sample_size === 0 || (catalog.directions.length === 0 && catalog.titles.length === 0)) {
-    return section("career-hot-jobs", "热门岗位", [note(INSUFFICIENT_DATA_TEXT, "data-hot-jobs-empty")]);
+    return section("career-hot-jobs", "热门岗位", [statusNote("insufficient", "data-hot-jobs-empty")]);
   }
 
   const directions = catalog.directions.slice(0, HOT_JOBS_SUMMARY_LIMIT);
   const titles = catalog.titles.slice(0, HOT_JOBS_SUMMARY_LIMIT);
 
   return section("career-hot-jobs", "热门岗位", [
-    mutedLine(HOT_DEFINITION, "data-hot-definition"),
     mutedLine("这里只放摘要卡；完整榜单、筛选与分页在岗位页。", "data-hot-summary-note"),
     directions.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "热门方向") : null,
     directions.length > 0
@@ -383,9 +372,9 @@ function HotJobsSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }
 
 /** 第 6 段：可投方向 / 需补技能 / 岗位证据，全部从 catalog 的当前窗口派生，不重复研判的行动建议。 */
 function StudentAdviceSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-student-advice", "学生就业建议", [unavailableNote()]);
+  if (!catalog) return section("career-student-advice", "学生就业建议", [statusNote("unavailable", "data-section-unavailable")]);
   if (catalog.sample_size === 0 || catalog.directions.length === 0) {
-    return section("career-student-advice", "学生就业建议", [note(INSUFFICIENT_DATA_TEXT, "data-advice-empty")]);
+    return section("career-student-advice", "学生就业建议", [statusNote("insufficient", "data-advice-empty")]);
   }
 
   const directions = catalog.directions.slice(0, ADVICE_DIRECTION_LIMIT);
@@ -446,7 +435,7 @@ function StudentAdviceSection({ catalog }: { catalog: CareerCatalogResponseV1 | 
 
 /** 第 7 段：政策与岗位联动；没有共同主题时整段隐藏，不留空卡片。 */
 function PolicyJobsSection({ summary }: { summary: SummaryResponseV1 | null }): ReactElement | null {
-  if (!summary) return section("career-policy-jobs", "政策与岗位联动", [unavailableNote()]);
+  if (!summary) return section("career-policy-jobs", "政策与岗位联动", [statusNote("unavailable", "data-section-unavailable")]);
   if (summary.shared_themes.length === 0) return null;
 
   return section("career-policy-jobs", "政策与岗位联动", [
@@ -493,7 +482,7 @@ function MethodSection({ summary, catalog }: {
   summary: SummaryResponseV1 | null;
   catalog: CareerCatalogResponseV1 | null;
 }): ReactElement {
-  if (!summary) return section("career-method", "数据范围与方法", [unavailableNote()]);
+  if (!summary) return section("career-method", "数据范围与方法", [statusNote("unavailable", "data-section-unavailable")]);
 
   const unknownFamily = unknownFamilyMetric(summary);
   const unknownSkill = unknownSkillMetric(summary);

@@ -53,6 +53,25 @@ export const STUDENT_FRIENDLY_LABELS: Record<StudentFriendly, string> = {
   no: "否",
   unknown: "未知",
 };
+
+/** 后端研判（CareerBriefV1）与信号（CareerSignalV1）共用的置信度等级。 */
+export type ConfidenceLevel = "low" | "medium" | "high";
+
+const CONFIDENCE_LABELS: Readonly<Record<ConfidenceLevel, string>> = {
+  low: "低置信",
+  medium: "中置信",
+  high: "高置信",
+};
+
+/**
+ * 全站统一的置信度文案：low/medium/high → 低置信/中置信/高置信。
+ * 等级由后端按观测日与样本量判定，前端只翻译，不重新判定，也不改等级顺序。
+ * 洞察页（研判徽标、信号卡）已改用本函数；首页 apps/web 的 HomeWorkbench.tsx 仍是本地
+ * 「置信度低/中/高」常量，下一轮由首页改为引用本函数即可对齐，不要再新增一套映射。
+ */
+export function confidenceLabel(confidence: ConfidenceLevel): string {
+  return CONFIDENCE_LABELS[confidence];
+}
 export const SKILL_LABELS: Readonly<Record<string, string>> = {
   python: "Python",
   sql: "SQL",

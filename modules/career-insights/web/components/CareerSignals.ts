@@ -4,18 +4,12 @@ import { createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { CareerSignalSkippedV1, CareerSignalV1 } from "../../contracts/index.ts";
 import { SIGNAL_EMPTY_HINT, SIGNAL_EMPTY_TITLE, SIGNAL_RULE_LABELS, careerJobHref, formatRatioPercent, skippedSurgeNotice } from "../feeds.ts";
-import { ROLE_FAMILY_LABELS } from "../labels.ts";
+import { confidenceLabel, ROLE_FAMILY_LABELS } from "../labels.ts";
 import { formatCareerDateTime } from "../time.ts";
 
-const CARD_CLASS = "rounded-card border border-line bg-surface p-5";
 const BADGE_CLASS = "inline-flex h-5 shrink-0 items-center rounded-full bg-amber-soft px-2 text-[11px] font-medium leading-none text-amber-ink";
 const MUTED_CLASS = "mt-1 text-[12px] leading-relaxed text-ink-4 break-words";
 const SOURCE_LINK_CLASS = "text-[12px] font-medium text-accent hover:underline";
-
-const CONFIDENCE_LABELS: Record<CareerSignalV1["confidence"], string> = {
-  high: "高置信",
-  medium: "中置信",
-};
 
 /** 把后端 evidence 里该规则用到的数字转成可读依据；契约没给的字段不硬凑，避免编造数字。 */
 export function signalEvidenceFacts(signal: CareerSignalV1): string[] {
@@ -66,7 +60,7 @@ function SignalItem({ signal }: { signal: CareerSignalV1 }): ReactElement {
       { className: "flex flex-wrap items-center gap-x-2 gap-y-1" },
       h("span", { "data-signal-rule": signal.rule, className: BADGE_CLASS }, SIGNAL_RULE_LABELS[signal.rule]),
       h("span", { "data-signal-company": signal.company, className: "text-[12px] text-ink-4 break-words" }, signal.company),
-      h("span", { "data-signal-confidence": signal.confidence, className: "text-[11px] text-ink-4" }, CONFIDENCE_LABELS[signal.confidence]),
+      h("span", { "data-signal-confidence": signal.confidence, className: "text-[11px] text-ink-4" }, confidenceLabel(signal.confidence)),
     ),
     h(
       "h3",
@@ -116,15 +110,5 @@ export function CareerSignalItems({ signals, skipped }: { signals: readonly Care
     skipped.length > 0
       ? h("p", { "data-signals-skipped": String(skipped.length), className: "mt-3 text-[12px] text-ink-4 break-words" }, skippedNotice(skipped))
       : null,
-  );
-}
-
-/** 首页等旧入口沿用的带标题卡片；洞察页改用 CareerSignalItems 以并入自己的第 2 段。 */
-export function CareerSignals({ signals, skipped }: { signals: readonly CareerSignalV1[]; skipped: readonly CareerSignalSkippedV1[] }): ReactElement {
-  return h(
-    "section",
-    { "aria-labelledby": "career-signals", className: CARD_CLASS },
-    h("h2", { id: "career-signals", className: "text-[16px] font-semibold text-ink" }, "值得注意的信号"),
-    h(CareerSignalItems, { signals, skipped }),
   );
 }
