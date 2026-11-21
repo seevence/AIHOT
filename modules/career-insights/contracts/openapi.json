@@ -128,6 +128,30 @@
         }
       }
     },
+    "/api/site/career-insights/daily-comment": {
+      "get": {
+        "operationId": "getCareerDailyComment",
+        "summary": "就业日报 AI 评论（只读缓存）",
+        "description": "后台每日管线预生成并按 (comment_date, prompt_version) 缓存；页面只读这份缓存，不触发模型调用。date 缺省为今天（Asia/Shanghai），无缓存返回 204，date 非法返回 400。comment 的数字只来自 facts 与当日聚合字段。",
+        "parameters": [
+          { "name": "date", "in": "query", "required": false, "schema": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "该日 AI 评论缓存",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/CareerDailyCommentResponseV1" } } }
+          },
+          "204": {
+            "description": "该日尚未生成评论缓存",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
     "/api/site/career-insights/signals": {
       "get": {
         "operationId": "listCareerSignals",
@@ -331,6 +355,34 @@
           },
           "sample_size": { "type": "integer", "minimum": 0 },
           "generated_at": { "type": "string", "format": "date-time" }
+        }
+      },
+      "CareerDailyCommentResponseV1": {
+        "description": "就业日报 AI 评论缓存：后台预生成，页面只读；无缓存时 API 返回 204。date 为 Asia/Shanghai 自然日。",
+        "type": "object",
+        "required": ["contract_version", "date", "as_of", "generated_at", "sample_size", "new_jobs", "confidence", "comment", "facts", "evidence"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "date": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" },
+          "as_of": { "type": "string", "format": "date-time" },
+          "generated_at": { "type": "string", "format": "date-time" },
+          "sample_size": { "type": "integer", "minimum": 0, "description": "当日有观测的岗位数" },
+          "new_jobs": { "type": "integer", "minimum": 0, "description": "当日首次观测到的新岗位数" },
+          "confidence": { "type": "string", "enum": ["low", "medium", "high"] },
+          "comment": { "type": "string", "maxLength": 400 },
+          "facts": { "type": "array", "items": { "type": "string" } },
+          "evidence": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "id", "title"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["job", "policy"] },
+                "id": { "type": "string", "format": "uuid" },
+                "title": { "type": "string" }
+              }
+            }
+          }
         }
       },
       "CareerSignalEvidenceV1": {

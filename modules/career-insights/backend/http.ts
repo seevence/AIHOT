@@ -1,3 +1,4 @@
+import { beijingDate, isValidDate } from "@aihot/contracts/time";
 import type { FastifyInstance, FastifyReply } from "fastify";
 import type { ApiErrorResponseV1, JobFiltersV1 } from "../contracts/api.ts";
 import type { EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
@@ -37,6 +38,7 @@ const POLICY_FILTER_KEYS = new Set(["source_key", "theme", "page", "page_size"])
 const HOT_FILTER_KEYS = new Set(["limit", "window_days"]);
 const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
 const CATALOG_FILTER_KEYS = new Set(["limit", "window_days"]);
+const DAILY_COMMENT_FILTER_KEYS = new Set(["date"]);
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidParameter(parameter: string, message: string): InvalidParameterError {
@@ -167,11 +169,24 @@ function parseCatalogOptions(query: unknown): CareerCatalogOptions {
   };
 }
 
+/** /daily-comment 的 date 缺省为今天（Asia/Shanghai）；页面读的是后台预生成的缓存，这里只选日期。 */
+function parseDailyCommentDate(query: unknown): string {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !DAILY_COMMENT_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+  const raw = input.date;
+  if (raw === undefined) return beijingDate(new Date());
+  if (typeof raw !== "string" || !isValidDate(raw)) {
+    throw invalidParameter("date", "Query parameter must be a calendar date (YYYY-MM-DD): date.");
+  }
+  return raw;
+}
+
 async function respond(reply: FastifyReply, read: () => Promise<unknown>): Promise<FastifyReply> {
   reply.header("Cache-Control", "no-store");
   try {
     const value = await read();
-    // 研判缓存未生成时对外是 204，而不是一个空对象。
+    // 研判/日报评论缓存未生成时对外是 204，而不是一个空对象。
     if (value === null) return reply.code(204).send();
     return reply.send(value);
   } catch (error) {
@@ -218,6 +233,10 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
   app.get("/api/site/career-insights/daily", async (request, reply) => respond(reply, async () => {
     assertNoQuery(request.query);
     return repository.dailySummary();
+  }));
+
+  app.get("/api/site/career-insights/daily-comment", async (request, reply) => respond(reply, async () => {
+    return repository.careerDailyComment(parseDailyCommentDate(request.query));
   }));
 
   app.get("/api/site/career-insights/signals", async (request, reply) => respond(reply, async () => {

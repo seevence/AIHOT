@@ -105,6 +105,7 @@ function fakeRepository(read: () => Promise<CareerBriefV1 | null>): CareerReposi
     careerSignals: notUsed,
     careerCatalog: notUsed,
     careerBrief: read,
+    careerDailyComment: notUsed,
     writeBatch: notUsed,
   };
 }

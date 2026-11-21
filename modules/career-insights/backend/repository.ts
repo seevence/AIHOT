@@ -9,6 +9,7 @@ import type {
 import type {
   CareerBriefV1,
   CareerCatalogResponseV1,
+  CareerDailyCommentResponseV1,
   CareerDailyResponseV1,
   CareerHotResponseV1,
   CareerSignalsResponseV1,
@@ -28,5 +29,6 @@ export interface CareerRepository {
   careerSignals(options: CareerSignalsOptions): Promise<CareerSignalsResponseV1>;
   careerCatalog(options: CareerCatalogOptions): Promise<CareerCatalogResponseV1>;
   careerBrief(): Promise<CareerBriefV1 | null>;
+  careerDailyComment(date: string): Promise<CareerDailyCommentResponseV1 | null>;
   writeBatch(batch: CareerObservationBatchV1): Promise<IngestResultV1>;
 }

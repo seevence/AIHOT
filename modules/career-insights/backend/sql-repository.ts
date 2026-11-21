@@ -14,11 +14,13 @@ import type { DataOrigin, DegreeLevel, EmploymentType, RoleFamily, StudentFriend
 import type {
   CareerBriefV1,
   CareerCatalogResponseV1,
+  CareerDailyCommentResponseV1,
   CareerDailyResponseV1,
   CareerHotResponseV1,
   CareerSignalsResponseV1,
 } from "../contracts/insights.ts";
 import { loadCareerBrief } from "./brief.ts";
+import { loadCareerDailyComment } from "./career-daily-comment.ts";
 import { loadCareerDaily, loadCareerHot, type HotCompanyOptions } from "./career-analytics.ts";
 import { loadCareerCatalog, type CareerCatalogOptions } from "./career-catalog.ts";
 import { loadCareerSignals, type CareerSignalsOptions } from "./career-signals.ts";
@@ -251,6 +253,10 @@ export class SqlCareerRepository implements CareerRepository {
 
   async careerBrief(): Promise<CareerBriefV1 | null> {
     return this.run(() => loadCareerBrief(this.db));
+  }
+
+  async careerDailyComment(date: string): Promise<CareerDailyCommentResponseV1 | null> {
+    return this.run(() => loadCareerDailyComment(this.db, date));
   }
 
   async writeBatch(batch: CareerObservationBatchV1): Promise<IngestResultV1> {

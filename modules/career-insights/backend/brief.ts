@@ -241,10 +241,12 @@ function equalAt(value: number, target: number, digits: number): boolean {
   return Math.round(value * factor) === Math.round(target * factor);
 }
 
-/** as_of 里的年、月、日片段可以原样引用，不算编造。 */
-function dateTokens(input: CareerBriefInputV1): Set<number> {
+/** 日期文本（as_of、日报的数据日期）里的年、月、日片段可以原样引用，不算编造。 */
+function dateTokens(dateTexts: readonly string[]): Set<number> {
   const tokens = new Set<number>();
-  for (const match of input.as_of.matchAll(DATE_TOKEN)) tokens.add(Number(match[0]));
+  for (const text of dateTexts) {
+    for (const match of text.matchAll(DATE_TOKEN)) tokens.add(Number(match[0]));
+  }
   return tokens;
 }
 
@@ -285,12 +287,16 @@ function numberContext(text: string, token: NumberToken): string {
   return characters.length <= CONTEXT_CHARS ? snippet : characters.slice(0, CONTEXT_CHARS).join("");
 }
 
-function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly string[]): void {
+/**
+ * 数字白名单校验（就业研判与日报 AI 评论共用）：values 里所有数值、以及所有字符串值里的连续数字片段
+ * 都可以被引用；dateTexts 里的年/月/日片段同样放行。引用判定的精度规则见 matchesKnownNumber。
+ */
+export function assertKnownNumbers(values: unknown, dateTexts: readonly string[], texts: readonly string[]): void {
   const known: number[] = [];
-  collectNumbers(input, known);
+  collectNumbers(values, known);
   const stringFragments = new Set<string>();
-  collectStringNumberFragments(input, stringFragments);
-  const dates = dateTokens(input);
+  collectStringNumberFragments(values, stringFragments);
+  const dates = dateTokens(dateTexts);
   for (const text of texts) {
     for (const token of numberTokens(text)) {
       if (matchesKnownNumber(token, known, dates, stringFragments)) continue;
@@ -299,6 +305,10 @@ function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly strin
       );
     }
   }
+}
+
+function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly string[]): void {
+  assertKnownNumbers(input, [input.as_of], texts);
 }
 
 function parseConfidence(value: unknown): CareerBriefV1["confidence"] {
