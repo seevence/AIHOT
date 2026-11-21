@@ -96,3 +96,48 @@ export const SKILL_LABELS: Readonly<Record<string, string>> = {
 export function skillLabel(skillId: string): string {
   return SKILL_LABELS[skillId] ?? skillId.replaceAll("_", " ");
 }
+
+/**
+ * 内部 ID / 英文字段名 → 中文领域词。洞察页渲染研判与信号文本时统一过一遍，
+ * 旧缓存里的文本可能带 ai_application_development、data_analysis、role_family 这类内部标识。
+ *
+ * 两条约束：
+ * - 长 id 优先：data_analysis 必须先于 data 命中；
+ * - 只认 ASCII 词边界：前后是 A-Za-z0-9_ 的不算命中，避免改到 metadata / email 之类单词内部，
+ *   同时允许中文紧邻（「职族：ai_algorithm」也要能替换）。
+ */
+const DOMAIN_FIELD_LABELS: Readonly<Record<string, string>> = {
+  role_family: "职族",
+  skills: "技能",
+  skill: "技能",
+  share: "占比",
+  student_friendly: "学生友好",
+  job_count: "岗位数",
+  company_count: "公司数",
+};
+
+function escapeRegExp(text: string): string {
+  const specials = ".+*?^$()[]{}|\\";
+  return [...text].map((char) => (specials.includes(char) ? "\\" + char : char)).join("");
+}
+
+const DOMAIN_TERM_REPLACEMENTS: ReadonlyArray<{ pattern: RegExp; label: string }> = (
+  [
+    ...Object.entries(SKILL_LABELS),
+    ...Object.entries(ROLE_FAMILY_LABELS),
+    ...Object.entries(DOMAIN_FIELD_LABELS),
+  ] as Array<readonly [string, string]>
+)
+  .sort(([left], [right]) => right.length - left.length)
+  .map(([id, label]) => ({
+    pattern: new RegExp(`(?<![A-Za-z0-9_])${escapeRegExp(id)}(?![A-Za-z0-9_])`, "g"),
+    label,
+  }));
+
+export function localizeDomainTerms(text: string): string {
+  let localized = text;
+  for (const { pattern, label } of DOMAIN_TERM_REPLACEMENTS) {
+    localized = localized.replace(pattern, label);
+  }
+  return localized;
+}

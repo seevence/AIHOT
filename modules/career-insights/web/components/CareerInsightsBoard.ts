@@ -1,12 +1,12 @@
-// 职业洞察页的八段板块（L2）：完整研判与异常信号在本页，完整榜单与岗位明细在 /career-insights/jobs。
+// 职业洞察页的六段板块（IA-2）：完整研判（含给学生的建议）与异常信号在本页，完整榜单与岗位明细在 /career-insights/jobs。
 // 纯展示：只读 loader 给出的契约数据，不发起请求、不做统计加工，所以 SSR 与 standalone 断言共用同一份渲染。
 import { createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { JobFiltersV1, MetricResultV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
 import type { CareerBriefV1, CareerCatalogResponseV1, CareerSignalsResponseV1 } from "../../contracts/index.ts";
-import { formatRatioPercent, publishedAtText } from "../feeds.ts";
+import { formatRatioPercent } from "../feeds.ts";
 import { JOB_PAGE_SIZES } from "../filters.ts";
-import { confidenceLabel, ROLE_FAMILY_LABELS, skillLabel } from "../labels.ts";
+import { confidenceLabel, localizeDomainTerms, ROLE_FAMILY_LABELS, skillLabel } from "../labels.ts";
 import { CareerTime } from "../time.ts";
 import { CareerSignalItems } from "./CareerSignals.ts";
 import { CATALOG_PATH, buildCatalogHref } from "./JobsCatalogBoard.ts";
@@ -19,7 +19,6 @@ export const HOT_DEFINITION = "热门指当前有效岗位数量，不表示新�
 export const SIGNAL_DEFINITION = "按跨界组合、新职族首现、数量突增、技能错配四条规则自动判定；每条附后端算好的数字依据与官方原文链接。";
 export const SKILL_DEFINITION = "技能计数为岗位提及次数，同一岗位提及一次计一次；share 是已识别技能岗位中的提及占比，不等于岗位需求概率。";
 export const COLLECTOR_CITATION = "采集路线图要求「口径披露必须随数字一起引用」：每个趋势数字都要与采集来源数、采集窗口和数据截止时间同屏出现；unknown 单列，不并入已分类子集的分母。本页数字全部直接取自聚合接口，不做二次推算，也不补造数字。";
-export const HOT_JOBS_SUMMARY_LIMIT = 6;
 export const ADVICE_DIRECTION_LIMIT = 3;
 export const ADVICE_SKILL_LIMIT = 5;
 
@@ -29,6 +28,9 @@ const MUTED_CLASS = "text-[12px] leading-relaxed text-ink-4 break-words";
 const BODY_CLASS = "mt-2 text-[13px] leading-relaxed text-ink-3 break-words";
 const CHIP_CLASS = "inline-flex h-6 items-center rounded-full border border-line-strong px-2.5 text-[11.5px] text-ink-2";
 const LINK_CLASS = "font-medium text-accent hover:underline";
+const ADVICE_CLASS = "mt-4 rounded-card border border-line bg-bg-sunk p-4";
+const ADVICE_TITLE_CLASS = "text-[14px] font-semibold text-ink";
+const ADVICE_SUBTITLE_CLASS = "mt-3 text-[13px] font-semibold text-ink";
 
 export interface InsightSectionV1 {
   id: string;
@@ -41,13 +43,11 @@ export const INSIGHT_SECTIONS: readonly InsightSectionV1[] = [
   { id: "career-signals", title: "不同寻常的信号" },
   { id: "career-job-trend", title: "岗位趋势" },
   { id: "career-skill-trend", title: "技能趋势" },
-  { id: "career-hot-jobs", title: "热门岗位" },
-  { id: "career-student-advice", title: "学生就业建议" },
   { id: "career-policy-jobs", title: "政策与岗位联动" },
   { id: "career-method", title: "数据范围与方法" },
 ];
 
-/** 岗位页是完整榜单与明细的落点；摘要卡只带一个入口链接。 */
+/** 岗位页是完整榜单与明细的落点；研判段的建议只带筛选链接，不重复榜单。 */
 const JOB_LINK_FILTERS: JobFiltersV1 = { page: 1, page_size: JOB_PAGE_SIZES[0] };
 
 function jobsHref(patch: Partial<JobFiltersV1>): string {
@@ -95,6 +95,11 @@ function bullets(items: readonly string[], dataAttr: string): ReactElement {
       h("li", { key: `${dataAttr}:${index}`, [dataAttr]: "", className: "text-[13px] leading-relaxed text-ink-2 break-words" }, item),
     ),
   );
+}
+
+/** 研判文本可能来自旧缓存、带内部 ID（职族/技能/字段名），显示前统一中文化。 */
+function localizedBullets(items: readonly string[], dataAttr: string): ReactElement {
+  return bullets(items.map(localizeDomainTerms), dataAttr);
 }
 
 function skillChips(skills: readonly { skill: string; count: number }[]): ReactElement | null {
@@ -169,20 +174,90 @@ function briefMeta(brief: CareerBriefV1): ReactElement {
   );
 }
 
-/** 第 1 段：完整研判。facts / inferences / actions / limitations / evidence 全部在这里，其它段落不重复。 */
-function BriefSection({ brief }: { brief: CareerBriefV1 | null }): ReactElement {
-  if (!brief) return section("career-brief", "AI 趋势研判", [briefEmptyNote()]);
+/**
+ * 研判段末尾的「给学生的建议」：可投方向 Top3 / 需补技能 / 一行岗位证据跳转。
+ * 全部从 catalog 的当前窗口派生，不重复研判的行动建议；数据不可用时只降级这一子块。
+ */
+function StudentAdviceBlock({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
+  const adviceTitle = h("h3", { className: ADVICE_TITLE_CLASS }, "给学生的建议");
+  if (!catalog) {
+    return h("div", { "data-student-advice": "", className: ADVICE_CLASS }, adviceTitle, statusNote("unavailable", "data-advice-unavailable"));
+  }
+  if (catalog.sample_size === 0 || catalog.directions.length === 0) {
+    return h("div", { "data-student-advice": "", className: ADVICE_CLASS }, adviceTitle, statusNote("insufficient", "data-advice-empty"));
+  }
+
+  const directions = catalog.directions.slice(0, ADVICE_DIRECTION_LIMIT);
+  const skills = catalog.skills.slice(0, ADVICE_SKILL_LIMIT);
+
+  return h(
+    "div",
+    { "data-student-advice": "", className: ADVICE_CLASS },
+    adviceTitle,
+    mutedLine("按当前有效岗位数给出可投方向与需补技能；只用于准备方向，不构成录用保证。", "data-advice-definition"),
+    h("h4", { className: ADVICE_SUBTITLE_CLASS }, "可投方向"),
+    h(
+      "ul",
+      { className: "mt-2 space-y-2" },
+      ...directions.map((direction) =>
+        h(
+          "li",
+          { key: direction.role_family, "data-advice-direction": direction.role_family, className: "rounded-card border border-line bg-surface px-3 py-2.5" },
+          h(
+            "div",
+            { className: "flex flex-wrap items-baseline justify-between gap-x-2" },
+            h("span", { className: "text-[13px] font-medium text-ink break-words" }, ROLE_FAMILY_LABELS[direction.role_family]),
+            h("span", { "data-advice-direction-friendly": String(direction.student_friendly_count), className: "num text-[12px] text-ink-3 whitespace-nowrap" }, `学生友好 ${direction.student_friendly_count} 个岗位`),
+          ),
+          h("p", { className: `mt-1 ${MUTED_CLASS}` }, `当前 ${direction.job_count} 个岗位 · 公司 ${direction.company_count} 家 · 近 ${catalog.window_days} 天新增 ${direction.new_in_window}`),
+          h(Link, { to: jobsHref({ role_family: direction.role_family, page: 1 }), className: `mt-1 inline-flex text-[12.5px] ${LINK_CLASS}` }, "看该方向岗位"),
+        ),
+      ),
+    ),
+    skills.length > 0 ? h("h4", { className: ADVICE_SUBTITLE_CLASS }, "需补技能") : null,
+    skills.length > 0
+      ? h(
+          "ul",
+          { className: "mt-2 flex flex-wrap gap-2" },
+          ...skills.map((entry) =>
+            h("li", { key: entry.skill },
+              h(
+                Link,
+                Object.assign(
+                  { to: jobsHref({ skill: entry.skill, page: 1 }), className: `inline-flex h-7 items-center rounded-full border border-line-strong px-3 text-[12px] ${LINK_CLASS}` },
+                  { "data-advice-skill": entry.skill },
+                ),
+                `${skillLabel(entry.skill)} · ${entry.job_count} 个岗位提及`,
+              ),
+            ),
+          ),
+        )
+      : null,
+    h("p", { "data-advice-evidence": "", className: `mt-3 ${MUTED_CLASS}` },
+      "岗位证据就是岗位明细本身：",
+      h(Link, { to: jobsHref({ student_friendly: "yes", page: 1 }), className: LINK_CLASS }, "仅学生友好岗位"),
+      " · ",
+      h(Link, { to: CATALOG_PATH, className: LINK_CLASS }, "全部岗位明细"),
+      "。完整榜单与筛选在岗位页，本页不重复展示。",
+    ),
+  );
+}
+
+/** 第 1 段：完整研判（facts / inferences / actions / limitations / evidence）；行动建议之后接「给学生的建议」。 */
+function BriefSection({ brief, catalog }: { brief: CareerBriefV1 | null; catalog: CareerCatalogResponseV1 | null }): ReactElement {
+  if (!brief) return section("career-brief", "AI 趋势研判", [briefEmptyNote(), h(StudentAdviceBlock, { catalog })]);
 
   return section("career-brief", "AI 趋势研判", [
     briefMeta(brief),
     brief.facts.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "数据事实") : null,
-    brief.facts.length > 0 ? bullets(brief.facts, "data-brief-fact") : null,
+    brief.facts.length > 0 ? localizedBullets(brief.facts, "data-brief-fact") : null,
     brief.inferences.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "趋势推断") : null,
-    brief.inferences.length > 0 ? bullets(brief.inferences, "data-brief-inference") : null,
+    brief.inferences.length > 0 ? localizedBullets(brief.inferences, "data-brief-inference") : null,
     brief.actions.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "行动建议") : null,
-    brief.actions.length > 0 ? bullets(brief.actions, "data-brief-action") : null,
+    brief.actions.length > 0 ? localizedBullets(brief.actions, "data-brief-action") : null,
+    h(StudentAdviceBlock, { catalog }),
     brief.limitations.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "局限") : null,
-    brief.limitations.length > 0 ? bullets(brief.limitations, "data-brief-limitation") : null,
+    brief.limitations.length > 0 ? localizedBullets(brief.limitations, "data-brief-limitation") : null,
     brief.evidence.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "可核查证据") : null,
     brief.evidence.length > 0 ? briefEvidence(brief.evidence) : null,
   ]);
@@ -310,130 +385,7 @@ function SkillTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | 
   ]);
 }
 
-/** 第 5 段：只放摘要卡与一个入口；完整方向榜/职位榜/筛选/分页都在岗位页。 */
-function HotJobsSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-hot-jobs", "热门岗位", [statusNote("unavailable", "data-section-unavailable")]);
-  if (catalog.sample_size === 0 || (catalog.directions.length === 0 && catalog.titles.length === 0)) {
-    return section("career-hot-jobs", "热门岗位", [statusNote("insufficient", "data-hot-jobs-empty")]);
-  }
-
-  const directions = catalog.directions.slice(0, HOT_JOBS_SUMMARY_LIMIT);
-  const titles = catalog.titles.slice(0, HOT_JOBS_SUMMARY_LIMIT);
-
-  return section("career-hot-jobs", "热门岗位", [
-    mutedLine("这里只放摘要卡；完整榜单、筛选与分页在岗位页。", "data-hot-summary-note"),
-    directions.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "热门方向") : null,
-    directions.length > 0
-      ? h(
-          "ul",
-          { className: "mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" },
-          ...directions.map((direction) =>
-            h(
-              "li",
-              { key: direction.role_family, "data-hot-direction": direction.role_family, className: "rounded-card border border-line bg-bg-sunk px-3 py-3" },
-              h("div", { className: "flex flex-wrap items-baseline justify-between gap-x-2" },
-                h("span", { className: "text-[13px] font-medium text-ink break-words" }, ROLE_FAMILY_LABELS[direction.role_family]),
-                h("span", { "data-hot-direction-count": String(direction.job_count), className: "num text-[12px] text-ink-3 whitespace-nowrap" }, `${direction.job_count} 个岗位`),
-              ),
-              h("p", { className: `mt-1 ${MUTED_CLASS}` }, `公司 ${direction.company_count} 家 · 近 ${catalog.window_days} 天新增 ${direction.new_in_window} · 学生友好 ${direction.student_friendly_count}`),
-              skillChips(direction.top_skills.slice(0, 2)),
-            ),
-          ),
-        )
-      : null,
-    titles.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "热门职位") : null,
-    titles.length > 0
-      ? h(
-          "ul",
-          { className: "mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" },
-          ...titles.map((title) =>
-            h(
-              "li",
-              { key: title.title_key, "data-hot-title": title.title_key, className: "rounded-card border border-line bg-bg-sunk px-3 py-3" },
-              h("div", { className: "flex flex-wrap items-baseline justify-between gap-x-2" },
-                h("span", { className: "text-[13px] font-medium text-ink break-words" }, title.title_display),
-                h("span", { "data-hot-title-count": String(title.job_count), className: "num text-[12px] text-ink-3 whitespace-nowrap" }, `${title.job_count} 个岗位`),
-              ),
-              h("p", { className: `mt-1 ${MUTED_CLASS}` }, `${title.cities.length > 0 ? title.cities.join("、") : "城市未知"} · 学生友好 ${title.student_friendly_count} · 最近发布 ${publishedAtText(title.latest_published_at)}`),
-            ),
-          ),
-        )
-      : null,
-    h(
-      Link,
-      Object.assign(
-        { to: CATALOG_PATH, className: "mt-4 inline-flex h-9 items-center rounded-full border border-line-strong px-4 text-[13px] font-medium text-ink-2" },
-        { "data-hot-all": "" },
-      ),
-      "查看全部岗位",
-    ),
-  ]);
-}
-
-/** 第 6 段：可投方向 / 需补技能 / 岗位证据，全部从 catalog 的当前窗口派生，不重复研判的行动建议。 */
-function StudentAdviceSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-student-advice", "学生就业建议", [statusNote("unavailable", "data-section-unavailable")]);
-  if (catalog.sample_size === 0 || catalog.directions.length === 0) {
-    return section("career-student-advice", "学生就业建议", [statusNote("insufficient", "data-advice-empty")]);
-  }
-
-  const directions = catalog.directions.slice(0, ADVICE_DIRECTION_LIMIT);
-  const skills = catalog.skills.slice(0, ADVICE_SKILL_LIMIT);
-
-  return section("career-student-advice", "学生就业建议", [
-    mutedLine("按当前有效岗位数给出可投方向与需补技能；只用于准备方向，不构成录用保证。", "data-advice-definition"),
-    h("h3", { className: SUBTITLE_CLASS }, "可投方向"),
-    h(
-      "ul",
-      { className: "mt-2 space-y-2" },
-      ...directions.map((direction) =>
-        h(
-          "li",
-          { key: direction.role_family, "data-advice-direction": direction.role_family, className: "rounded-card border border-line bg-bg-sunk px-3 py-2.5" },
-          h("div", { className: "flex flex-wrap items-baseline justify-between gap-x-2" },
-            h("span", { className: "text-[13px] font-medium text-ink break-words" }, ROLE_FAMILY_LABELS[direction.role_family]),
-            h("span", { className: "num text-[12px] text-ink-3 whitespace-nowrap" }, `${direction.job_count} 个岗位`),
-          ),
-          h("p", { className: `mt-1 ${MUTED_CLASS}` }, `公司 ${direction.company_count} 家 · 学生友好 ${direction.student_friendly_count}`),
-          h(Link, { to: jobsHref({ role_family: direction.role_family, page: 1 }), className: `mt-1 inline-flex text-[12.5px] ${LINK_CLASS}` }, "看该方向岗位"),
-        ),
-      ),
-    ),
-    skills.length > 0 ? h("h3", { className: SUBTITLE_CLASS }, "需补技能") : null,
-    skills.length > 0
-      ? h(
-          "ul",
-          { className: "mt-2 flex flex-wrap gap-2" },
-          ...skills.map((entry) =>
-            h(
-              "li",
-              { key: entry.skill },
-              h(
-                Link,
-                Object.assign(
-                  { to: jobsHref({ skill: entry.skill, page: 1 }), className: `inline-flex h-7 items-center rounded-full border border-line-strong px-3 text-[12px] ${LINK_CLASS}` },
-                  { "data-advice-skill": entry.skill },
-                ),
-                `${skillLabel(entry.skill)} · ${entry.job_count} 个岗位提及`,
-              ),
-            ),
-          ),
-        )
-      : null,
-    h("h3", { className: SUBTITLE_CLASS }, "岗位证据"),
-    h(
-      "p",
-      { "data-advice-evidence": "", className: MUTED_CLASS },
-      "证据就是岗位明细本身：",
-      h(Link, { to: jobsHref({ student_friendly: "yes", page: 1 }), className: LINK_CLASS }, "仅学生友好岗位"),
-      " · ",
-      h(Link, { to: CATALOG_PATH, className: LINK_CLASS }, "全部岗位明细"),
-      "。完整榜单与筛选在岗位页，本页不重复展示。",
-    ),
-  ]);
-}
-
-/** 第 7 段：政策与岗位联动；没有共同主题时整段隐藏，不留空卡片。 */
+/** 第 5 段：政策与岗位联动；没有共同主题时整段隐藏，不留空卡片。 */
 function PolicyJobsSection({ summary }: { summary: SummaryResponseV1 | null }): ReactElement | null {
   if (!summary) return section("career-policy-jobs", "政策与岗位联动", [statusNote("unavailable", "data-section-unavailable")]);
   if (summary.shared_themes.length === 0) return null;
@@ -477,7 +429,7 @@ function PolicyJobsSection({ summary }: { summary: SummaryResponseV1 | null }): 
   ]);
 }
 
-/** 第 8 段：数据范围与方法。口径按采集路线图「必须随数字一起引用」披露，不在这里编数字。 */
+/** 第 6 段：数据范围与方法。口径按采集路线图「必须随数字一起引用」披露，不在这里编数字。 */
 function MethodSection({ summary, catalog }: {
   summary: SummaryResponseV1 | null;
   catalog: CareerCatalogResponseV1 | null;
@@ -544,12 +496,10 @@ export function CareerInsightsBoard({ summary, catalog, signals, brief }: {
     singleSnapshot
       ? h("div", { role: "note", className: "rounded-card border border-line bg-bg-sunk px-4 py-3 text-[13px] leading-relaxed text-ink-3 break-words" }, "当前仅有单快照，新增岗位与变化趋势数据不足，不作趋势推断。")
       : null,
-    h(BriefSection, { brief }),
+    h(BriefSection, { brief, catalog }),
     h(SignalsSection, { signals }),
     h(JobTrendSection, { summary, catalog }),
     h(SkillTrendSection, { summary, catalog }),
-    h(HotJobsSection, { catalog }),
-    h(StudentAdviceSection, { catalog }),
     h(PolicyJobsSection, { summary }),
     h(MethodSection, { summary, catalog }),
   );
