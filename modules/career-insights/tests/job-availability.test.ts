@@ -157,3 +157,30 @@ test("the route rejects a missing, empty, malformed or oversized ids parameter",
     await app.close();
   }
 });
+test("an uppercase UUID is answered under its lowercase key", async () => {
+  const id = await seededJobId();
+  const app = await build();
+  try {
+    const response = await app.inject({ url: availabilityUrl([id.toUpperCase()]) });
+
+    assert.equal(response.statusCode, 200);
+    assert.deepEqual(response.json(), { contract_version: "0.1", ids: { [id]: "visible" } });
+  } finally {
+    await app.close();
+  }
+});
+
+test("repeated ids query parameters are rejected instead of silently merged", async () => {
+  const app = await build();
+  try {
+    const response = await app.inject({
+      url: `/api/site/career-insights/jobs/availability?ids=${missingId()}&ids=${missingId()}`,
+    });
+
+    assert.equal(response.statusCode, 400);
+    assert.equal(response.json().error.code, "invalid_parameter");
+    assert.equal(response.headers["cache-control"], "no-store");
+  } finally {
+    await app.close();
+  }
+});

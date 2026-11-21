@@ -54,11 +54,20 @@ const jobDetail = {
   observations: [],
   notice: "固定说明：仅供测试。",
 };
+/** 记录每次可用性探测收到的 id 批次，供分批/过滤测试断言。 */
+let availabilityProbes: string[][] = [];
+const AVAILABILITY_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const api = fakeApi((url, res) => {
   if (url.pathname === "/api/site/career-insights/jobs") return jobList;
   if (url.pathname === `/api/site/career-insights/jobs/${JOB_ID}`) return jobDetail;
   if (url.pathname === "/api/site/career-insights/jobs/availability") {
     const ids = (url.searchParams.get("ids") ?? "").split(",").filter(Boolean);
+    // 后端对坏 id 整批 400：前端如果没过滤旧格式 id，所有徽标都会消失。
+    if (ids.some((id) => !AVAILABILITY_UUID.test(id))) {
+      res.statusCode = 400;
+      return { error: { code: "invalid_parameter", message: "fixture" } };
+    }
+    availabilityProbes.push(ids);
     if (ids.includes(FAILING_JOB_ID)) {
       res.statusCode = 500;
       return { error: { code: "internal_error", message: "fixture" } };
@@ -239,6 +248,56 @@ test("an availability failure is silent: the list still renders without badges",
     await expect(row).toBeVisible();
     await expect(row).toContainText("探测失败的岗位");
     await expect(page.locator('[data-starred-job-missing="true"]')).toHaveCount(0);
+    assert.deepEqual(errors, [], "hydration must not log errors");
+  } finally {
+    await context.close();
+  }
+});
+
+test("a stored legacy id is left out of the probe instead of failing the whole batch", async () => {
+  const { context, page, errors } = await openPage();
+  try {
+    await page.addInitScript(() => {
+      localStorage.setItem("aihot-starred-jobs", JSON.stringify([
+        { id: "22222222-2222-4222-8222-222222222222", title: "已下架岗位", company: "示例公司", savedAt: "2026-10-01T00:00:00.000Z" },
+        // job-favorites 的 ID_PATTERN 允许非 UUID；后端收到它会整批 400，前端必须先过滤。
+        { id: "legacy_job_1", title: "旧格式收藏", company: "示例公司", savedAt: "2026-10-01T00:00:00.000Z" },
+      ]));
+    });
+    availabilityProbes = [];
+    await visit(page, `${web.origin}/starred`);
+    await expect.poll(() => availabilityProbes.length).toBe(1);
+    assert.deepEqual(availabilityProbes[0], [STALE_JOB_ID], "only the strict UUID is probed");
+    await expect(page.locator('[data-starred-job-missing="true"]')).toHaveCount(1);
+    await expect(page.locator(`[data-starred-job="${STALE_JOB_ID}"]`)).toHaveAttribute("data-starred-job-missing", "true");
+    // 旧格式 id 的行照常显示，只是不参与探测。
+    await expect(page.locator('[data-starred-job="legacy_job_1"]')).toContainText("旧格式收藏");
+    assert.deepEqual(errors, [], "hydration must not log errors");
+  } finally {
+    await context.close();
+  }
+});
+
+test("availability probes at most 100 ids per request", async () => {
+  const { context, page, errors } = await openPage();
+  try {
+    await page.addInitScript(() => {
+      const jobs = Array.from({ length: 101 }, (_, index) => ({
+        id: `11111111-1111-4111-8111-${String(index).padStart(12, "0")}`,
+        title: `岗位 ${index + 1}`,
+        company: "示例公司",
+        savedAt: "2026-10-01T00:00:00.000Z",
+      }));
+      // 第 101 个是已知下架的 id：它在第二批，验证分批后仍然会探测。
+      jobs[100]!.id = "22222222-2222-4222-8222-222222222222";
+      localStorage.setItem("aihot-starred-jobs", JSON.stringify(jobs));
+    });
+    availabilityProbes = [];
+    await visit(page, `${web.origin}/starred`);
+    await expect.poll(() => availabilityProbes.length).toBe(2);
+    assert.deepEqual(availabilityProbes.map((batch) => batch.length), [100, 1], "batches of 100, then the remainder");
+    assert.equal(availabilityProbes[1]![0], STALE_JOB_ID);
+    await expect(page.locator(`[data-starred-job="${STALE_JOB_ID}"]`)).toHaveAttribute("data-starred-job-missing", "true");
     assert.deepEqual(errors, [], "hydration must not log errors");
   } finally {
     await context.close();

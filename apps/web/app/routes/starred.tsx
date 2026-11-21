@@ -27,6 +27,13 @@ export function meta() {
   return pageMeta({ title: "我的收藏", description: `收藏的 ${SITE.name} 内容，适合稍后阅读和回看。`, path: "/starred", noindex: true });
 }
 
+// 岗位可用性探测的批次大小：后端一次接受去重后 200 个，但 UUID 比文章 id 长，
+// 200 个的 query 约 7.8k 字符，贴近反向代理常见的 8K 请求行上限，所以和文章收藏一样按 100/批发送。
+const AVAILABILITY_BATCH_SIZE = 100;
+// 只探测严格 UUID：收藏里可能残留旧格式 id（job-favorites 的 ID_PATTERN 更宽），
+// 不能因为一条坏 id 让后端 400，把所有徽标都吞掉。
+const JOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function reportText(r: ImportReport): string {
   const parts = [`新增收藏 ${r.starredAdded} 条`, `已读记录 ${r.readAdded} 条`];
   if (r.starredSkipped || r.readSkipped) parts.push(`有 ${r.starredSkipped + r.readSkipped} 条没导入（超出数量上限或格式不对）`);
@@ -67,15 +74,20 @@ export default function StarredPage() {
     return () => controller.abort();
   }, [mounted, starredIds]);
 
-  // 岗位可用性同样只探测已收藏的 id；一次最多 200 个，收藏上限也是 200，分批只是兜底。
+  // 岗位可用性同样只探测已收藏的 id，按 100 个一批发送（见 AVAILABILITY_BATCH_SIZE）。
   // 接口失败或超时静默降级：不显示徽标，收藏列表照常渲染。
-  const starredJobIds = starredJobs.map((job) => job.id).join(",");
+  const starredJobIds = starredJobs.map((job) => job.id).filter((id) => JOB_ID_PATTERN.test(id)).join(",");
   useEffect(() => {
-    if (!mounted || !starredJobIds) return;
+    if (!mounted) return;
+    if (!starredJobIds) {
+      // 收藏清空（或只剩旧格式 id）时清掉旧结果，避免之后再收藏同一 id 时先闪一下过期徽标。
+      setMissingJobs({});
+      return;
+    }
     const controller = new AbortController();
     const ids = starredJobIds.split(",");
     const batches: string[][] = [];
-    for (let i = 0; i < ids.length; i += 200) batches.push(ids.slice(i, i + 200));
+    for (let i = 0; i < ids.length; i += AVAILABILITY_BATCH_SIZE) batches.push(ids.slice(i, i + AVAILABILITY_BATCH_SIZE));
     Promise.all(
       batches.map((batch) =>
         fetch(`/api/site/career-insights/jobs/availability?ids=${encodeURIComponent(batch.join(","))}`, { signal: controller.signal })

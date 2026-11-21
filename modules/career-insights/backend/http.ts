@@ -40,7 +40,11 @@ const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
 const CATALOG_FILTER_KEYS = new Set(["limit", "window_days"]);
 const DAILY_COMMENT_FILTER_KEYS = new Set(["date"]);
 const JOB_AVAILABILITY_FILTER_KEYS = new Set(["ids"]);
-/** 与文章收藏的批量探测保持一致：一次请求最多 200 个 id，收藏上限也是 200。 */
+/**
+ * 后端一次接受去重后最多 200 个 id，与岗位收藏上限（STARRED_JOBS_LIMIT=200）一致。
+ * 前端按 100 个一批发送：UUID 比文章 id 长，200 个的 query 约 7.8k 字符，贴近反向代理常见的 8K 请求行上限。
+ * 文章侧后端一次接受 500 个、前端同样拆成 100/批，两边的上限数字因此不同。
+ */
 const JOB_AVAILABILITY_MAX_IDS = 200;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
