@@ -13,6 +13,7 @@ import type {
   CareerDailyResponseV1,
   CareerHotResponseV1,
   CareerSignalsResponseV1,
+  JobAvailabilityResponseV1,
 } from "../contracts/insights.ts";
 import type { HotCompanyOptions } from "./career-analytics.ts";
 import type { CareerCatalogOptions } from "./career-catalog.ts";
@@ -23,6 +24,8 @@ export interface CareerRepository {
   summary(): Promise<SummaryResponseV1>;
   listJobs(filters: JobFiltersV1): Promise<JobListResponseV1>;
   jobDetail(id: string): Promise<JobDetailResponseV1 | null>;
+  /** 收藏页批量探测：每个 id 返回 visible/missing，未知 id 记 missing。 */
+  jobAvailability(ids: string[]): Promise<JobAvailabilityResponseV1>;
   listPolicies(filters: PolicyFiltersV1): Promise<PolicyListResponseV1>;
   hotCompanies(options: HotCompanyOptions): Promise<CareerHotResponseV1>;
   dailySummary(): Promise<CareerDailyResponseV1>;

@@ -18,6 +18,8 @@ import type {
   CareerDailyResponseV1,
   CareerHotResponseV1,
   CareerSignalsResponseV1,
+  JobAvailabilityResponseV1,
+  JobAvailabilityStatus,
 } from "../contracts/insights.ts";
 import { loadCareerBrief } from "./brief.ts";
 import { loadCareerDailyComment } from "./career-daily-comment.ts";
@@ -228,6 +230,27 @@ export class SqlCareerRepository implements CareerRepository {
         observations: observations.map(toObservation),
         notice: NOTICE,
       };
+    });
+  }
+
+  /**
+   * 收藏页的批量探测：只读 career_jobs 是否存在该行，和 jobDetail 的可见性条件一致；
+   * 不返回岗位字段，未知 id 只记 missing。id 由 HTTP 层校验为 UUID，这里再按小写去重兜底。
+   */
+  async jobAvailability(ids: string[]): Promise<JobAvailabilityResponseV1> {
+    return this.run(async () => {
+      const unique = [...new Set(ids.map((id) => id.toLowerCase()))];
+      const statuses: Record<string, JobAvailabilityStatus> = {};
+      for (const id of unique) statuses[id] = "missing";
+      if (unique.length > 0) {
+        // 与 jobDetail 的 uuid 等值条件同一条路径，走主键索引；id 已由 HTTP 层校验为 UUID。
+        const rows = await this.db<{ id: string }[]>`
+          SELECT id::text AS id
+          FROM career_jobs
+          WHERE id = ANY(${unique}::uuid[])`;
+        for (const row of rows) if (Object.hasOwn(statuses, row.id)) statuses[row.id] = "visible";
+      }
+      return { contract_version: "0.1", ids: statuses };
     });
   }
 

@@ -375,6 +375,7 @@ test("the openapi contract registers the hot, daily and signals endpoints", () =
     "/api/site/career-insights/daily",
     "/api/site/career-insights/daily-comment",
     "/api/site/career-insights/signals",
+    "/api/site/career-insights/jobs/availability",
   ]) {
     assert.ok(contract.paths[path], `missing path ${path}`);
   }
@@ -389,6 +390,8 @@ test("the openapi contract registers the hot, daily and signals endpoints", () =
     "CareerSignalEvidenceV1",
     "CareerSignalSkippedV1",
     "CareerHotRoleFamilyCountV1",
+    "JobAvailabilityStatus",
+    "JobAvailabilityResponseV1",
   ]) {
     assert.ok(contract.components.schemas[schema], `missing schema ${schema}`);
   }
