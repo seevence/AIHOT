@@ -150,16 +150,24 @@ export function ErrorBoundary() {
         <p className="mt-2 text-[13.5px] leading-relaxed text-ink-3">
           {notFound ? "链接可能有误，或者这条内容已经下架。" : "页面暂时无法显示，请重新加载后再试。"}
         </p>
+        {/* 404 回到站点现在的三个入口：首页、热门岗位、就业日报；旧的精选/全部动态已下线。 */}
         <div className="mt-6 flex flex-wrap justify-center gap-2.5">
           {!notFound && <Link reloadDocument to={pathname + search + hash} className={buttonClass("primary")}>
             重新加载
           </Link>}
           <Link reloadDocument to="/" className={buttonClass(notFound ? "primary" : "secondary")}>
-            回到精选
+            回首页
           </Link>
-          <Link reloadDocument to="/all" className={buttonClass("secondary")}>
-            浏览全部动态
-          </Link>
+          {notFound && (
+            <>
+              <Link reloadDocument to="/career-insights/jobs" className={buttonClass("secondary")}>
+                热门岗位
+              </Link>
+              <Link reloadDocument to="/daily" className={buttonClass("secondary")}>
+                就业日报
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </div>

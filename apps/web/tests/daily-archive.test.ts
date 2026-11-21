@@ -164,7 +164,8 @@ test("/daily?date= without a cached comment says so and keeps the page at 200", 
 test("a malformed ?date= falls back to today's report", async () => {
   const { status, hits, $ } = await read("/daily?date=not-a-date");
   assert.equal(status, 200);
-  assert.equal($('a[href="/daily/archive"]').length, 0);
+  assert.equal($("[data-career-daily-history]").length, 0, "a malformed date is not shown as a history day");
+  assert.equal($("[data-career-daily]").length, 1, "it falls back to today's report");
   assert.match($("body").text(), /各来源采集结果/);
   assert.deepEqual(hits.sort(), ["/api/site/career-insights/daily", "/api/site/career-insights/daily-comment"]);
 });

@@ -11,6 +11,7 @@ import type {
   SummaryResponseV1,
 } from "../contracts/api.ts";
 import type { DataOrigin, DegreeLevel, EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
+import { SKILL_LABELS } from "../data/dictionaries.ts";
 import type {
   CareerBriefV1,
   CareerCatalogResponseV1,
@@ -135,14 +136,38 @@ function escapeLikePattern(keyword: string): string {
   return keyword.replace(/[\\%_]/g, (match) => `\\${match}`);
 }
 
-/** 关键词同时匹配职位名、公司名、技能与城市；pg 的 ILIKE 对 ASCII 不区分大小写，中文按字面匹配。 */
+const CJK_TEXT = /[\u3400-\u9fff]/;
+
+/**
+ * 中文技能名 → 技能 ID。skills 列存的是稳定 ID（data_analysis），搜索框给的却是展示标签（数据分析），
+ * 只按原文 ILIKE 找不到这类岗位。标签与关键词精确相等，或中文关键词是标签的一部分（机器 → 机器学习、
+ * 微调 → 模型微调）时都算命中；纯 ASCII 关键词只认整词，避免 Java 误伤 JavaScript。
+ */
+function skillIdsForKeyword(keyword: string): string[] {
+  const needle = keyword.toLowerCase();
+  if (needle === "") return [];
+  const partial = needle.length >= 2 && CJK_TEXT.test(needle);
+  const ids = new Set<string>();
+  for (const [id, label] of Object.entries(SKILL_LABELS)) {
+    const normalized = label.toLowerCase();
+    if (normalized === needle || (partial && normalized.includes(needle))) ids.add(id);
+  }
+  return [...ids];
+}
+
+/**
+ * 关键词同时匹配职位名、公司名、技能与城市；pg 的 ILIKE 对 ASCII 不区分大小写，中文按字面匹配。
+ * 技能列存 ID，中文标签反查出的 ID 也一起匹配（参数化、按字面转义）。
+ */
 function keywordCondition(keyword: string): ReturnType<typeof sql> {
   const pattern = `%${escapeLikePattern(keyword)}%`;
+  const skillPatterns = skillIdsForKeyword(keyword).map((id) => `%${escapeLikePattern(id)}%`);
   return sql`AND (
     title ILIKE ${pattern}
     OR company_name ILIKE ${pattern}
     OR skills::text ILIKE ${pattern}
     OR locations::text ILIKE ${pattern}
+    OR skills::text ILIKE ANY(${skillPatterns}::text[])
   )`;
 }
 

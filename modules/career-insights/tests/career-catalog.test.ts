@@ -77,7 +77,7 @@ test("directions aggregate by role_family without the unknown bucket and honour 
     job({ job_key: "dir-2", company_name: "云图公司", title: "推荐算法工程师", skills: ["python"] }),
     job({ job_key: "dir-3", company_name: "深智公司", title: "大模型算法工程师", skills: ["大模型"] }),
     job({ job_key: "dir-4", company_name: "深智公司", title: "数据工程师", role_family: "data", skills: ["sql"] }),
-    job({ job_key: "dir-5", company_name: "深智公司", title: "机械设计工程师", role_family: "unknown", skills: ["cad"] }),
+    job({ job_key: "dir-5", company_name: "深智公司", title: "机械设计工程师", role_family: "unknown", skills: ["cad"], student_friendly: "yes" }),
   );
   await ageJob("dir-4", 45);
 
@@ -101,6 +101,16 @@ test("directions aggregate by role_family without the unknown bucket and honour 
   assert.equal(data.new_in_window, 0, "a job first seen 45 days ago is outside a 30 day window");
   assert.equal(result.window_days, 30);
   assert.ok(Number.isFinite(Date.parse(result.as_of)));
+
+  // 方向榜只统计已归类岗位；未归类岗位的数量、其中学生友好数与占比单独披露。
+  assert.equal(result.unclassified_job_count, 1);
+  assert.equal(result.unclassified_student_friendly_count, 1);
+  assert.equal(result.unclassified_ratio, 1 / 5);
+  assert.equal(
+    result.directions.reduce((sum, direction) => sum + direction.job_count, 0) + result.unclassified_job_count!,
+    result.sample_size,
+    "directions + unclassified account for the whole sample",
+  );
 });
 
 test("titles merge city and bracket variants of the same title without double counting", async () => {
@@ -171,6 +181,9 @@ test("the catalog route enforces parameter bounds, a public cache, defaults, and
   assert.deepEqual(empty.json().titles, []);
   assert.deepEqual(empty.json().skills, []);
   assert.equal(empty.json().sample_size, 0);
+  assert.equal(empty.json().unclassified_job_count, 0);
+  assert.equal(empty.json().unclassified_student_friendly_count, 0);
+  assert.equal(empty.json().unclassified_ratio, null, "an empty sample has no coverage ratio");
   assert.equal(empty.json().window_days, 30);
   assert.equal(empty.json().as_of, "1970-01-01T00:00:00.000Z");
 

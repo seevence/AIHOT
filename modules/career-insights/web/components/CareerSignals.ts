@@ -4,7 +4,7 @@ import { createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { CareerSignalSkippedV1, CareerSignalV1 } from "../../contracts/index.ts";
 import { SIGNAL_EMPTY_HINT, SIGNAL_EMPTY_TITLE, SIGNAL_RULE_LABELS, careerJobHref, formatRatioPercent, skippedSurgeNotice } from "../feeds.ts";
-import { confidenceLabel, localizeDomainTerms, ROLE_FAMILY_LABELS } from "../labels.ts";
+import { careerSourceLabel, confidenceLabel, localizeDomainTerms, ROLE_FAMILY_LABELS } from "../labels.ts";
 import { formatCareerDateTime } from "../time.ts";
 
 const BADGE_CLASS = "inline-flex h-5 shrink-0 items-center rounded-full bg-amber-soft px-2 text-[11px] font-medium leading-none text-amber-ink";
@@ -75,7 +75,7 @@ function SignalItem({ signal }: { signal: CareerSignalV1 }): ReactElement {
     h(
       "div",
       { className: "mt-1 flex flex-wrap items-center gap-x-3 gap-y-1" },
-      h("span", { className: "text-[11px] text-ink-4 break-words" }, `来源 ${signal.source_key}`),
+      h("span", { className: "text-[11px] text-ink-4 break-words" }, `来源 ${careerSourceLabel(signal.source_key)}`),
       h("a", { href: signal.official_url, target: "_blank", rel: "noopener noreferrer", "data-signal-source": signal.rule, className: SOURCE_LINK_CLASS }, "官方原文"),
     ),
   );

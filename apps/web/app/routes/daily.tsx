@@ -6,7 +6,7 @@ import { cachedPage } from "../lib/api.server";
 import { logError } from "../lib/errors.server";
 import { pageReuse } from "../lib/page-reuse";
 import { pageMeta } from "../lib/seo";
-import { CareerDailyReport } from "../../../../modules/career-insights/web/components/CareerDailyReport.ts";
+import { CareerDailyReport, type CareerDailyReportLink } from "../../../../modules/career-insights/web/components/CareerDailyReport.ts";
 import { dailyCommentMeta } from "../../../../modules/career-insights/web/feeds.ts";
 import { formatCareerDate } from "../../../../modules/career-insights/web/time.ts";
 import {
@@ -19,6 +19,14 @@ import type { Screen } from "../components/shell/screens";
 export const handle: Screen = { tab: "daily", name: "就业日报" };
 export { pageHeaders as headers } from "../lib/api.server";
 export const { clientLoader, shouldRevalidate } = pageReuse<typeof loader>();
+
+/** 日报页顶部的报告入口，与 /daily/archive、/weekly、/monthly 页的 REPORT_LINKS 同一份口径。 */
+const REPORT_LINKS: readonly CareerDailyReportLink[] = [
+  { to: "/daily", label: "日报", current: true },
+  { to: "/weekly", label: "周报" },
+  { to: "/monthly", label: "月报" },
+  { to: "/daily/archive", label: "往期" },
+];
 
 /**
  * 评论区块单独降级：无缓存(204) 返回 null，请求失败也返回 null 并记一条请求日志，
@@ -122,5 +130,5 @@ export default function CareerDailyPage() {
   if (loaderData.mode === "history") {
     return <CareerDailyHistoryView date={loaderData.date} comment={loaderData.comment} />;
   }
-  return <CareerDailyReport daily={loaderData.daily} comment={loaderData.comment} />;
+  return <CareerDailyReport daily={loaderData.daily} comment={loaderData.comment} reportLinks={REPORT_LINKS} />;
 }

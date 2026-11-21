@@ -1,4 +1,4 @@
-import type { EmploymentType, RoleFamily, StudentFriendly } from "@aihot/career-insights/contracts";
+import type { DegreeLevel, EmploymentType, RoleFamily, StudentFriendly } from "@aihot/career-insights/contracts";
 
 /** 与 data/dictionaries.ts 的 THEME_LABELS 同步；data 包依赖 node:crypto，不能进浏览器构建。 */
 export const THEME_LABELS: Readonly<Record<string, string>> = {
@@ -31,6 +31,26 @@ export const POLICY_SOURCE_TIER_LABELS: Readonly<Record<string, string>> = {
   official_media: "官方媒体",
   other_public: "其他公开来源",
 };
+
+/**
+ * 岗位与采集来源的中文名，与 collector/sources.ts 的 label 逐条同步。
+ * web 不能直接 import collector（那是后端包，会带进 Node 依赖），所以这里维护一份前端映射；
+ * 库里出现未登记的来源时回落 source_key（旧缓存、联调样例），不把空值或猜测的名字端给读者。
+ */
+export const CAREER_SOURCE_LABELS: Readonly<Record<string, string>> = {
+  "alibaba-official-careers": "阿里巴巴官方招聘",
+  "tencent-official-careers": "腾讯官方招聘",
+  "meituan-official-careers": "美团官方招聘",
+  "baidu-official-careers": "百度官方招聘",
+  "bytedance-official-careers": "字节跳动官方招聘",
+  "state-council-policy": "中国政府网政策文件库",
+  "ndrc-policy": "国家发展改革委政策发布",
+  "moe-policy": "教育部公告公示",
+};
+
+export function careerSourceLabel(sourceKey: string): string {
+  return CAREER_SOURCE_LABELS[sourceKey] ?? sourceKey;
+}
 
 /** 与 data/dictionaries.ts 的 ROLE_FAMILY_LABELS 一致；unknown 站内统一写「未归类」。 */
 export const ROLE_FAMILY_LABELS: Record<RoleFamily, string> = {
@@ -72,6 +92,21 @@ const CONFIDENCE_LABELS: Readonly<Record<ConfidenceLevel, string>> = {
  */
 export function confidenceLabel(confidence: ConfidenceLevel): string {
   return CONFIDENCE_LABELS[confidence];
+}
+
+/** DegreeLevel 全枚举的中文名；unknown 不是「未知学历」而是源页面没写，站内统一写「未明确」。 */
+export const DEGREE_LABELS: Readonly<Record<DegreeLevel, string>> = {
+  any_explicit: "学历不限",
+  bachelor: "本科",
+  master: "硕士",
+  doctor: "博士",
+  other: "其他",
+  unknown: "未明确",
+};
+
+/** 接口回退的旧枚举值同样按「未明确」处理，不把英文枚举端给读者。 */
+export function degreeLabel(degree: string): string {
+  return (DEGREE_LABELS as Readonly<Record<string, string>>)[degree] ?? DEGREE_LABELS.unknown;
 }
 
 /** 与 data/dictionaries.ts 的 SKILL_LABELS 全量同步（45 项）；web 不能直接 import 后者，因为 data 包依赖 node:crypto。 */

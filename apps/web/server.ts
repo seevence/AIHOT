@@ -70,6 +70,8 @@ async function serveStatic(pathname: string, res: import("node:http").ServerResp
     "Content-Length": info.size,
     "Cache-Control": immutable ? "public, max-age=31536000, immutable" : "public, max-age=3600",
     "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
   });
   createReadStream(file).pipe(res);
   return true;
@@ -107,6 +109,10 @@ function pageResponse(req: import("node:http").IncomingMessage, res: import("nod
   res.writeHead = ((status: number, messageOrHeaders?: string | import("node:http").OutgoingHttpHeaders, headers?: import("node:http").OutgoingHttpHeaders) => {
     const outgoing = typeof messageOrHeaders === "string" ? headers : messageOrHeaders;
     for (const [name, value] of Object.entries(outgoing ?? {})) if (value !== undefined) res.setHeader(name, value);
+    // 基础安全头：所有页面统一带上（CSP 需要 nonce/hash 覆盖内联启动脚本，另行推进）。
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Referrer-Policy", "strict-origin-when-cross-origin");
     // Download managers can treat prefetched .data with the unknown text/x-script type as a file.
     // Turbo-stream is text decoded from the response body; its client does not depend on the MIME.
     if (url.pathname.endsWith(".data") && res.getHeader("Content-Type") === "text/x-script") {

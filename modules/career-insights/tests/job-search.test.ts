@@ -89,12 +89,32 @@ test("a keyword matches the title, the company, a skill and a city", async () =>
     job({ job_key: "city", title: "产品经理", company_name: "丁公司", locations: ["杭州"], skills: ["product"] }),
   );
 
-  assert.deepEqual(await titlesFor({ q: "数据分析" }), ["数据分析工程师"]);
+  // 「数据分析」也是技能 data_analysis 的中文标签：标题命中的岗位与技能命中的后端工程师一起返回。
+  assert.deepEqual(await titlesFor({ q: "数据分析" }), ["后端工程师", "数据分析工程师"]);
   assert.deepEqual(await titlesFor({ q: "数据乙" }), ["算法工程师"]);
   assert.deepEqual(await titlesFor({ q: "data_analysis" }), ["后端工程师"]);
   assert.deepEqual(await titlesFor({ q: "杭州" }), ["产品经理"]);
-  // 同一关键词可命中多个字段：标题与公司各一个。
-  assert.deepEqual(await titlesFor({ q: "数据" }), ["数据分析工程师", "算法工程师"]);
+  // 同一关键词可命中多个字段：标题、公司各一个，另有 data_analysis 技能岗位（「数据」是技能标签的一部分）。
+  assert.deepEqual(await titlesFor({ q: "数据" }), ["后端工程师", "数据分析工程师", "算法工程师"]);
+});
+
+test("a Chinese skill label matches the skill id stored on the row", async () => {
+  await seed(
+    job({ job_key: "backend", title: "后端工程师", company_name: "甲公司", locations: ["北京"], skills: ["data_analysis"] }),
+    job({ job_key: "analyst", title: "数据分析工程师", company_name: "乙公司", locations: ["上海"], skills: ["data_analysis"], fetched_at: "2026-01-02T00:00:00.000Z" }),
+    job({ job_key: "ml", title: "算法工程师", company_name: "丙公司", locations: ["深圳"], skills: ["machine_learning"] }),
+  );
+
+  // 技能列里存的是 data_analysis，搜索框给的是中文标签「数据分析」：反查 ID 后两种写法命中同一批岗位。
+  const byLabel = await repository.listJobs({ q: "数据分析", page: 1, page_size: 20 });
+  const byId = await repository.listJobs({ q: "data_analysis", page: 1, page_size: 20 });
+  assert.equal(byLabel.total, byId.total);
+  assert.deepEqual(byLabel.items.map((item) => item.title), ["数据分析工程师", "后端工程师"]);
+  assert.deepEqual(byId.items.map((item) => item.title), ["数据分析工程师", "后端工程师"]);
+  // 中文标签只反查自己的 ID：机器学习岗位不能被「数据分析」带出来。
+  assert.ok(!byLabel.items.some((item) => item.title === "算法工程师"));
+  // 标签的一部分也算命中：机器 → 机器学习，这个关键词在标题、公司、城市和技能原文里都不存在。
+  assert.deepEqual(await titlesFor({ q: "机器" }), ["算法工程师"]);
 });
 
 test("ASCII case does not matter while Chinese matches literally", async () => {

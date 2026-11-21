@@ -164,7 +164,7 @@ test("the daily report answers has_run=false when today has no ingest run", asyn
   assert.equal(daily.unknown_ratio, null);
   assert.equal(daily.sample_size, 0);
   assert.equal(daily.data_origin, "live");
-  assert.ok(Number.isFinite(Date.parse(daily.generated_at)));
+  assert.equal(daily.generated_at, EPOCH, "an empty table reports the epoch cutoff, not the request time");
 });
 
 test("the daily report sums today's runs per source and shares the summary unknown ratio", async () => {
@@ -256,6 +256,11 @@ test("the daily report sums today's runs per source and shares the summary unkno
   assert.equal(daily.unknown_ratio, 2 / 3);
   assert.equal(daily.unknown_ratio, skillMetric.unknown_ratio, "the same denominator as the summary");
   assert.equal(daily.sample_size, summary.sample_size);
+
+  // 数据截止时间取最新一次观测：同一份数据下保持稳定，ETag 才能命中 304。
+  assert.equal(daily.generated_at, seededAt);
+  const again = await loadCareerDaily(sql);
+  assert.equal(again.generated_at, daily.generated_at);
 });
 
 test("the daily route rejects query parameters and answers today", async () => {
@@ -275,5 +280,11 @@ test("the daily route rejects query parameters and answers today", async () => {
     response.json().date,
     new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Shanghai" }).format(new Date()),
   );
+  assert.equal(response.json().generated_at, EPOCH, "no data means the epoch cutoff");
+  const notModified = await app.inject({
+    url: "/api/site/career-insights/daily",
+    headers: { "if-none-match": String(response.headers.etag) },
+  });
+  assert.equal(notModified.statusCode, 304, "a stable generated_at lets the ETag hit");
   await app.close();
 });

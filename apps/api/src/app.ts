@@ -90,6 +90,14 @@ export async function buildApp(): Promise<FastifyInstance> {
     return reply.header("Cache-Control", "no-store").send({ ok: true, db: "ok", ms: Math.round(performance.now() - started), release: process.env.AIHOT_RELEASE ?? "dev" });
   });
 
+  // 基础安全头：所有 API/feed/MCP/静态响应统一带上（公开读取为主，不涉及内联脚本）。
+  app.addHook("onSend", async (_req, reply, payload) => {
+    reply.header("X-Content-Type-Options", "nosniff");
+    reply.header("X-Frame-Options", "DENY");
+    reply.header("Referrer-Policy", "strict-origin-when-cross-origin");
+    return payload;
+  });
+
   registerSite(app);
   registerOg(app);
   registerAdminAuth(app);

@@ -26,7 +26,9 @@ export function TabBar({ changelogVersion }: { changelogVersion: string | null }
   const restored = useSyncExternalStore(subscribe, () => rememberedTab(key), serverTab);
   const items = tabs();
   const requested = screen.tab ?? restored ?? last.current ?? screen.home;
-  const active = requested && !items.some((t) => t.key === requested) ? "featured" : requested;
+  // 日报这类不占底栏的页面把 tab 声明成底栏没有的键：底栏不高亮任何一项（aria-current 不设），
+  // 不要回退高亮首页，让读者以为已经在首页。
+  const active = requested && items.some((t) => t.key === requested) ? requested : undefined;
   useIsoLayoutEffect(() => {
     // Do not overwrite a saved entry with the server fallback before hydration reads this browser's tab.
     if (restored === null) return;

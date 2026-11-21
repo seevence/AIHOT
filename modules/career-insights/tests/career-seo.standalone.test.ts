@@ -204,11 +204,28 @@ test("联调样例（synthetic_fixture）不输出 JobPosting/面包屑，也不
   assert.equal(robotsOf(tags), "noindex, follow");
 });
 
-test("岗位列表 meta：ItemList 前 20 个岗位带 position/name/url，canonical 是列表页，head 带岗位 RSS", () => {
+test("岗位列表 meta：关键词视图不索引、不输出 ItemList，canonical 是列表页，head 带岗位 RSS", () => {
   const tags = tagsOf(careerJobsMeta({ keyword: "算法", jobs: LIVE_JOBS(25) }));
   assert.equal(titleOf(tags), `岗位搜索：算法 · ${SITE.name}`);
   assert.equal(new URL(canonicalOf(tags)).pathname, JOBS_PATH);
   assert.match(descriptionOf(tags), /「算法」相关岗位/);
+  // 搜索结果是同一列表页的视图：noindex，且不把按关键词变化的内容写进 ItemList。
+  assert.equal(robotsOf(tags), "noindex, follow");
+  assert.equal(ldOfType(tags, "ItemList"), null);
+  assert.deepEqual(crumbsOf(tags).map((crumb) => crumb.name), ["首页", "职业洞察", "热门岗位"]);
+  assert.deepEqual(feedLinkOf(tags), {
+    tagName: "link",
+    rel: "alternate",
+    type: "application/rss+xml",
+    title: `${SITE.name} 就业岗位`,
+    href: "/feed/jobs.xml",
+  });
+});
+
+test("干净的岗位列表可索引：ItemList 前 20 个岗位带 position/name/url", () => {
+  const tags = tagsOf(careerJobsMeta({ jobs: LIVE_JOBS(25) }));
+  assert.equal(titleOf(tags), `热门岗位 · ${SITE.name}`);
+  assert.equal(robotsOf(tags), "max-image-preview:large");
 
   const list = ldOfType(tags, "ItemList");
   assert.ok(list, "a live job list carries ItemList");
@@ -225,18 +242,7 @@ test("岗位列表 meta：ItemList 前 20 个岗位带 position/name/url，canon
   });
   assert.equal(entries[19]!.position, 20);
   assert.ok(entries.every((entry) => new URL(entry.url).pathname.startsWith("/career-insights/jobs/")), "every entry links to a job detail page");
-
   assert.deepEqual(crumbsOf(tags).map((crumb) => crumb.name), ["首页", "职业洞察", "热门岗位"]);
-  assert.deepEqual(feedLinkOf(tags), {
-    tagName: "link",
-    rel: "alternate",
-    type: "application/rss+xml",
-    title: `${SITE.name} 就业岗位`,
-    href: "/feed/jobs.xml",
-  });
-
-  const plainTitle = titleOf(tagsOf(careerJobsMeta({ jobs: LIVE_JOBS(1) })));
-  assert.equal(plainTitle, `热门岗位 · ${SITE.name}`);
 });
 
 test("岗位列表没有真实岗位时不输出 ItemList，但面包屑与 RSS 仍在", () => {
