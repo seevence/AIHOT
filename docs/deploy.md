@@ -281,22 +281,30 @@ node scripts/backup-local.ts --database-url postgres://aihot:密码@127.0.0.1:54
 docker compose exec worker node scripts/backup-local.ts
 ```
 
-恢复默认只打印目标库和文件、不改任何数据；加 `--yes` 才执行 `pg_restore --clean --if-exists`，会覆盖目标库里同名对象，目标库必须已经存在：
+恢复默认只打印目标库和文件、不改任何数据。**2026-11-21 的恢复演练事故之后，只加 `--yes` 不再够用**：恢复必须显式给出目标库 `--restore-into`（没有默认值，且必须与连接串里的库名一致），再加同名 `--confirm` 才能执行；`aihot` / `postgres` / `template*` 这类生产库名默认拒绝（确需恢复要额外 `--allow-production`）。`pg_restore --clean --if-exists` 会覆盖目标库的同名对象，目标库必须已经存在。
 
 ```bash
-# 先恢复到临时库演练（不要直接指向正式库）
-node scripts/restore-local.ts .data/backups/20261121T063012Z.dump --database-url postgres://aihot:密码@127.0.0.1:5432/aihot_restore_test --yes
+# 正确演练：先建临时库 aihot_restore_test，再恢复到临时库（不会碰正式库）
+node scripts/restore-local.ts .data/backups/20261121T063012Z.dump \
+  --database-url postgres://aihot:密码@127.0.0.1:5432/aihot_restore_test \
+  --restore-into aihot_restore_test --confirm aihot_restore_test --yes
 # Docker 部署在 worker 容器里跑，路径用 /data/backups/...
-docker compose exec worker node scripts/restore-local.ts /data/backups/20261121T063012Z.dump --database-url "$DATABASE_URL" --yes
+docker compose exec worker node scripts/restore-local.ts /data/backups/20261121T063012Z.dump \
+  --database-url "$DATABASE_URL" --restore-into aihot_restore_test --confirm aihot_restore_test --yes
+# 正式库恢复（危险，先停 api/worker）：显式 --allow-production
+node scripts/restore-local.ts .data/backups/20261121T063012Z.dump \
+  --database-url postgres://aihot:密码@127.0.0.1:5432/aihot \
+  --restore-into aihot --confirm aihot --allow-production --yes
 ```
 
 演练步骤：
 
 1. 跑一次备份，确认输出的文件存在、大小合理（脚本会用 `pg_restore --list` 校验归档能读）。
-2. 建一个临时库（例如 `aihot_restore_test`），用 `--database-url` 指向它并加 `--yes` 恢复；正式库不受影响。
+2. 建一个**临时库**（例如 `aihot_restore_test`），用 `--database-url` 指向它、`--restore-into` 与 `--confirm` 都写它并加 `--yes` 恢复；正式库不受影响。
 3. 在临时库上抽查关键表行数（`articles`、`career_jobs`、`career_policies` 等），或让一个 API 实例连它启动、访问 `/api/health`。
-4. 确认无误后删掉临时库；需要正式恢复时先停 api/worker，按同样命令指向正式库，恢复后再启动。
+4. 确认无误后删掉临时库；需要正式恢复时先停 api/worker，按同样命令加 `--allow-production` 指向正式库，恢复后再启动。
 5. Windows 上没有 `pg_dump`：按上方说明在 WSL2 或 Docker 里跑，本机 Docker 部署用 `docker compose exec worker ...`。
+6. **不要把预览命令复制后直接加 `--yes`**：`--restore-into`/`--confirm` 就是为了拦住这种手滑（连接串与目标库不一致会直接拒绝）。
 
 本地备份是兜底，不替代对象存储备份：它只有本机一份，机器或磁盘坏了备份也没了。有 `DB_BACKUP_STORE_*` 时仍以每天 04:10 的对象存储备份为准（含附件），本地脚本可以另按自己的节奏跑，比如发布前手工备份一次。脚本的数据库账号密码只通过环境变量 `PGUSER`/`PGPASSWORD` 传给 `pg_dump`/`pg_restore`，不出现在命令行里。
 

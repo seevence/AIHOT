@@ -136,7 +136,7 @@ async function main(): Promise<void> {
   const removed = await prune(options.dir, options.keep);
   console.log(`备份完成：${file}（${size} 字节），保留最近 ${options.keep} 份`);
   for (const name of removed) console.log(`已清理旧备份：${name}`);
-  console.log(`恢复演练/恢复：node scripts/restore-local.ts ${file} --database-url <连接串> --yes`);
+  console.log(`恢复演练/恢复：node scripts/restore-local.ts ${file} --database-url <连接串> --restore-into <库名> --confirm <库名> --yes`);
 }
 
 if (import.meta.main) {

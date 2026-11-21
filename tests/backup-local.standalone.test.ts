@@ -11,7 +11,7 @@ import {
   pgEnvironment,
   selectBackups,
 } from "../scripts/backup-local.ts";
-import { parseRestoreArgs } from "../scripts/restore-local.ts";
+import { parseRestoreArgs, validateRestoreTarget } from "../scripts/restore-local.ts";
 
 test("backup-local 默认：DATABASE_URL / AIHOT_DATA_DIR 生效，保留 7 份", () => {
   const options = parseBackupArgs([], { DATABASE_URL: "postgres://u:p@127.0.0.1:5432/aihot", AIHOT_DATA_DIR: "D:\\data" });
@@ -70,17 +70,35 @@ test("连接串：用户名密码进 PGUSER/PGPASSWORD，不出现在 argv；其
   assert.equal(url, "postgres://db.example:5432/aihot?sslmode=require");
 });
 
-test("restore-local 默认只预览、不执行；加 --yes 才算确认", () => {
-  assert.deepEqual(parseRestoreArgs([".data/backups/20261121T063012Z.dump"], {}), {
-    help: false,
-    dump: ".data/backups/20261121T063012Z.dump",
-    databaseUrl: "postgres://127.0.0.1:5432/aihot",
-    yes: false,
-  });
-  const confirmed = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot_restore_test", "--yes", "dump.dump"]);
-  assert.equal(confirmed.yes, true);
-  assert.equal(confirmed.dump, "dump.dump");
-  assert.equal(confirmed.databaseUrl, "postgres://127.0.0.1:5432/aihot_restore_test");
+test("restore-local 必须显式目标、双确认；生产库默认拒绝（2026-11-21 演练事故后加固）", () => {
+  const defaults = parseRestoreArgs([".data/backups/20261121T063012Z.dump"], {});
+  assert.equal(defaults.restoreInto, null);
+  assert.equal(defaults.confirm, null);
+  assert.equal(defaults.allowProduction, false);
+  assert.equal(defaults.yes, false);
+  assert.throws(() => validateRestoreTarget(defaults), /--restore-into/, "没有显式目标库时拒绝");
+
+  const preview = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot_restore_test", "--restore-into", "aihot_restore_test", "x.dump"]);
+  assert.equal(validateRestoreTarget(preview), "aihot_restore_test", "预览只校验目标，不需要确认");
+
+  const mismatch = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot", "--restore-into", "aihot_restore_test", "x.dump"]);
+  assert.throws(() => validateRestoreTarget(mismatch), /不一致/, "连接串与目标库不一致时拒绝");
+
+  const noConfirm = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot_restore_test", "--restore-into", "aihot_restore_test", "--yes", "x.dump"]);
+  assert.throws(() => validateRestoreTarget(noConfirm), /--confirm/, "--yes 必须有同名 --confirm");
+
+  const wrongConfirm = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot_restore_test", "--restore-into", "aihot_restore_test", "--confirm", "other_db", "--yes", "x.dump"]);
+  assert.throws(() => validateRestoreTarget(wrongConfirm), /--confirm/);
+
+  const confirmed = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot_restore_test", "--restore-into", "aihot_restore_test", "--confirm", "aihot_restore_test", "--yes", "x.dump"]);
+  assert.equal(validateRestoreTarget(confirmed), "aihot_restore_test");
+
+  const production = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot", "--restore-into", "aihot", "--confirm", "aihot", "--yes", "x.dump"]);
+  assert.throws(() => validateRestoreTarget(production), /生产库/, "生产库名默认拒绝");
+
+  const productionAllowed = parseRestoreArgs(["--database-url", "postgres://127.0.0.1:5432/aihot", "--restore-into", "aihot", "--confirm", "aihot", "--allow-production", "--yes", "x.dump"]);
+  assert.equal(validateRestoreTarget(productionAllowed), "aihot");
+
   assert.throws(() => parseRestoreArgs(["a.dump", "b.dump"]), /只能指定一个/);
   assert.throws(() => parseRestoreArgs(["--nope"]), /未知参数/);
 });
