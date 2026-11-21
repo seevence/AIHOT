@@ -1,5 +1,7 @@
 import { createElement as h, type ReactElement } from "react";
+import { Link } from "react-router";
 import type { CareerDailyCommentResponseV1, CareerDailyResponseV1, CareerDailySourceV1 } from "../../contracts/index.ts";
+import { careerSourceLabel } from "../labels.ts";
 import {
   DAILY_NO_RUN_TEXT,
   DAILY_SOURCE_STATUS_LABELS,
@@ -25,7 +27,7 @@ function SourceRow({ source }: { source: CareerDailySourceV1 }): ReactElement {
     h(
       "div",
       { className: "min-w-0" },
-      h("div", { className: "text-[14px] font-medium text-ink break-words" }, source.source_key),
+      h("div", { className: "text-[14px] font-medium text-ink break-words" }, careerSourceLabel(source.source_key)),
       h(
         "div",
         { className: "mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-4" },
@@ -74,13 +76,23 @@ function DailyComment({ comment }: { comment: CareerDailyCommentResponseV1 }): R
   );
 }
 
+/** 日报页顶部的报告入口；与 /daily/archive、/weekly、/monthly 页的 REPORT_LINKS 同一份口径。 */
+export interface CareerDailyReportLink {
+  to: string;
+  label: string;
+  current?: boolean;
+}
+
 export function CareerDailyReport({
   daily,
   comment,
+  reportLinks,
 }: {
   daily: CareerDailyResponseV1;
   /** 日报 AI 评论缓存；null 表示今天还没生成或请求失败，整块隐藏。 */
   comment?: CareerDailyCommentResponseV1 | null;
+  /** 日报/周报/月报/往期的入口行；不传就不渲染（联调与内嵌场景不出现站点导航）。 */
+  reportLinks?: readonly CareerDailyReportLink[];
 }): ReactElement {
   return h(
     "div",
@@ -96,6 +108,27 @@ export function CareerDailyReport({
         " · 采集来源、今日新增与库表概况",
       ),
     ),
+    reportLinks !== undefined && reportLinks.length > 0
+      ? h(
+          "nav",
+          { "aria-label": "报告入口", className: "flex flex-wrap gap-2" },
+          ...reportLinks.map((link) =>
+            h(
+              Link,
+              {
+                key: link.to,
+                to: link.to,
+                viewTransition: true,
+                "aria-current": link.current ? "page" : undefined,
+                className: link.current
+                  ? "rounded-full bg-accent-soft px-3.5 py-1.5 text-[13px] font-semibold text-accent"
+                  : "rounded-full border border-line-strong bg-surface px-3.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 hover:text-ink",
+              },
+              link.label,
+            ),
+          ),
+        )
+      : null,
     !daily.has_run
       ? h(
           "div",

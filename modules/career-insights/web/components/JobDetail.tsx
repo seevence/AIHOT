@@ -1,6 +1,8 @@
 import { Link } from "react-router";
 import type { JobDetailV1 } from "@aihot/career-insights/contracts";
 import {
+  careerSourceLabel,
+  degreeLabel,
   EMPLOYMENT_TYPE_LABELS,
   ROLE_FAMILY_LABELS,
   STUDENT_FRIENDLY_LABELS,
@@ -9,7 +11,17 @@ import {
 import { CareerTime } from "../time";
 import { JobStarButton } from "./JobStarButton";
 
-type Fact = { label: string; value: string; dateTime?: boolean };
+type Fact = { label: string; value: string; dateTime?: boolean; note?: string };
+
+/** 抓取原文只作次要证据：压成一行、超过 24 字截断；与归一化文案相同就不重复展示。 */
+const DEGREE_RAW_MAX_CHARS = 24;
+
+function degreeRawNote(raw: string | null, label: string): string | undefined {
+  if (!raw) return undefined;
+  const text = raw.replace(/\s+/g, " ").trim();
+  if (text === "" || text === label) return undefined;
+  return text.length > DEGREE_RAW_MAX_CHARS ? `${text.slice(0, DEGREE_RAW_MAX_CHARS)}…` : text;
+}
 
 export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: string }) {
   const experience =
@@ -19,17 +31,19 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
       : null);
 
   const facts: Fact[] = [];
-  const addFact = (label: string, value: string | null | undefined, dateTime = false) => {
-    if (value) facts.push({ label, value, dateTime });
+  const addFact = (label: string, value: string | null | undefined, dateTime = false, note?: string) => {
+    if (value) facts.push({ label, value, dateTime, note });
   };
   addFact("职位类别", ROLE_FAMILY_LABELS[job.role_family] ?? job.role_family);
   addFact("用工类型", EMPLOYMENT_TYPE_LABELS[job.employment_type] ?? job.employment_type);
   addFact("学生友好", STUDENT_FRIENDLY_LABELS[job.student_friendly] ?? job.student_friendly);
-  addFact("学历", job.degree_raw ?? job.degree);
+  // 学历先给归一化的中文枚举，抓取原文只作次要证据（整句不直接铺开）。
+  const degree = degreeLabel(job.degree);
+  addFact("学历", degree, false, degreeRawNote(job.degree_raw, degree));
   addFact("经验", experience);
   addFact("公司", job.company_name);
   addFact("城市", job.locations.join("、"));
-  addFact("来源", job.source_key);
+  addFact("来源", careerSourceLabel(job.source_key));
   addFact("发布时间", job.published_at, true);
   addFact("首次观测", job.first_seen_at, true);
   addFact("最近观测", job.last_seen_at, true);
@@ -55,10 +69,13 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
         <h2 id="job-facts" className="text-[17px] font-semibold text-ink">职位信息</h2>
         <dl className="mt-4 grid grid-cols-1 gap-x-5 gap-y-3 text-[13px] sm:grid-cols-2">
           {facts.map((fact) => (
-            <div key={fact.label} className="min-w-0">
+            <div key={fact.label} data-job-fact={fact.label} className="min-w-0">
               <dt className="text-ink-4">{fact.label}</dt>
               <dd className="mt-1 text-ink-2 break-words">
                 {fact.dateTime ? <CareerTime value={fact.value} /> : fact.value}
+                {fact.note !== undefined && (
+                  <span data-job-fact-note="" className="mt-1 block text-[12px] text-ink-4">原文：{fact.note}</span>
+                )}
               </dd>
             </div>
           ))}
