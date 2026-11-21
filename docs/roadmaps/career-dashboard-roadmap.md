@@ -211,6 +211,13 @@
 - **L1 首页 5 段**（`d821a08` + L1 minors）：今日概览 / AI 就业研判（只留 inferences ≤3 + actions ≤3 + 置信度文案） / 需求变化三指标（观察窗新增岗位、活跃招聘企业、学生友好岗位+口径注） / 最新就业日报摘要+入口 / 热门方向 Top3 一行入口。移除值得注意的信号、热门岗位 Top6、热门技能与准备建议、最新岗位列表；loader 只请求 `summary`、`catalog?limit=3`、`daily`、`brief` 四个接口（不再请求 signals/latest jobs），SSR payload 也裁到 3 条。
 - **L2 洞察页 8 段**（`c499bf4` + minors `682c0de`）：AI 趋势研判（完整 facts/inferences/actions/limitations/evidence + 置信度 + as_of + 样本） / 不同寻常的信号（从首页移入，带数字依据 + 官方原文链接 + skipped 分组提示） / 岗位趋势 / 技能趋势 / 热门岗位摘要卡 + 跳转 jobs / 学生就业建议 / 政策与岗位联动（无共同主题整段隐藏） / 数据范围与方法。热门岗位不再放完整榜/筛选/分页（完整榜单只在 `/career-insights/jobs`）。
 - **独立评审**：review-l1 PASS with minors（变异验证：把「值得注意的信号」加回首页 → `cache.test.ts` 失败）；review-l2 PASS with minors（变异验证：删第 2 段信号 → 5 条测试失败；政策段不隐藏 / 摘要卡跳转改错 / 去掉 skipped 提示各触发 1 条失败）。minor 修复：`682c0de`（不可用态与样本不足文案分开、补 4 条信号规则与摘要卡/建议上限断言、catalog 失败不再编「30 天」窗口）与 L1 minors（研判上限 3、学生友好口径、请求面与宽页断言）。
+
+- **E9 二次调整（2026-11-21 上午，用户截图反馈）**：
+  - 洞察页 8 段 → **6 段**：删除冗余「热门岗位」摘要段（完整榜只在 `/career-insights/jobs`），「学生就业建议」并入「AI 趋势研判」段内的「给学生的建议」子块（可投方向/需补技能/岗位证据链接）；最终顺序 = 研判（含建议）→ 异常信号 → 岗位趋势 → 技能趋势 → 政策联动（无主题隐藏）→ 数据范围与方法（`4d9ceb5` + IA-2 minors）。
+  - **领域词中文化**：洞察页/首页的研判 facts/inferences/actions/limitations、信号文本统一过 `localizeDomainTerms`，内部职族/技能 ID 与英文字段名不再出现在读者可见文本；首页在 loader 层中文化（payload 也不含 ID）；web 技能标签与 `data/dictionaries.ts` 全量 45 项对齐，职族文案统一为「软件 / AI 应用开发」「AI 产品 / 运营」「未归类」。
+  - **研判生成侧中文化**（`61379a7`）：模型输入改中文名与百分比并给分母，prompt 硬约束禁内部 ID，compose 增加 sanitizer + 残留断言；`prompt_version` 由 `career-brief/1` bump 到 `career-brief/2`（旧 2 行保留，新 1 行 receipt 337；新行 34 段文本内部 ID 命中 0、5 处百分比均带分母）。
+  - **就业日报排序**：今日概况 → AI 评论 → 各来源采集结果（采集结果放最底部）。
+  - **热门岗位页**：筛选岗位条从页首下移到「方向榜」之后、「职位榜」之前，并在方向榜标注口径（全量岗位；仅学生友好时按该口径排序与计数，城市等筛选不影响本榜）；岗位明细加 `id="catalog-jobs"`，上一页/下一页链接带该锚点，翻页后滚到岗位明细而不是页顶。
 - **验证**：干净副本 `test:web` **53/53**；主要 standalone `career-insights-board` 19/19、board+feeds 27/27；`tsc -p modules` 0；`npm run build -w @aihot/web` 成功。
 - **L4-a 清理（`865e3a1`）**：删除无线上入口的 `CareerDashboard.tsx` 与 `CareerSignals` 旧包装（保留 `CareerSignalItems`，信号断言迁到新渲染）；新增 `labels.ts` 的 `confidenceLabel()` 统一「低置信/中置信/高置信」，首页本地「置信度低/中/高」常量改为引用同一函数；`HOT_DEFINITION` 只保留在方法段一处。
 - **L3b 日报 AI 评论（`0b69f95` 后端 + `d5241d5` 页面）**：`/daily` 新增「AI 评论」区块（正文 + 「生成于 … · 中置信 · 当日观测样本 N 个岗位 · 今日新增 M」），无缓存/失败整块隐藏；后台由每日管线第四步预生成并写 `career_daily_comments`，页面只读缓存；真实生成 receipt 334。
