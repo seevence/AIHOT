@@ -39,6 +39,14 @@ function redirectedToDifferentPath(input: BlockProbeInput): boolean {
   }
 }
 
+function stripHtmlToText(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<!--[\s\S]*?-->/g, " ")
+    .replace(/<[^>]*>/g, " ");
+}
+
 export function detectBlock(input: BlockProbeInput): AccessBlockedError | null {
   if (input.status === 401) {
     return new AccessBlockedError("unauthorized", "HTTP 401 需要登录凭据", input.sourceKey);
@@ -52,7 +60,10 @@ export function detectBlock(input: BlockProbeInput): AccessBlockedError | null {
 
   // 只对网页正文做验证码/付费墙文案扫描：JSON API 的业务字段里可能出现「安全验证」「登录」等词。
   const bodyTextIsWebPage = input.contentType === undefined || input.contentType === null || !/json/i.test(input.contentType);
-  const lowerBody = input.bodyText.toLowerCase();
+  // 只扫网页的可见文本：脚本/样式里的「验证码」生成器、input 的 placeholder（如中国建筑登录框）
+  // 都不代表页面被拦截；真正的验证码页会把提示放在可见文本里。
+  const markerText = bodyTextIsWebPage ? stripHtmlToText(input.bodyText) : input.bodyText;
+  const lowerBody = markerText.toLowerCase();
   if (bodyTextIsWebPage && CAPTCHA_MARKERS.some((marker) => lowerBody.includes(marker.toLowerCase()))) {
     return new AccessBlockedError("captcha", "出现验证码或人机验证", input.sourceKey);
   }

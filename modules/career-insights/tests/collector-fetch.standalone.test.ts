@@ -218,6 +218,37 @@ test("六类访问限制全部识别，正常页面不误判", () => {
     "captcha",
     "HTML 页面仍按验证码文案识别",
   );
+  // 页面内嵌的验证码生成器脚本不算拦截页（中国建筑官网模板的误判场景）。
+  assert.equal(
+    detectBlock({
+      ...base,
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      bodyText: '<html><body><h1>招聘公告</h1><script>function createCode(){/* 验证码的长度 */ var n=4;}</script></body></html>',
+    }),
+    null,
+    "script 内的验证码生成器不误判",
+  );
+  assert.equal(
+    detectBlock({
+      ...base,
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      bodyText: '<html><body><p>领取验证码</p><script>var x=1;</script></body></html>',
+    })?.limitationType,
+    "captcha",
+    "可见正文里的验证码仍然识别",
+  );
+  assert.equal(
+    detectBlock({
+      ...base,
+      status: 200,
+      contentType: "text/html; charset=utf-8",
+      bodyText: '<html><body><input type="text" value="请输入验证码" onfocus="if(value==\'请输入验证码\'){value=\'\';}"><h1>招聘公告</h1></body></html>',
+    }),
+    null,
+    "input 属性里的验证码占位符不误判",
+  );
 });
 
 test("单调时钟回拨视为配置错误", () => {

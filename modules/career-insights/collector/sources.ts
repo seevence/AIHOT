@@ -121,4 +121,44 @@ export const CAREER_SOURCE_DEFINITIONS: readonly CareerSourceDefinition[] = [
     notes:
       "2026-11-21 实测：公开 JSON——列表 GET /recruit-portal-service/api/job/front/list?page=&size=（无 Cookie、无 token、无签名），列表项已含 jobDuty/jobQualification；详情 GET /recruit-portal-service/api/job/front/view/{jdId}，详情页 /social/jobDetail?jdId=。已存 3 份列表 + 2 份详情真实样本，适配器与回放用例通过。",
   },
+  {
+    source_key: "honor-official-careers",
+    label: "荣耀官方招聘",
+    kind: "company_careers",
+    entry_url: "https://career.honor.com/",
+    access: "http",
+    enabled: true,
+    notes:
+      "2026-11-21 实测：官网北森托管，公开表单 JSON（无 Cookie/Token/签名）：列表 /wecruit/positionInfo/listPosition/SU5ff669649b0d78e6f4296c9a、详情 listPositionDetail（postId=）；列表含标题/地点/学历/发布时间，职责与要求需逐条取详情；详情页 /SU5ff669649b0d78e6f4296c9a/pb/posDetail.html?postId= 公开。已存 3 列表 + 2 详情真实样本，按 postId 去重。",
+  },
+  {
+    source_key: "changsha-rsj-policy",
+    label: "长沙市人力资源和社会保障局劳动就业公告",
+    kind: "government_policy",
+    entry_url: "http://rsj.changsha.gov.cn/zxzx_0/tzgg_131288/ldjy_131291/",
+    access: "http",
+    enabled: true,
+    notes:
+      "2026-11-21 实测：长沙人社局劳动就业公告 TRS 静态 HTML（站点 SiteDomain 为 http，https 443 持续 502）；列表 index_{N-1}.html，详情 h1.article-title/.pages_content；已存 2 列表 + 3 详情真实样本。明文 HTTP 无完整性保护，仅用于公开政策原文，notes 如实标注。",
+  },
+  {
+    source_key: "hunan-jyt-policy",
+    label: "湖南省教育厅通知公告",
+    kind: "government_policy",
+    entry_url: "https://jyt.hunan.gov.cn/jyt/sjyt/xxgk/tzgg/index.html",
+    access: "http",
+    enabled: true,
+    notes:
+      "2026-11-21 实测：湖南省教育厅通知公告 TRS 静态 HTML，HTTPS 200、无 Cookie/Token/签名/验证码；列表 index_N.html，详情 .main_content h2/.main_con_zw；已存 2 列表 + 3 详情真实样本。",
+  },
+  {
+    source_key: "cscec-official-careers",
+    label: "中国建筑社会招聘",
+    kind: "company_careers",
+    entry_url: "https://www.cscec.com/rlzy_new/rczp/",
+    access: "http",
+    enabled: true,
+    notes:
+      "2026-11-21 实测：官网公开静态 HTML（无 Cookie/Token/签名/验证码）——栏目页 /rlzy_new/rczp/ 列出集团总部+所属企业招聘公告（71 条，单页），详情 /rlzy_new/rczp/{jtzbzp,ssqyzp}/YYYYMM/<id>.html；标题 h2.gsywtpc、发布日期 .fbdate、正文 #gsxwxq > p，招聘岗位小节逐条列岗位。已存 1 列表 + 5 详情真实样本；正文含联系人/电话/邮箱的公告整条跳过。页面模板 <script> 含验证码生成器，block-detector 已在扫描前剔除 script/style。",
+  },
 ];

@@ -39,6 +39,10 @@ test("真实 manifest 通过结构校验并满足样本配额", async () => {
       "mohrss-policy:policy:5",
       "netease-official-careers:job:5",
       "didi-official-careers:job:5",
+      "honor-official-careers:job:5",
+      "changsha-rsj-policy:policy:5",
+      "hunan-jyt-policy:policy:5",
+      "cscec-official-careers:job:6",
     ],
   );
 });
