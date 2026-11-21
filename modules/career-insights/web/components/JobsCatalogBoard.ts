@@ -1,8 +1,9 @@
 // 岗位目录页（C-CATALOG@1 的展示侧）：方向榜、职位榜与岗位明细，筛选全部由 URL 参数驱动。
-// 纯展示与纯函数，客户端组件不引入任何 .server 模块。
-import { createElement as h, type ReactElement } from "react";
+// 纯展示与纯函数，客户端组件不引入任何 .server 模块；收藏按钮（.tsx）由路由注入，见 JobRowStarProps。
+import { createElement as h, type ComponentType, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { JobFiltersV1, JobListResponseV1 } from "@aihot/career-insights/contracts";
+import type { LocalStarredJob } from "../job-favorites.ts";
 import type { CareerCatalogResponseV1, CareerDirectionV1, CareerTitleV1 } from "../../contracts/index.ts";
 import { buildJobHref, serializeJobFilters, withJobsListAnchor } from "../filters.ts";
 import { publishedAtText } from "../feeds.ts";
@@ -15,6 +16,12 @@ export const CITY_OPTION_LIMIT = 8;
 export const CATALOG_LIMIT = 50;
 export const CATALOG_WINDOW_DAYS = 30;
 export const CATALOG_EMPTY_TEXT = "继续积累观测";
+
+/**
+ * 列表行收藏按钮的入参：由路由（jobs-catalog.tsx）把 JobStarButton 注入进来。这个 .ts 文件会被
+ * standalone 测试用 Node 直接执行，不能 import .tsx；按钮组件因此由调用方传入。
+ */
+export type JobRowStarProps = Omit<LocalStarredJob, "savedAt"> & { compact: boolean };
 
 const CARD_CLASS = "rounded-card border border-line bg-surface p-5";
 const MUTED_CLASS = "text-[12px] leading-relaxed text-ink-4 break-words";
@@ -65,7 +72,8 @@ function filterChip(label: string, href: string, active: boolean, dataAttr: stri
   return h(
     "li",
     { key },
-    h(Link, { to: href, [dataAttr]: active ? "active" : "idle", "aria-current": active ? "true" : undefined, className: active ? CHIP_ACTIVE_CLASS : CHIP_IDLE_CLASS }, label),
+    // 筛选只改结果集，不应把读者弹回页面顶部（滚动位置留给 ScrollRestoration，不重置）。
+  h(Link, { to: href, preventScrollReset: true, [dataAttr]: active ? "active" : "idle", "aria-current": active ? "true" : undefined, className: active ? CHIP_ACTIVE_CLASS : CHIP_IDLE_CLASS }, label),
   );
 }
 
@@ -98,7 +106,7 @@ function FilterBar({ catalog, filters }: { catalog: CareerCatalogResponseV1; fil
       ? h(
           Link,
           Object.assign(
-            { to: CATALOG_PATH, className: "mt-4 inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium text-ink-2" },
+            { to: CATALOG_PATH, preventScrollReset: true, className: "mt-4 inline-flex h-8 items-center rounded-full border border-line-strong px-3 text-[12.5px] font-medium text-ink-2" },
             { "data-filter-clear": "" },
           ),
           "清除筛选",
@@ -151,7 +159,7 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
               h(
                 Link,
                 Object.assign(
-                  { to: buildCatalogHref(filters, { role_family: direction.role_family, page: 1 }), className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
+                  { to: buildCatalogHref(filters, { role_family: direction.role_family, page: 1 }), preventScrollReset: true, className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
                   { "data-direction-evidence": direction.role_family },
                 ),
                 "查看该方向岗位",
@@ -199,7 +207,7 @@ function TitleRanking({ catalog, filters }: { catalog: CareerCatalogResponseV1; 
                     h(
                       Link,
                       Object.assign(
-                        { to: buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 }), className: "text-[12.5px] font-medium text-accent hover:underline" },
+                        { to: buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 }), preventScrollReset: true, className: "text-[12.5px] font-medium text-accent hover:underline" },
                         { "data-title-evidence": title.title_key },
                       ),
                       "查看证据",
@@ -212,11 +220,18 @@ function TitleRanking({ catalog, filters }: { catalog: CareerCatalogResponseV1; 
   );
 }
 
-function JobRow({ job, back }: { job: JobListResponseV1["items"][number]; back: string }): ReactElement {
+function JobRow({ job, back, Star }: { job: JobListResponseV1["items"][number]; back: string; Star?: ComponentType<JobRowStarProps> }): ReactElement {
   return h(
     "li",
     { "data-catalog-job": job.id, className: "px-4 py-4" },
-    h(Link, { to: buildJobHref(job.id, back), className: "text-[15px] font-semibold text-ink break-words hover:text-accent" }, job.title),
+    h(
+      "div",
+      { className: "flex items-start justify-between gap-2" },
+      h(Link, { to: buildJobHref(job.id, back), className: "min-w-0 text-[15px] font-semibold text-ink break-words hover:text-accent" }, job.title),
+      Star
+        ? h(Star, { id: job.id, title: job.title, company: job.company_name, roleFamily: job.role_family, locations: job.locations, compact: true })
+        : null,
+    ),
     h("div", { className: `mt-1 ${MUTED_CLASS}` }, `${job.company_name} · ${job.locations.length > 0 ? job.locations.join("、") : "地点未知"}`),
     h(
       "div",
@@ -242,16 +257,16 @@ function JobPager({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFilt
       "div",
       { className: "flex items-center gap-2" },
       current > 1
-        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), preventScrollReset: true, className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
         : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "上一页"),
       current < totalPages
-        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), preventScrollReset: true, className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
         : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "下一页"),
     ),
   );
 }
 
-function JobListSection({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFiltersV1 }): ReactElement {
+function JobListSection({ jobs, filters, Star }: { jobs: JobListResponseV1; filters: JobFiltersV1; Star?: ComponentType<JobRowStarProps> }): ReactElement {
   return h(
     "section",
     { id: "catalog-jobs", "aria-labelledby": "catalog-job-list", "data-section": "job-list", className: "" },
@@ -268,16 +283,18 @@ function JobListSection({ jobs, filters }: { jobs: JobListResponseV1; filters: J
       : h(
           "ul",
           { className: "mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface" },
-          ...jobs.items.map((job) => h(JobRow, { key: job.id, job, back: buildCatalogHref(filters) })),
+          ...jobs.items.map((job) => h(JobRow, { key: job.id, job, back: buildCatalogHref(filters), Star })),
         ),
     h(JobPager, { jobs, filters }),
   );
 }
 
-export function JobsCatalogBoard({ catalog, jobs, filters }: {
+export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
   catalog: CareerCatalogResponseV1;
   jobs: JobListResponseV1;
   filters: JobFiltersV1;
+  /** 列表行的收藏按钮组件，由路由注入（见本文件 JobRowStarProps）；不传则列表不带收藏按钮。 */
+  starButton?: ComponentType<JobRowStarProps>;
 }): ReactElement {
   return h(
     "div",
@@ -302,6 +319,6 @@ export function JobsCatalogBoard({ catalog, jobs, filters }: {
     h(DirectionRanking, { catalog, filters }),
     h(FilterBar, { catalog, filters }),
     h(TitleRanking, { catalog, filters }),
-    h(JobListSection, { jobs, filters }),
+    h(JobListSection, { jobs, filters, Star: starButton }),
   );
 }

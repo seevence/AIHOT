@@ -6,6 +6,7 @@ import type { CareerCatalogResponseV1 } from "../../contracts/index.ts";
 import { careerApiPath, loadCareerApi, parseDashboardFilters, serializeJobFilters } from "../api";
 import { CATALOG_LIMIT, CATALOG_WINDOW_DAYS, JobsCatalogBoard } from "../components/JobsCatalogBoard";
 import { CareerError, CareerLoading, CareerPending } from "../components/CareerStates";
+import { JobStarButton } from "../components/JobStarButton";
 
 export async function loader({ request }: LoaderArgs) {
   const search = new URL(request.url).searchParams;
@@ -47,7 +48,7 @@ export default function JobsCatalogRoute() {
           <CareerPending label="正在加载筛选结果…" />
         </div>
       )}
-      <JobsCatalogBoard catalog={data.catalog} jobs={data.jobs} filters={data.filters} />
+      <JobsCatalogBoard catalog={data.catalog} jobs={data.jobs} filters={data.filters} starButton={JobStarButton} />
     </>
   );
 }

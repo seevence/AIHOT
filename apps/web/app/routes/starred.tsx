@@ -7,6 +7,8 @@ import { Presence } from "../components/ui/Presence";
 import { edgeTtl } from "../lib/api.server";
 import { pageMeta } from "../lib/seo";
 import { exportBundle, importBundle, removeStar, useStarred, type ImportReport } from "../lib/local-state";
+import { removeStarredJob, useStarredJobs } from "../../../../modules/career-insights/web/job-favorites.ts";
+import { ROLE_FAMILY_LABELS } from "../../../../modules/career-insights/web/labels.ts";
 import { fullDateTime } from "../lib/format";
 import { IconBookmark, IconDownload, IconClose } from "../components/icons";
 import { readSnapshot, restoreAnchor, useSaveOnLeave } from "../lib/restore";
@@ -35,6 +37,7 @@ function reportText(r: ImportReport): string {
 
 export default function StarredPage() {
   const starred = useStarred();
+  const starredJobs = useStarredJobs();
   const [mounted, setMounted] = useState(false);
   const [availability, setAvailability] = useState<Record<string, ItemAvailability>>({});
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -99,7 +102,7 @@ export default function StarredPage() {
 
   const action = "text-[12.5px] text-ink-3 transition-colors hover:text-accent";
   const Account = webModules().find((m) => m.account)?.account;
-  const localNote = <p className="rounded-tile border border-line bg-surface px-4 py-2.5 text-[12.5px] text-ink-3">不用登录，收藏直接存在这个浏览器里；清除浏览器数据或换设备都不会同步，换设备前可以先导出备份。</p>;
+  const localNote = <p className="rounded-tile border border-line bg-surface px-4 py-2.5 text-[12.5px] text-ink-3">不用登录，收藏直接存在这个浏览器里；清除浏览器数据或换设备都不会同步。导出/导入目前只包含文章收藏，岗位收藏只存在这个浏览器里。</p>;
   return (
     <div className="pb-12">
       <PhoneBar back={{ to: "/more", label: "我的" }} title="收藏" />
@@ -137,10 +140,52 @@ export default function StarredPage() {
           </button>
         </div>
       </Presence>
+      {mounted && (
+        <section data-starred-jobs="" aria-labelledby="starred-jobs-title" className="mt-6">
+          <h2 id="starred-jobs-title" className="text-[18px] font-semibold text-ink">收藏的岗位</h2>
+          {starredJobs.length === 0 ? (
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-3">
+              还没有收藏的岗位，在
+              <Link to="/career-insights/jobs" className="font-medium text-accent hover:underline">
+                热门岗位
+              </Link>
+              或职位详情点收藏
+            </p>
+          ) : (
+            <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
+              {starredJobs.map((job) => (
+                <li key={job.id} data-starred-job={job.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold leading-[1.6] text-ink">
+                      <Link viewTransition to={`/career-insights/jobs/${encodeURIComponent(job.id)}`} className="break-words transition-colors hover:text-accent">
+                        {job.title}
+                      </Link>
+                    </h3>
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3 break-words">
+                      {[job.company, job.locations?.join("、") || "地点未知", ROLE_FAMILY_LABELS[job.roleFamily ?? "unknown"]].join(" · ")}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-ink-4">
+                      收藏于 <span className="num">{fullDateTime(job.savedAt)}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`移除收藏：${job.title}`}
+                    onClick={() => removeStarredJob(job.id)}
+                    className="shrink-0 text-[12.5px] text-ink-3 transition-colors hover:text-accent"
+                  >
+                    移除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       {!mounted ? null : starred.length === 0 ? (
         <div className="mt-3 flex flex-col items-center rounded-card border border-dashed border-line-strong px-6 py-12 text-center">
           <IconBookmark size={20} className="text-ink-4" />
-          <p className="mt-3 text-[13px] text-ink-3">还没有收藏内容。点开任意一条内容，在详情页点击收藏即可添加。</p>
+          <p className="mt-3 text-[13px] text-ink-3">还没有收藏的文章。点开任意一条内容，在详情页点击收藏即可添加。</p>
           <p className="mt-1.5 text-[13px] text-ink-3">
             本站内容暂未接入，可先查看
             <Link to="/career-insights" className="font-medium text-accent hover:underline">

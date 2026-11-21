@@ -223,6 +223,11 @@
 - **L3b 日报 AI 评论（`0b69f95` 后端 + `d5241d5` 页面）**：`/daily` 新增「AI 评论」区块（正文 + 「生成于 … · 中置信 · 当日观测样本 N 个岗位 · 今日新增 M」），无缓存/失败整块隐藏；后台由每日管线第四步预生成并写 `career_daily_comments`，页面只读缓存；真实生成 receipt 334。
 - **已知限制 / 待办（L4 收口）**：置信度文案首页「低/中/高」与洞察页「低置信」待统一；`CareerDashboard.tsx` 与 `CareerSignals` 旧包装已无线上入口（死代码待清）；`modules/career-insights/web/README.md` 与 E8 的「8 区块/七段」口径已被本节取代。
 
+
+- **E9 三次调整（2026-11-21 中午，用户反馈）**：
+  - **岗位收藏（`a07693b`）**：收藏栏此前只用于文章，现在也用于职业岗位。存储为**浏览器本地收藏**（`aihot-starred-jobs`，上限 200，与文章收藏 `aihot-starred-items` 互不影响；保存岗位快照，下架后仍可回看）；入口在热门岗位列表行与职位详情标题区（`JobStarButton`，`aria-pressed`/`data-job-star`），`/starred` 新增「收藏的岗位」区块（中文职族/公司/城市/收藏时间/移除/跳详情 + 空态引导）。SSR/hydration 首帧为未收藏态、挂载后恢复（`useSyncExternalStore` server snapshot），跨标签 storage 事件同步；不可解析/不可显示日期会被安全替换，不会让 `/starred` 崩；**无后端/表/契约改动**（设备本地数据，换浏览器不迁移；导出/导入目前只含文章收藏，岗位收藏仅存在本浏览器，页面文案已说明）。
+  - **筛选/翻页不再重置滚动（`20cd1b0` + 回归 `f3a8f38`）**：React Router 的 `ScrollRestoration` 会为新 location 滚到页顶；给筛选 chips、清除筛选、方向/职位证据、上一页/下一页的 Link 加 `preventScrollReset`。浏览器回归（chromium）实测：点筛选后 `scrollY` 保持（478）、点下一页后落到岗位明细（3006→1336）而非页顶；变异验证（去掉 preventScrollReset / 去掉锚点）会让测试失败。
+  - **验证**：模块 standalone 含新增 `job-favorites` 7/7；`test:web` 61/61（含新增浏览器用例：收藏 2 条 + 滚动 2 条）；typecheck 0；web build 成功。
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）
 
 | # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |
