@@ -37,8 +37,13 @@ test("the daily page renders the cached AI comment with its numbers and confiden
     /生成于 2026年10月4日 16:00 · 中置信 · 当日观测样本 12 个岗位 · 今日新增 3/,
     "the metadata line reads the cache's generated_at in Beijing time, the shared confidence label and its counts",
   );
-  assert.ok(rendered.indexOf("今日概况") < rendered.indexOf("AI 评论"), "the comment follows the day's figures");
-  assert.ok(rendered.indexOf("各来源采集结果") < rendered.indexOf("AI 评论"), "the comment follows the source results");
+  // Assert the body order structurally: <head>'s meta description also names the source results.
+  const body = rendered.slice(rendered.indexOf("<body"));
+  const figuresAt = body.indexOf('id="career-daily-figures"');
+  const commentAt = body.indexOf('data-daily-comment=""');
+  const sourcesAt = body.indexOf('id="career-daily-sources"');
+  assert.ok(figuresAt >= 0 && figuresAt < commentAt, "the comment follows the day's figures");
+  assert.ok(commentAt < sourcesAt, "the source results sit at the bottom");
   // The comment joins the daily read in the same loader, once each; nothing else is read for this page.
   assert.deepEqual(
     hits.sort(),

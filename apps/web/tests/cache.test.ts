@@ -131,7 +131,17 @@ test("the home renders three brief conclusions only, keeps the daily entry and r
   const briefApi = fakeApi((url, res) => {
     if (!url.pathname.startsWith("/api/site/career-insights/")) return undefined;
     hits.push(url.pathname + url.search);
-    if (url.pathname === "/api/site/career-insights/brief") return careerBriefFixture();
+    if (url.pathname === "/api/site/career-insights/brief") {
+      return careerBriefFixture({
+        inferences: [
+          "INFERENCE-1 数据显示 data_analysis 与 large_language_models 技能",
+          "INFERENCE-2",
+          "INFERENCE-3",
+          "INFERENCE-4",
+          "INFERENCE-5",
+        ],
+      });
+    }
     // The daily read fails on purpose: its entry is navigation, so it stays while the block degrades.
     if (url.pathname === "/api/site/career-insights/daily") {
       res.statusCode = 503;
@@ -152,6 +162,11 @@ test("the home renders three brief conclusions only, keeps the daily entry and r
       assert.doesNotMatch(html, new RegExp(hidden), hidden);
     }
     assert.match(html, /中置信/, "the conclusion badge names the brief's confidence");
+    // 首页也复用全站领域词中文化：内部 id 不得出现在用户可见文本里。
+    assert.match(html, /数据分析/);
+    assert.match(html, /大语言模型/);
+    assert.doesNotMatch(html, /data_analysis/, "home brief text is localized, not raw ids");
+    assert.doesNotMatch(html, /large_language_models/, "home brief text is localized, not raw ids");
   assert.doesNotMatch(html, /置信度中/, "the home uses the site-wide confidence wording, not its old local one");
     // Adjacent JSX text nodes are split by comment markers in SSR; the rendered sentence still reads whole.
     const rendered = html.replace(/<!--[\s\S]*?-->/g, "");

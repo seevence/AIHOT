@@ -6,6 +6,7 @@ import type {
   CareerSignalsResponseV1,
 } from "../contracts/insights.ts";
 import type { DataOrigin, RoleFamily } from "../contracts/job.ts";
+import { ROLE_FAMILY_LABELS } from "../data/dictionaries.ts";
 import { InvalidParameterError } from "./errors.ts";
 import { resolveDataOrigin } from "./provenance.ts";
 
@@ -85,13 +86,8 @@ const AI_FAMILIES: ReadonlySet<RoleFamily> = new Set<RoleFamily>([
   "ai_product_operations",
 ]);
 
-const FAMILY_LABELS: Record<RoleFamily, string> = {
-  ai_algorithm: "算法",
-  ai_application_development: "AI 应用开发",
-  data: "数据",
-  ai_product_operations: "AI 产品运营",
-  unknown: "未分类",
-};
+/** 职族文案全站单一来源：与 data/dictionaries.ts 保持一致（信号卡 reason 与前端 evidence 不再两套叫法）。 */
+const FAMILY_LABELS: Record<RoleFamily, string> = ROLE_FAMILY_LABELS;
 
 export interface CareerSignalsOptions {
   limit: number;

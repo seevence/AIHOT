@@ -4,7 +4,7 @@ import { createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { CareerSignalSkippedV1, CareerSignalV1 } from "../../contracts/index.ts";
 import { SIGNAL_EMPTY_HINT, SIGNAL_EMPTY_TITLE, SIGNAL_RULE_LABELS, careerJobHref, formatRatioPercent, skippedSurgeNotice } from "../feeds.ts";
-import { confidenceLabel, ROLE_FAMILY_LABELS } from "../labels.ts";
+import { confidenceLabel, localizeDomainTerms, ROLE_FAMILY_LABELS } from "../labels.ts";
 import { formatCareerDateTime } from "../time.ts";
 
 const BADGE_CLASS = "inline-flex h-5 shrink-0 items-center rounded-full bg-amber-soft px-2 text-[11px] font-medium leading-none text-amber-ink";
@@ -51,7 +51,8 @@ export function signalEvidenceFacts(signal: CareerSignalV1): string[] {
 }
 
 function SignalItem({ signal }: { signal: CareerSignalV1 }): ReactElement {
-  const facts = signalEvidenceFacts(signal);
+  // 旧缓存里的理由与证据可能带内部 ID（职族/技能/字段名），显示前统一中文化。
+  const facts = signalEvidenceFacts(signal).map(localizeDomainTerms);
   return h(
     "li",
     { "data-signal-item": signal.rule, className: "px-4 py-3.5" },
@@ -67,7 +68,7 @@ function SignalItem({ signal }: { signal: CareerSignalV1 }): ReactElement {
       { className: "mt-1 text-[15px] font-semibold text-ink break-words" },
       h(Link, { to: careerJobHref(signal.job_id), className: "transition-colors hover:text-accent" }, h("span", { "data-signal-title": signal.job_title }, signal.job_title)),
     ),
-    h("p", { "data-signal-reason": signal.rule, className: "mt-1 text-[13px] leading-relaxed text-ink-3 break-words" }, signal.reason_text),
+    h("p", { "data-signal-reason": signal.rule, className: "mt-1 text-[13px] leading-relaxed text-ink-3 break-words" }, localizeDomainTerms(signal.reason_text)),
     facts.length > 0
       ? h("p", { "data-signal-evidence": signal.rule, className: MUTED_CLASS }, `数字依据：${facts.join(" · ")}`)
       : null,

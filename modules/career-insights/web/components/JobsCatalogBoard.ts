@@ -4,7 +4,7 @@ import { createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { JobFiltersV1, JobListResponseV1 } from "@aihot/career-insights/contracts";
 import type { CareerCatalogResponseV1, CareerDirectionV1, CareerTitleV1 } from "../../contracts/index.ts";
-import { buildJobHref, serializeJobFilters } from "../filters.ts";
+import { buildJobHref, serializeJobFilters, withJobsListAnchor } from "../filters.ts";
 import { publishedAtText } from "../feeds.ts";
 import { EMPLOYMENT_TYPE_LABELS, ROLE_FAMILY_LABELS, STUDENT_FRIENDLY_LABELS, skillLabel } from "../labels.ts";
 import { CareerTime } from "../time.ts";
@@ -114,6 +114,7 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
     { "aria-labelledby": "catalog-directions", "data-section": "direction-ranking", className: CARD_CLASS },
     h("h2", { id: "catalog-directions", className: "text-[16px] font-semibold text-ink" }, "方向榜"),
     h("p", { className: MUTED_CLASS }, `按职族聚合当前有效岗位；观察窗 ${catalog.window_days} 天。`),
+    h("p", { "data-direction-scope": "", className: `mt-1 ${MUTED_CLASS}` }, "方向榜取全量岗位；选「仅学生友好」时按学生友好岗位数排序并按该口径计数，城市等筛选不影响本榜。"),
     ranked.length === 0
       ? h("p", { "data-directions-empty": "", role: "status", className: "mt-3 text-[14px] font-medium text-ink-2" }, CATALOG_EMPTY_TEXT)
       : h(
@@ -241,10 +242,10 @@ function JobPager({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFilt
       "div",
       { className: "flex items-center gap-2" },
       current > 1
-        ? h(Link, Object.assign({ to: buildCatalogHref(filters, { page: current - 1 }), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current - 1 })), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "prev" }), "上一页")
         : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "上一页"),
       current < totalPages
-        ? h(Link, Object.assign({ to: buildCatalogHref(filters, { page: current + 1 }), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
+        ? h(Link, Object.assign({ to: withJobsListAnchor(buildCatalogHref(filters, { page: current + 1 })), className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-2" }, { "data-page": "next" }), "下一页")
         : h("span", { "aria-disabled": "true", className: "inline-flex h-8 items-center rounded-control border border-line px-3 text-[13px] text-ink-4 opacity-60" }, "下一页"),
     ),
   );
@@ -253,7 +254,7 @@ function JobPager({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFilt
 function JobListSection({ jobs, filters }: { jobs: JobListResponseV1; filters: JobFiltersV1 }): ReactElement {
   return h(
     "section",
-    { "aria-labelledby": "catalog-job-list", "data-section": "job-list", className: "" },
+    { id: "catalog-jobs", "aria-labelledby": "catalog-job-list", "data-section": "job-list", className: "" },
     h(
       "div",
       { className: "flex flex-wrap items-baseline justify-between gap-2 px-1" },
@@ -298,8 +299,8 @@ export function JobsCatalogBoard({ catalog, jobs, filters }: {
           h("p", { className: `mt-1 ${MUTED_CLASS}` }, "样本或观测日不足，先展示已有采集结果，不给出趋势判断。"),
         )
       : null,
-    h(FilterBar, { catalog, filters }),
     h(DirectionRanking, { catalog, filters }),
+    h(FilterBar, { catalog, filters }),
     h(TitleRanking, { catalog, filters }),
     h(JobListSection, { jobs, filters }),
   );

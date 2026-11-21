@@ -718,6 +718,7 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 - 口径披露：facts 显式给出「技能占比的分母：当日带技能岗位 N 个」与「当日方向未归类（unknown）岗位 M 个：单列，不进入方向榜与任何占比的分母」；prompt 要求引用占比时同时说明分母、不得把 unknown 计入分母。
 - 数字白名单：复用 brief 抽出的 `assertKnownNumbers`，只允许输入里出现的数字（含证据标题数字片段、`date`/`as_of` 日期片段），编造 999 拒绝；comment ≤400 字；confidence low/medium/high。
 - 缓存表 `career_daily_comments`（`0165`，UNIQUE(comment_date, prompt_version)），读缓存取该日最新 `generated_at`；契约只加 `CareerDailyCommentResponseV1`，openapi 同步。
+- **中文化与 prompt 版本（`61379a7`）**：模型可见输入改为中文职族/技能名 + 百分比与分母，SYSTEM_PROMPT 禁止内部 ID/英文字段名，compose 增加 sanitizer + 残留断言；`prompt_version` `career-brief/1` → `career-brief/2`（旧 2 行保留、新行 receipt 337；新行 34 段文本内部 ID 命中 0、5 处百分比均同句带分母）。
 - 2026-11-21 真实生成（receipt 332→334）：date 2026-11-21、as_of 2026-11-21T01:29:35Z、sample_size 60（当日有观测岗位）、new_jobs 34、confidence medium；页面 `/daily` 渲染「AI 评论」区块（无缓存整块隐藏）。
 - 评审 review-l3b1：PASS with minors（变异验证：comment 步骤移到 ingest 前 → 顺序测试失败；去掉数字校验 → 2 条编造数字测试失败）；minor 已处理（facts 分母/unknown 单列 + 页面文案「当日观测样本」+ 首页置信度文案统一为「低置信/中置信/高置信」）。
 

@@ -2,12 +2,13 @@
 
 ## 页面
 
-- `/`（首页，2026-11-21 L1）：5 段 —— 今日概览 / AI 就业研判（只留 inferences ≤3 + actions ≤3） / 需求变化三指标（学生友好岗位带口径注） / 最新就业日报摘要+入口 / 热门方向 Top3 一行入口；不再请求 signals 与 latest jobs。
-- `/career-insights`（2026-11-21 L2）：8 段 —— AI 趋势研判（完整 facts/inferences/actions/limitations/evidence）/ 不同寻常的信号（带数字依据与原文链接，skipped 分组提示）/ 岗位趋势 / 技能趋势 / 热门岗位摘要卡 + 跳转 jobs / 学生就业建议 / 政策与岗位联动（无共同主题整段隐藏）/ 数据范围与方法。通过正式 HTTP API 并行读取 summary、catalog、signals、brief，逐块降级。
+- `/`（首页，2026-11-21 L1 + 中文化）：5 段 —— 今日概览 / AI 就业研判（只留 inferences ≤3 + actions ≤3） / 需求变化三指标（学生友好岗位带口径注） / 最新就业日报摘要+入口 / 热门方向 Top3 一行入口；不再请求 signals 与 latest jobs。
+- `/career-insights`（2026-11-21 L2 + E9 二次调整）：**6 段** —— AI 趋势研判（完整 facts/inferences/actions/limitations/evidence，含「给学生的建议」子块）/ 不同寻常的信号（带数字依据与原文链接，skipped 分组提示）/ 岗位趋势 / 技能趋势 / 政策与岗位联动（无共同主题整段隐藏）/ 数据范围与方法。领域词（职族/技能 ID、英文字段名）在渲染前统一中文化；通过正式 HTTP API 并行读取 summary、catalog、signals、brief，逐块降级。
+- `/career-insights/jobs`：热门岗位页 —— 方向榜 → 筛选岗位 → 职位榜 → 岗位明细（明细带 `#catalog-jobs` 锚点，翻页保留滚动位置）；筛选真实生效（城市/仅学生友好收窄职位榜与明细）。
 - `/career-insights/jobs/:id`：读取职位详情与观测记录。
 - `/career-insights/policies`：政策列表页，通过正式 HTTP API 读取 `/api/site/career-insights/policies`，支持 `source_key`、`theme`、`page`、`page_size` 查询参数与分页；参数非法时显示页面级错误状态，不回退 fixture。
 - `/hot`：企业招聘热度榜，读取 `/api/site/career-insights/hot?limit=10`（公司、岗位数、前 3 个职族、最近发布日期）。
-- `/daily`：就业日报，读取 `/api/site/career-insights/daily`（当日各来源采集结果、今日新增与库表计数、空技能岗位占比），并读取 `/api/site/career-insights/daily-comment` 渲染「AI 评论」区块（后台预生成的当日点评 + 生成时间/置信度/当日观测样本/今日新增；无缓存或失败时整块隐藏，页面永不触发模型）。
+- `/daily`：就业日报（顺序：今日概况 → AI 评论 → 各来源采集结果），读取 `/api/site/career-insights/daily`（当日各来源采集结果、今日新增与库表计数、空技能岗位占比），并读取 `/api/site/career-insights/daily-comment` 渲染「AI 评论」区块（后台预生成的当日点评 + 生成时间/置信度/当日观测样本/今日新增；无缓存或失败时整块隐藏，页面永不触发模型）。
   （已更新：`/daily` 由站点日报改为就业日报；站点日报的 `/weekly`、`/monthly` 仍走 `/api/site/reports/*`。）
 
 正式页面只使用 `@aihot/web/lib/api.server` 请求 `/api/site/career-insights/*`，不导入 fixture、数据库或密钥。API 返回 503 时页面显示“数据尚未就绪”，不会自动回退 fixture；加载、空态、请求错误和单快照均有独立可见状态。

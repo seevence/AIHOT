@@ -12,6 +12,7 @@ import { logError } from "../lib/errors.server";
 import { pageReuse } from "../lib/page-reuse";
 import { pageMeta, siteLd } from "../lib/seo";
 import type { Screen } from "../components/shell/screens";
+import { localizeDomainTerms } from "../../../../modules/career-insights/web/labels.ts";
 import type { HomeBriefState } from "../features/home/contracts.ts";
 import { HOME_BRIEF_LIMIT, HOME_CATALOG_LIMIT } from "../features/home/contracts.ts";
 import { HomeWorkbench } from "../features/home/HomeWorkbench.tsx";
@@ -53,8 +54,9 @@ async function settledBrief(signal: AbortSignal): Promise<HomeBriefState> {
         generated_at,
         sample_size,
         confidence,
-        inferences: inferences.slice(0, HOME_BRIEF_LIMIT),
-        actions: actions.slice(0, HOME_BRIEF_LIMIT),
+        // 领域词在 loader 就中文化：页面可见文本与内联 payload 都不带内部英文 ID。
+        inferences: inferences.slice(0, HOME_BRIEF_LIMIT).map(localizeDomainTerms),
+        actions: actions.slice(0, HOME_BRIEF_LIMIT).map(localizeDomainTerms),
       },
     };
   } catch (error) {
