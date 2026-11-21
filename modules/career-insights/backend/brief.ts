@@ -1,13 +1,14 @@
 // 离线研判：脚本读聚合指标 → 调模型 → 按 (as_of, prompt_version) upsert 到 career_briefs；
-// 读者只经 loadCareerBrief 读缓存，不触碰模型。模型输入只有聚合数字、时间窗、样本量和可引用 id，
-// 输出里的任何数字都必须已在输入中出现。
+// 读者只经 loadCareerBrief 读缓存，不触碰模型。模型输入只有聚合数字、时间窗、样本量和可引用编号：
+// 职族/技能一律换成中文展示名，占比写成百分比，内部 id 不进 prompt；模型输出必须是中文，
+// 落库前再做一次确定性中文化清洗，任何数字都仍然必须已在输入中出现。
 import type { Db } from "@aihot/backend/db";
 import { BEIJING_TIMEZONE } from "@aihot/contracts/time";
 import type { CareerBriefV1 } from "../contracts/insights.ts";
-import type { RoleFamily } from "../contracts/job.ts";
+import { ROLE_FAMILY_LABELS, SKILL_LABELS } from "../data/dictionaries.ts";
 import { loadCareerCatalog, type CareerCatalogOptions } from "./career-catalog.ts";
 
-export const CAREER_BRIEF_PROMPT_VERSION = "career-brief/1";
+export const CAREER_BRIEF_PROMPT_VERSION = "career-brief/2";
 export const CAREER_BRIEF_PURPOSE = "career-brief";
 export const CAREER_BRIEF_CONTRACT_VERSION = "0.1" as const;
 
@@ -20,6 +21,11 @@ const MAX_TOKENS_HINT = "不超过 60 个字";
 const EARLY_LIMITATION = "观测日不足两个，只反映当前已观测到的岗位，不构成走势判断。";
 const EARLY_INFERENCE = "当前观测日不足两个，只陈述现状，暂不判断走势。";
 const WINDOW_WORDS = ["观察窗", "观测窗", "观测日", "置信度"] as const;
+const CONFIDENCE_LABELS: Readonly<Record<CareerBriefV1["confidence"], string>> = {
+  low: "低",
+  medium: "中",
+  high: "高",
+};
 const TREND_TERMS = [
   "增长", "下降", "走势", "上升", "下滑", "上涨", "下跌", "回落", "攀升", "走低", "走高",
   "减少", "增加", "提升", "降低", "扩大", "收窄", "trend", "growth", "decline", "increase",
@@ -35,28 +41,142 @@ const YEAR_MIN = 1900;
 const YEAR_MAX = 2100;
 
 const SYSTEM_PROMPT = [
-  "你是学生就业数据研判助手。输入是一份 JSON 聚合统计：岗位方向、职位、技能、观察窗、样本量、观测日数，以及可引用的岗位与政策 id。",
+  "你是学生就业数据研判助手。输入是一份中文 JSON 聚合统计：数据截止、观察窗天数、样本量、观测日数、方向、职位、技能、技能占比分母，以及可引用证据；所有名称都是中文展示值。",
   "只输出一个 JSON 对象，字段为 facts、inferences、actions、limitations、confidence、evidence，不要输出 JSON 之外的文字。",
-  "facts：只陈述输入中已有的事实，每条尽量简短；inferences：趋势推断，必须写明观察窗或置信度措辞；actions：给学生可执行的准备建议；limitations：数据与方法的限制。",
+  "输出必须全部使用中文，不得出现任何内部 ID、英文标识或英文字段名（例如 role_family、skills、share、ai_application_development、data_analysis 都不得出现在正文里）；引用职族或技能必须使用输入里的中文名称；引用技能占比必须写成百分比并在同一处说明分母（例如「占 166 个有技能岗位的 43.4%」），不要单独写百分比、不要写小数或 share；facts、inferences、actions、limitations 都适用。",
+  "facts：只陈述输入中已有的事实，每条只写一件事（不要在一句里罗列多个方向或技能），每条不超过 60 个字；inferences：趋势推断，必须写明观察窗或置信度措辞；actions：给学生可执行的准备建议；limitations：数据与方法的限制。",
   `只能使用输入中已经出现的数字，禁止编造或自行推算新数字（facts 每条${MAX_TOKENS_HINT}）。`,
-  "evidence：只能引用输入 evidence_candidates 中已有的 id，kind 取 job 或 policy，title 原样返回；没有可引用项时给空数组。",
+  "evidence：只能引用输入「可引用证据」中已有的编号；输出时 kind 取 job（对应类型 岗位）或 policy（对应类型 政策），id 填该编号，title 原样返回；没有可引用项时给空数组。",
   "confidence：low、medium、high 之一。观测日不足两个时不要写增长、下降、走势一类判断。",
 ].join("\n");
 
+/** 模型输出里常见但用户不该看到的英文字段名 → 中文说法。 */
+const FIELD_NAME_TERMS: ReadonlyArray<readonly [string, string]> = [
+  ["role_family", "职族"],
+  ["top_skills", "主要技能"],
+  ["student_friendly_count", "学生友好岗位数"],
+  ["student_friendly", "学生友好"],
+  ["new_in_window", "观察窗内新增岗位数"],
+  ["company_count", "公司数"],
+  ["job_count", "岗位数"],
+  ["job_key", "岗位"],
+  ["title_display", "职位名称"],
+  ["title_key", "职位"],
+  ["evidence_candidates", "可引用证据"],
+  ["sample_size", "样本量"],
+  ["observation_days", "观测日数"],
+  ["window_days", "观察窗天数"],
+  ["as_of", "数据截止"],
+  ["contract_version", "契约版本"],
+  ["generated_at", "生成时间"],
+  ["directions", "方向"],
+  ["titles", "职位"],
+  ["title", "标题"],
+  ["skills", "技能"],
+  ["skill", "技能"],
+  ["share", "占比"],
+  ["unknown", "未归类"],
+  ["jobs", "岗位"],
+  ["job", "岗位"],
+  ["policies", "政策"],
+  ["policy", "政策"],
+  ["evidence", "证据"],
+  ["inferences", "推断"],
+  ["limitations", "限制"],
+  ["actions", "建议"],
+  ["facts", "事实"],
+  ["confidence", "置信度"],
+  ["medium", "中"],
+  ["high", "高"],
+  ["low", "低"],
+  ["kind", "类型"],
+  ["id", "编号"],
+];
+
+/**
+ * 中文化替换表：职族 id、全部技能 id、常见英文字段名。按 id 长度降序拼成一个正则，
+ * 保证 data_analysis 先于 data、skills 先于 skill 命中；两侧用词边界，避免把 Google、
+ * email、metadata、database 这类普通英文词拆开。词典里没有的技能不展示（宁可不出现内部 id）。
+ */
+const DOMAIN_TERM_ENTRIES: ReadonlyArray<readonly [string, string]> = [
+  ...Object.entries(ROLE_FAMILY_LABELS),
+  ...Object.entries(SKILL_LABELS),
+  ...FIELD_NAME_TERMS,
+];
+
+const DOMAIN_TERM_REPLACEMENTS: ReadonlyMap<string, string> = new Map(
+  DOMAIN_TERM_ENTRIES.map(([id, label]) => [id.toLowerCase(), label]),
+);
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const DOMAIN_TERM_SOURCE =
+  "(?<![A-Za-z0-9_])(?:" +
+  [...new Set(DOMAIN_TERM_ENTRIES.map(([id]) => id))]
+    .sort((left, right) => right.length - left.length || left.localeCompare(right))
+    .map(escapeRegExp)
+    .join("|") +
+  ")(?![A-Za-z0-9_])";
+
+const DOMAIN_TERM_PATTERN = new RegExp(DOMAIN_TERM_SOURCE, "giu");
+/** 残留校验用大小写敏感版：Python、SQL 这类展示名是词典认可的写法，不算内部 id。 */
+const DOMAIN_TERM_RESIDUAL_PATTERN = new RegExp(DOMAIN_TERM_SOURCE, "u");
+
 export type CareerBriefEvidenceV1 = CareerBriefV1["evidence"][number];
 
-export type CareerBriefEvidenceCandidateV1 = CareerBriefEvidenceV1 & { role_family?: RoleFamily };
-
-/** 模型可见的全部输入：没有公司名、URL 或原文，只有聚合结果与可引用 id。 */
+/**
+ * 聚合输入：内部保留职族/技能 id 与小数占比，只用于拼中文 prompt 和数字白名单校验，
+ * 不会原样发给模型；没有公司名、URL 或原文。
+ */
 export interface CareerBriefInputV1 {
   as_of: string;
   window_days: number;
   sample_size: number;
   observation_days: number;
+  /** 技能占比的分母：有技能的岗位数（未识别技能的岗位不进分母）。 */
+  skills_sample_size: number;
   directions: CareerCatalogResponseDirectionsV1;
   titles: CareerCatalogResponseTitlesV1;
   skills: CareerCatalogResponseSkillsV1;
-  evidence_candidates: CareerBriefEvidenceCandidateV1[];
+  evidence_candidates: CareerBriefEvidenceV1[];
+}
+
+/** 模型可见的输入：名称全部是中文展示值，占比是百分比字符串，只有可引用证据保留编号。 */
+interface CareerBriefPromptInputV1 {
+  数据截止: string;
+  观察窗天数: number;
+  样本量: number;
+  观测日数: number;
+  /** 技能占比的分母：有技能的岗位数，模型引用占比时必须一并说明。 */
+  技能占比分母: number;
+  方向: Array<{
+    职族: string;
+    岗位数: number;
+    公司数: number;
+    观察窗内新增岗位数: number;
+    学生友好岗位数: number;
+    主要技能: string[];
+  }>;
+  职位: Array<{
+    职位名称: string;
+    岗位数: number;
+    公司数: number;
+    城市: string[];
+    主要技能: string[];
+    学生友好岗位数: number;
+  }>;
+  技能: Array<{
+    技能: string;
+    岗位数: number;
+    占比: string;
+  }>;
+  可引用证据: Array<{
+    类型: "岗位" | "政策";
+    编号: string;
+    标题: string;
+  }>;
 }
 
 type CareerCatalogResponseDirectionsV1 = Awaited<ReturnType<typeof loadCareerCatalog>>["directions"];
@@ -98,7 +218,10 @@ interface ObservationDaysRow {
 interface JobEvidenceRow {
   id: string;
   title: string;
-  role_family: RoleFamily;
+}
+
+interface SkillsSampleRow {
+  count: number;
 }
 
 interface PolicyEvidenceRow {
@@ -108,13 +231,18 @@ interface PolicyEvidenceRow {
 
 export async function buildCareerBriefInput(db: Db, options: CareerBriefInputOptions): Promise<CareerBriefInputV1> {
   const catalogOptions: CareerCatalogOptions = { limit: options.limit, window_days: options.window_days };
-  const [catalog, observationDays, jobEvidence, policyEvidence] = await Promise.all([
+  const [catalog, observationDays, skillsSample, jobEvidence, policyEvidence] = await Promise.all([
     loadCareerCatalog(db, catalogOptions),
     db<ObservationDaysRow[]>`
       SELECT COUNT(DISTINCT (observed_at AT TIME ZONE ${BEIJING_TIMEZONE})::date)::int AS days
       FROM career_job_observations`,
+    // 技能占比的分母，与 loadCareerCatalog 的 skills[].share 同口径：只算有技能的岗位。
+    db<SkillsSampleRow[]>`
+      SELECT COUNT(*)::int AS count
+      FROM career_jobs
+      WHERE jsonb_typeof(skills) = 'array' AND jsonb_array_length(skills) > 0`,
     db<JobEvidenceRow[]>`
-      SELECT id::text AS id, title, role_family
+      SELECT id::text AS id, title
       FROM career_jobs
       ORDER BY last_seen_at DESC, id ASC
       LIMIT ${JOB_EVIDENCE_LIMIT}`,
@@ -130,18 +258,96 @@ export async function buildCareerBriefInput(db: Db, options: CareerBriefInputOpt
     window_days: catalog.window_days,
     sample_size: catalog.sample_size,
     observation_days: observationDays[0]?.days ?? 0,
+    skills_sample_size: skillsSample[0]?.count ?? 0,
     directions: catalog.directions,
     titles: catalog.titles,
     skills: catalog.skills,
     evidence_candidates: [
-      ...jobEvidence.map((row) => ({ kind: "job" as const, id: row.id, title: row.title, role_family: row.role_family })),
+      ...jobEvidence.map((row) => ({ kind: "job" as const, id: row.id, title: row.title })),
       ...policyEvidence.map((row) => ({ kind: "policy" as const, id: row.id, title: row.title })),
     ],
   };
 }
 
+/** 技能 id → 中文展示名；词典里没有的技能不展示，避免把内部 id 写进 prompt。 */
+function skillLabel(skill: string): string | null {
+  return SKILL_LABELS[skill] ?? null;
+}
+
+function skillLabels(skills: ReadonlyArray<{ skill: string }>): string[] {
+  const labels: string[] = [];
+  for (const entry of skills) {
+    const label = skillLabel(entry.skill);
+    if (label !== null) labels.push(label);
+  }
+  return labels;
+}
+
+/** 一位小数的百分比，与日报评论同一写法；模型可以直接引用这个字符串。 */
+function percentText(share: number): string {
+  return (share * 100).toFixed(1) + "%";
+}
+
+/** 把内部聚合输入翻成模型可见的中文输入：不出现职族/技能 id 和小数占比。 */
+function buildCareerBriefPromptInput(input: CareerBriefInputV1): CareerBriefPromptInputV1 {
+  return {
+    数据截止: input.as_of,
+    观察窗天数: input.window_days,
+    样本量: input.sample_size,
+    观测日数: input.observation_days,
+    技能占比分母: input.skills_sample_size,
+    方向: input.directions.map((entry) => ({
+      职族: ROLE_FAMILY_LABELS[entry.role_family],
+      岗位数: entry.job_count,
+      公司数: entry.company_count,
+      观察窗内新增岗位数: entry.new_in_window,
+      学生友好岗位数: entry.student_friendly_count,
+      主要技能: skillLabels(entry.top_skills),
+    })),
+    职位: input.titles.map((entry) => ({
+      职位名称: entry.title_display,
+      岗位数: entry.job_count,
+      公司数: entry.company_count,
+      城市: entry.cities,
+      主要技能: skillLabels(entry.top_skills),
+      学生友好岗位数: entry.student_friendly_count,
+    })),
+    技能: input.skills.flatMap((entry) => {
+      const label = skillLabel(entry.skill);
+      return label === null ? [] : [{ 技能: label, 岗位数: entry.job_count, 占比: percentText(entry.share) }];
+    }),
+    可引用证据: input.evidence_candidates.map((candidate) => ({
+      类型: candidate.kind === "job" ? ("岗位" as const) : ("政策" as const),
+      编号: candidate.id,
+      标题: candidate.title,
+    })),
+  };
+}
+
 export function buildCareerBriefPrompt(input: CareerBriefInputV1): { system: string; user: string } {
-  return { system: SYSTEM_PROMPT, user: JSON.stringify(input) };
+  return { system: SYSTEM_PROMPT, user: JSON.stringify(buildCareerBriefPromptInput(input)) };
+}
+
+/**
+ * 确定性中文化：把模型输出里残留的职族/技能 id 与常见英文字段名换成中文展示值。
+ * 长 id 优先匹配，两侧词边界保证 Google、email、metadata、database 这类普通英文词不受影响。
+ */
+function localizeDomainTerms(text: string): string {
+  return text.replace(DOMAIN_TERM_PATTERN, (match) => DOMAIN_TERM_REPLACEMENTS.get(match.toLowerCase()) ?? match);
+}
+
+/**
+ * 兜底校验：清洗后仍出现已知内部标识就判模型输出不合规（而不是静默放过）。
+ * 大小写敏感，因为词典里的 Python、SQL 等展示名本身就是允许的写法。
+ */
+function assertNoInternalTerms(texts: readonly string[]): void {
+  for (const text of texts) {
+    const match = DOMAIN_TERM_RESIDUAL_PATTERN.exec(text);
+    if (match === null) continue;
+    throw new CareerBriefValidationError(
+      `Model output still contains an internal identifier after localization: ${match[0]} (context: ${text.slice(0, CONTEXT_CHARS)}).`,
+    );
+  }
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -345,8 +551,8 @@ export interface ComposeCareerBriefOptions {
 }
 
 /**
- * 把模型草稿变成可缓存的记录：截断 facts、丢弃输入外的证据、校验数字来源，
- * 观测日不足两个时强制 low 置信度并移除走势断言。
+ * 把模型草稿变成可缓存的记录：先把残留的内部英文标识换成中文（再校验没有残留），
+ * 然后截断 facts、丢弃输入外的证据、校验数字来源，观测日不足两个时强制 low 置信度并移除走势断言。
  */
 export function composeCareerBrief(
   input: CareerBriefInputV1,
@@ -354,13 +560,14 @@ export function composeCareerBrief(
   options: ComposeCareerBriefOptions,
 ): CareerBriefRecordV1 {
   if (!isRecord(rawDraft)) throw new CareerBriefValidationError("Model output must be a JSON object.");
-  const rawFacts = textItems(rawDraft.facts, "facts");
-  let inferences = textItems(rawDraft.inferences, "inferences");
-  let limitations = textItems(rawDraft.limitations, "limitations");
-  const actions = textItems(rawDraft.actions, "actions");
+  const localizedFacts = textItems(rawDraft.facts, "facts").map(localizeDomainTerms);
+  let inferences = textItems(rawDraft.inferences, "inferences").map(localizeDomainTerms);
+  let limitations = textItems(rawDraft.limitations, "limitations").map(localizeDomainTerms);
+  const actions = textItems(rawDraft.actions, "actions").map(localizeDomainTerms);
   const evidence = knownEvidence(input, rawDraft.evidence);
-  assertOnlyKnownNumbers(input, [...rawFacts, ...inferences, ...actions, ...limitations]);
-  const facts = rawFacts.map(clampFact);
+  assertNoInternalTerms([...localizedFacts, ...inferences, ...actions, ...limitations]);
+  assertOnlyKnownNumbers(input, [...localizedFacts, ...inferences, ...actions, ...limitations]);
+  const facts = localizedFacts.map(clampFact);
 
   const earlyObservation = input.observation_days < MIN_OBSERVATION_DAYS;
   const confidence = earlyObservation ? "low" : parseConfidence(rawDraft.confidence);
@@ -370,7 +577,7 @@ export function composeCareerBrief(
     if (!limitations.includes(EARLY_LIMITATION)) limitations = [...limitations, EARLY_LIMITATION];
   }
   if (!inferences.some((item) => WINDOW_WORDS.some((word) => item.includes(word)))) {
-    inferences.push(`以上基于 ${input.window_days} 天观察窗，置信度 ${confidence}。`);
+    inferences.push(`以上基于 ${input.window_days} 天观察窗，置信度：${CONFIDENCE_LABELS[confidence]}。`);
   }
 
   return {

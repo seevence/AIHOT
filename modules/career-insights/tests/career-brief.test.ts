@@ -9,6 +9,7 @@ import type { NormalizedJobV1 } from "../contracts/index.ts";
 import type { CareerBriefV1 } from "../contracts/insights.ts";
 import {
   CareerBriefValidationError,
+  buildCareerBriefPrompt,
   composeCareerBrief,
   generateCareerBrief,
   loadCareerBrief,
@@ -29,6 +30,7 @@ function input(overrides: Partial<CareerBriefInputV1> = {}): CareerBriefInputV1 
     window_days: 30,
     sample_size: 12,
     observation_days: 3,
+    skills_sample_size: 12,
     directions: [],
     titles: [],
     skills: [],
@@ -174,7 +176,7 @@ test("a long decimal share may be quoted at lower precision", () => {
     { generated_at: "2026-11-20T01:00:00.000Z" },
   );
 
-  assert.equal(record.facts[0], "data_analysis 占比 0.4266");
+  assert.equal(record.facts[0], "数据分析 占比 0.4266");
 });
 
 test("a percentage the input cannot support is rejected with its context", () => {
@@ -248,6 +250,94 @@ test("the string whitelist does not blanket-pass percentages", () => {
   );
 });
 
+test("the prompt input uses Chinese display names and percentages instead of internal ids", () => {
+  const promptInput = input({
+    sample_size: 222,
+    skills_sample_size: 166,
+    directions: [
+      {
+        role_family: "ai_application_development",
+        job_count: 42,
+        company_count: 3,
+        new_in_window: 42,
+        student_friendly_count: 4,
+        top_skills: [{ skill: "data_analysis", count: 22 }],
+      },
+    ],
+    titles: [
+      {
+        title_key: "算法工程师",
+        title_display: "算法工程师",
+        job_count: 7,
+        company_count: 2,
+        cities: ["北京"],
+        top_skills: [{ skill: "python", count: 5 }],
+        student_friendly_count: 0,
+        latest_published_at: null,
+      },
+    ],
+    skills: [{ skill: "data_analysis", job_count: 72, share: 72 / 166 }],
+  });
+
+  const { user } = buildCareerBriefPrompt(promptInput);
+
+  for (const internal of [
+    "ai_application_development",
+    "data_analysis",
+    "role_family",
+    "top_skills",
+    "skills",
+    "share",
+    "title_key",
+  ]) {
+    assert.equal(user.includes(internal), false, internal);
+  }
+  assert.ok(user.includes("软件 / AI 应用开发"));
+  assert.ok(user.includes("数据分析"));
+  assert.ok(user.includes("43.4%"));
+  assert.ok(user.includes("166"));
+  assert.ok(user.includes("算法工程师"));
+  assert.ok(user.includes("Python"));
+  assert.ok(user.includes("可引用证据"));
+});
+
+test("the composed brief replaces internal ids and English field names in every text field", () => {
+  const record = composeCareerBrief(
+    shareInput({ skills_sample_size: 166 }),
+    draft({
+      facts: ["data_analysis 占比 42.7%，分母为 166 个有技能岗位"],
+      inferences: ["ai_application_development 方向的 share 在观察窗内保持 0.4266"],
+      actions: ["先补齐 data_analysis 与 python 的项目经历"],
+      limitations: ["role_family 与 skills 均为中文展示值"],
+    }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.equal(record.facts[0], "数据分析 占比 42.7%，分母为 166 个有技能岗位");
+  assert.equal(record.inferences[0], "软件 / AI 应用开发 方向的 占比 在观察窗内保持 0.4266");
+  assert.equal(record.actions[0], "先补齐 数据分析 与 Python 的项目经历");
+  assert.equal(record.limitations[0], "职族 与 技能 均为中文展示值");
+
+  const serialized = JSON.stringify(record);
+  for (const internal of ["data_analysis", "ai_application_development", "role_family", "skills", "share"]) {
+    assert.equal(serialized.includes(internal), false, internal);
+  }
+});
+
+test("localization keeps ordinary English words intact and only replaces exact ids", () => {
+  const record = composeCareerBrief(
+    input(),
+    draft({
+      facts: ["Google、GitHub、email、metadata、database 都是普通英文词"],
+      inferences: ["data 方向与 AI 算法方向都需要数据分析"],
+    }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+
+  assert.equal(record.facts[0], "Google、GitHub、email、metadata、database 都是普通英文词");
+  assert.equal(record.inferences[0], "数据 方向与 AI 算法方向都需要数据分析");
+});
+
 test("evidence ids outside the input candidates are dropped silently", () => {
   const record = composeCareerBrief(
     input(),
@@ -274,6 +364,8 @@ test("a single observation day forces low confidence and removes trend claims", 
   assert.equal(record.inferences.some((line) => line.includes("增长")), false);
   assert.equal(record.limitations.some((line) => line.includes("观测日不足")), true);
   assert.equal(record.inferences.some((line) => line.includes("观察窗") || line.includes("置信度")), true);
+  assert.equal(record.inferences.some((line) => /low|medium|high/.test(line)), false);
+  assert.equal(record.inferences.at(-1), "以上基于 30 天观察窗，置信度：低。");
 });
 
 test("stored briefs are read back in contract shape and upserted per (as_of, prompt_version)", async () => {
@@ -304,6 +396,7 @@ test("stored briefs are read back in contract shape and upserted per (as_of, pro
   assert.ok(first !== null);
   assert.equal(seen[0]!.sample_size, 1);
   assert.equal(seen[0]!.observation_days, 2);
+  assert.equal(seen[0]!.skills_sample_size, 1);
   assert.equal(JSON.stringify(seen[0]).includes("测试科技有限公司"), false);
 
   await generateCareerBrief(sql, callLlm, {
