@@ -5,6 +5,8 @@ export interface BlockProbeInput {
   readonly requestUrl: string;
   readonly finalUrl: string;
   readonly bodyText: string;
+  /** 响应 Content-Type：JSON 接口的正文里可能出现「安全验证」等业务词，不能当验证码页面。 */
+  readonly contentType?: string | null;
   readonly sourceKey: string;
 }
 
@@ -48,8 +50,10 @@ export function detectBlock(input: BlockProbeInput): AccessBlockedError | null {
     return new AccessBlockedError("rate_limited", "HTTP 429 触发限频", input.sourceKey);
   }
 
+  // 只对网页正文做验证码/付费墙文案扫描：JSON API 的业务字段里可能出现「安全验证」「登录」等词。
+  const bodyTextIsWebPage = input.contentType === undefined || input.contentType === null || !/json/i.test(input.contentType);
   const lowerBody = input.bodyText.toLowerCase();
-  if (CAPTCHA_MARKERS.some((marker) => lowerBody.includes(marker.toLowerCase()))) {
+  if (bodyTextIsWebPage && CAPTCHA_MARKERS.some((marker) => lowerBody.includes(marker.toLowerCase()))) {
     return new AccessBlockedError("captcha", "出现验证码或人机验证", input.sourceKey);
   }
 
@@ -58,7 +62,7 @@ export function detectBlock(input: BlockProbeInput): AccessBlockedError | null {
     return new AccessBlockedError("login_required", "被重定向到登录入口", input.sourceKey);
   }
 
-  if (PAYWALL_MARKERS.some((marker) => lowerBody.includes(marker.toLowerCase()))) {
+  if (bodyTextIsWebPage && PAYWALL_MARKERS.some((marker) => lowerBody.includes(marker.toLowerCase()))) {
     return new AccessBlockedError("paywall", "出现付费墙", input.sourceKey);
   }
 

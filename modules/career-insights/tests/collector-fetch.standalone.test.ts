@@ -202,6 +202,22 @@ test("六类访问限制全部识别，正常页面不误判", () => {
     "paywall",
   );
   assert.equal(detectBlock({ ...base, status: 200 }), null);
+  // JSON API 的业务正文里出现「安全验证」不是验证码页面（华为招聘安全类岗位曾误判）。
+  assert.equal(
+    detectBlock({ ...base, status: 200, contentType: "application/json;charset=UTF-8", bodyText: JSON.stringify({ body: "负责产品安全验证与漏洞修复" }) }),
+    null,
+    "JSON 正文不按验证码文案误判",
+  );
+  assert.equal(
+    detectBlock({ ...base, status: 200, contentType: "application/json", bodyText: '{"captcha":true}' }),
+    null,
+    "JSON 接口的验证码标记由状态码/重定向判断，不做正文扫描",
+  );
+  assert.equal(
+    detectBlock({ ...base, status: 200, contentType: "text/html; charset=utf-8", bodyText: "请输入验证码" })?.limitationType,
+    "captcha",
+    "HTML 页面仍按验证码文案识别",
+  );
 });
 
 test("单调时钟回拨视为配置错误", () => {

@@ -35,6 +35,10 @@ test("真实 manifest 通过结构校验并满足样本配额", async () => {
       "meituan-official-careers:job:5",
       "baidu-official-careers:job:5",
       "state-council-policy:policy:4",
+      "huawei-official-careers:job:5",
+      "mohrss-policy:policy:5",
+      "netease-official-careers:job:5",
+      "didi-official-careers:job:5",
     ],
   );
 });

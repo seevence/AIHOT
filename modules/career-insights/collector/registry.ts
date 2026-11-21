@@ -8,7 +8,11 @@ import {
 } from "./adapters/policy-sources.ts";
 import type { PolicySourceAdapter } from "./adapters/policy-sources.ts";
 import { createBaiduOfficialCareersAdapter } from "./adapters/baidu-official-careers.ts";
+import { createDidiOfficialCareersAdapter } from "./adapters/didi-official-careers.ts";
+import { createHuaweiOfficialCareersAdapter } from "./adapters/huawei-official-careers.ts";
+import { createNetEaseOfficialCareersAdapter } from "./adapters/netease-official-careers.ts";
 import { createMeituanOfficialCareersAdapter } from "./adapters/meituan-official-careers.ts";
+import { createMohrssPolicyAdapter } from "./adapters/mohrss-policy.ts";
 import { createTencentOfficialCareersAdapter } from "./adapters/tencent-official-careers.ts";
 import { CAREER_SOURCE_DEFINITIONS } from "./sources.ts";
 
@@ -39,6 +43,15 @@ export function createCareerAdapters(transport: FetchTransport): CareerAdapterSe
       case "baidu-official-careers":
         jobs.push(createBaiduOfficialCareersAdapter(transport));
         break;
+      case "huawei-official-careers":
+        jobs.push(createHuaweiOfficialCareersAdapter(transport));
+        break;
+      case "netease-official-careers":
+        jobs.push(createNetEaseOfficialCareersAdapter(transport));
+        break;
+      case "didi-official-careers":
+        jobs.push(createDidiOfficialCareersAdapter(transport));
+        break;
       case "ndrc-policy":
         policies.push(createNdrcPolicySourceAdapter(transport));
         break;
@@ -47,6 +60,9 @@ export function createCareerAdapters(transport: FetchTransport): CareerAdapterSe
         break;
       case "state-council-policy":
         policies.push(createGovPolicySourceAdapter(transport));
+        break;
+      case "mohrss-policy":
+        policies.push(createMohrssPolicyAdapter(transport));
         break;
       default:
         throw new ConfigError(`来源 ${definition.source_key} 已启用但没有对应适配器实现`);
