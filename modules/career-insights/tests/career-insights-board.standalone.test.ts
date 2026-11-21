@@ -27,11 +27,13 @@ import { localizeDomainTerms, ROLE_FAMILY_LABELS } from "../web/labels.ts";
 import {
   CATALOG_EMPTY_TEXT,
   JobsCatalogBoard,
+  MAX_SEARCH_LENGTH,
   buildCatalogHref,
   catalogCityOptions,
   filterTitles,
   sortDirections,
 } from "../web/components/JobsCatalogBoard.ts";
+import { buildJobsHref, parseDashboardFilters, serializeJobFilters } from "../web/filters.ts";
 
 const AS_OF = "2026-11-20T00:00:00.000Z";
 
@@ -795,3 +797,79 @@ test("pager links keep the job list anchor while filter links do not", () => {
   assert.equal(buildCatalogHref(FILTERS, { page: 2 }), "/career-insights/jobs?page=2&page_size=20");
 });
 
+// 岗位关键词搜索（P0）：「筛选岗位」里的搜索框、标题区的当前关键词与无结果时的两个出口。
+test("the keyword search box submits to the catalog path and keeps the other filters", () => {
+  const filters: JobFiltersV1 = { ...FILTERS, city: "北京", q: "数据分析" };
+  const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters }));
+  const form = html("[data-job-search]");
+
+  assert.equal(form.length, 1);
+  assert.equal(form.attr("method"), "get");
+  assert.equal(form.attr("action"), "/career-insights/jobs");
+  assert.equal(form.attr("role"), "search");
+
+  const input = form.find("[data-search-input]");
+  assert.equal(input.attr("name"), "q");
+  assert.equal(input.attr("value"), "数据分析");
+  assert.equal(input.attr("maxlength"), String(MAX_SEARCH_LENGTH));
+  assert.match(input.attr("placeholder") ?? "", /如：数据分析/);
+  assert.equal(MAX_SEARCH_LENGTH, 100);
+
+  // 其它筛选作为隐藏域保留；页码不带，换关键词后从第 1 页看起。
+  assert.deepEqual(
+    form.find("input[type='hidden']").toArray().map((element) => [html(element).attr("name"), html(element).attr("value")]),
+    [["city", "北京"], ["page_size", "20"]],
+  );
+  assert.equal(form.find("input[type='hidden'][name='page']").length, 0);
+});
+
+test("the current keyword shows in the title area and clears without dropping the other filters", () => {
+  const filters: JobFiltersV1 = { ...FILTERS, city: "北京", q: "数据分析" };
+  const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters }));
+
+  assert.match(html("[data-search-summary]").text(), /搜索“数据分析” · 1 个岗位/);
+  assert.match(html("[data-search-current]").text(), /当前搜索“数据分析”/);
+  assert.equal(html("[data-search-clear]").text(), "清除搜索");
+  assert.equal(html("[data-search-clear]").attr("href"), "/career-insights/jobs?city=%E5%8C%97%E4%BA%AC&page=1&page_size=20");
+
+  const plain = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: FILTERS }));
+  assert.equal(plain("[data-search-summary]").length, 0);
+  assert.equal(plain("[data-search-current]").length, 0);
+  assert.equal(plain("[data-search-clear]").length, 0);
+  assert.equal(plain("[data-search-hint]").text().includes("也可以点方向/职位榜进入对应筛选"), true);
+  assert.equal(plain("[data-search-input]").attr("value"), "");
+});
+
+test("an empty keyword result offers clearing the search or seeing every job", () => {
+  const filters: JobFiltersV1 = { ...FILTERS, q: "不存在的岗位" };
+  const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: { ...JOBS, items: [], total: 0 }, filters }));
+
+  assert.match(html("[data-jobs-empty]").text(), /不存在的岗位/);
+  assert.equal(html("[data-job-search-empty-clear]").text(), "清除搜索");
+  assert.equal(html("[data-job-search-empty-clear]").attr("href"), "/career-insights/jobs?page=1&page_size=20");
+  assert.equal(html("[data-job-search-empty-all]").text(), "查看全部岗位");
+  assert.equal(html("[data-job-search-empty-all]").attr("href"), "/career-insights/jobs");
+
+  // 无关键词的普通空筛选保持原空态，不出现这两个出口。
+  const noKeyword = render(
+    createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: { ...JOBS, items: [], total: 0 }, filters: { ...FILTERS, city: "上海" } }),
+  );
+  assert.equal(noKeyword("[data-job-search-empty-clear]").length, 0);
+  assert.equal(noKeyword("[data-job-search-empty-all]").length, 0);
+});
+
+test("the catalog URL round-trips the keyword and the dashboard job links keep it", () => {
+  const filters = parseDashboardFilters(new URLSearchParams("q=%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90&city=%E5%8C%97%E4%BA%AC&page=2&page_size=50"));
+  assert.deepEqual(filters, { page: 2, page_size: 50, city: "北京", q: "数据分析" });
+  assert.equal(
+    serializeJobFilters(filters),
+    "city=%E5%8C%97%E4%BA%AC&q=%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90&page=2&page_size=50",
+  );
+
+  // 空白关键词等于没搜索；洞察页跳岗位页的链接同样带上 q。
+  assert.deepEqual(parseDashboardFilters(new URLSearchParams("q=%20%20")), { page: 1, page_size: 20 });
+  assert.equal(
+    buildJobsHref({ q: "数据分析", page: 1, page_size: 20 }),
+    "/career-insights?q=%E6%95%B0%E6%8D%AE%E5%88%86%E6%9E%90&page=1&page_size=20",
+  );
+});

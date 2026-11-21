@@ -155,15 +155,15 @@ export const ABOUT = {
   description: `关于 ${SITE.name}：${SITE.description}`,
   /** 大标题：第一行正常颜色，第二行强调色。 */
   headline: ["就业圈每天都有新动向，", "值得看的，只有几条。"] as [string, string],
-  /** 标题下面的一段话。{sources} 会换成实时的信源数（两边自动加空格，所以 {sources} 两边不写空格）；统计没取到时换成 sourcesFallback。 */
-  lead: `${SITE.name} 替你盯着{sources}个信源：抓取、归并、打分、精选，${EDITION_WHEN.daily} 出一份日报。免费，不用注册。`,
-  sourcesFallback: "十几",
-  /** 信源河动画下面的四个环节。 */
+  /** 标题下面的一段话。{sources} 会换成实时的采集来源数（两边自动加空格，所以 {sources} 两边不写空格）；统计没取到时换成 sourcesFallback。 */
+  lead: `${SITE.name} 汇总{sources}个公开招聘与政府政策来源：抓取、归一、比对，${EDITION_WHEN.daily} 出一份就业日报。免费，不用注册。`,
+  sourcesFallback: "多个",
+  /** 数据流水线下面的四个环节。 */
   steps: {
-    collect: "官方博客、媒体和个人的订阅源都在看；更新越勤的源看得越勤，最快 15 分钟看一次。",
-    store: "抓到的都存下来，同一件事的报道归到一起，热点榜就是从这里算出来的。",
-    select: `模型先看是不是这个行业的事、有没有实际信息，再写中文标题、摘要和${ITEM_COPY.reasonLabel}；营销稿和重复转发进不来。`,
-    publish: `${EDITION_WHEN.daily} 出日报，${EDITION_WHEN.weekly} 出周报，${EDITION_WHEN.monthly} 出月报。`,
+    collect: "企业官方招聘网站与政府公开政策页面，每天定时采集（约北京时间 06:10），只抓公开页面，不抓需要登录的内容。",
+    store: "抓到的岗位和政策都存下来，同一岗位的多次观测归到一起，用于计算新增、变化与去重。",
+    select: "按职族、技能、城市、学历等字段归一，标出学生友好岗位，并把异常变化单独挑出来。",
+    publish: `${EDITION_WHEN.daily} 出就业日报；周报与月报正在筹备，上线后会在页面上说明。`,
   },
   /**
    * 作者块（选填），null 就不显示。
@@ -178,7 +178,7 @@ export const ABOUT = {
     feishu?: ContactCard;
   },
   /** 页面底部的版权与下架说明，中间接“反馈页”的链接。 */
-  copyright: [`${SITE.name} 是聚合摘要和阅读索引，原文版权归各来源所有。如果你是来源方，希望更正、下架或调整展示方式，可以通过`, "联系我们。"] as [string, string],
+  copyright: [`${SITE.name} 汇总公开的岗位与政策信息，并注明来源；原文版权归各来源所有。如果你是来源方，希望更正、下架或调整展示方式，可以通过`, "联系我们。"] as [string, string],
   /** 页面底部“使用规则”链接的锚点 id（选填）：外部文档写死过这个锚点就填上，以后不要改。 */
   termsAnchor: null as string | null,
 } as const;

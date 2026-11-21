@@ -33,7 +33,9 @@ import type { CareerRepository } from "./repository.ts";
 const ROLE_FAMILIES = ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown"] as const;
 const EMPLOYMENT_TYPES = ["campus", "internship", "experienced", "other", "unknown"] as const;
 const STUDENT_FRIENDLY_VALUES = ["yes", "no", "unknown"] as const;
-const FILTER_KEYS = new Set(["role_family", "company", "city", "employment_type", "student_friendly", "skill", "page", "page_size"]);
+const FILTER_KEYS = new Set(["role_family", "company", "city", "employment_type", "student_friendly", "skill", "q", "page", "page_size"]);
+/** 岗位关键词的上限：前端输入框同样限制 100，超过按参数错误返回 400，不静默截断。 */
+const MAX_JOB_QUERY_LENGTH = 100;
 const POLICY_FILTER_KEYS = new Set(["source_key", "theme", "page", "page_size"]);
 const HOT_FILTER_KEYS = new Set(["limit", "window_days"]);
 const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
@@ -84,6 +86,19 @@ function optionalText(input: Record<string, unknown>, key: string): string | und
   return value.trim();
 }
 
+/**
+ * 关键词参数：trim 后为空视为没传（后端不按空白过滤）；非字符串（如重复参数 fastify 给的数组）或超长都 400。
+ */
+function optionalKeyword(input: Record<string, unknown>, key: string, maxLength: number): string | undefined {
+  const value = input[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "string") throw invalidParameter(key, `Query parameter must be a single string: ${key}.`);
+  const keyword = value.trim();
+  if (keyword === "") return undefined;
+  if (keyword.length > maxLength) throw invalidParameter(key, `Query parameter must be at most ${maxLength} characters: ${key}.`);
+  return keyword;
+}
+
 function pageNumber(input: Record<string, unknown>, key: string, fallback: number, maximum?: number): number {
   const raw = input[key];
   if (raw === undefined) return fallback;
@@ -108,6 +123,7 @@ function parseJobFilters(query: unknown): JobFiltersV1 {
   const company = optionalText(input, "company");
   const city = optionalText(input, "city");
   const skill = optionalText(input, "skill");
+  const keyword = optionalKeyword(input, "q", MAX_JOB_QUERY_LENGTH);
 
   return {
     ...(roleFamily === undefined ? {} : { role_family: roleFamily }),
@@ -116,6 +132,7 @@ function parseJobFilters(query: unknown): JobFiltersV1 {
     ...(employmentType === undefined ? {} : { employment_type: employmentType }),
     ...(studentFriendly === undefined ? {} : { student_friendly: studentFriendly }),
     ...(skill === undefined ? {} : { skill }),
+    ...(keyword === undefined ? {} : { q: keyword }),
     page: pageNumber(input, "page", 1, MAX_PAGE),
     page_size: pageNumber(input, "page_size", DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE),
   };

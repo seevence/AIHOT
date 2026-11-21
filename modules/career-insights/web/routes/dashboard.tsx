@@ -8,6 +8,7 @@ import { loadCareerSignals } from "../feeds.server";
 import type { CareerBriefV1, CareerCatalogResponseV1 } from "../../contracts/index.ts";
 import { CareerInsightsBoard } from "../components/CareerInsightsBoard";
 import { CareerError, CareerLoading } from "../components/CareerStates";
+import { careerDashboardMeta } from "../seo";
 
 const CATALOG_LIMIT = 10;
 const CATALOG_WINDOW_DAYS = 30;
@@ -56,8 +57,9 @@ export function headers() {
 
 export const handle: Screen = { tab: "insights", name: "职业洞察" };
 
-export function meta() {
-  return [{ title: "职业洞察" }];
+/** 标题/描述/canonical 见 web/seo.ts；联调样例（虚构数据）不索引。 */
+export function meta({ loaderData }: { loaderData?: Awaited<ReturnType<typeof loader>> }) {
+  return careerDashboardMeta(loaderData?.summary?.data_origin);
 }
 
 export const HydrateFallback = CareerLoading;

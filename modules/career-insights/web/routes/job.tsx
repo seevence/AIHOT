@@ -1,10 +1,12 @@
 import { data, isRouteErrorResponse, useLoaderData, useRouteError } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
+import { pageMeta } from "@aihot/web/lib/seo";
 import type { JobDetailResponseV1, ObservationPublicV1 } from "@aihot/career-insights/contracts";
 import { careerApiPath, loadCareerApi } from "../api";
 import { safeBackHref } from "../filters";
 import { CareerError, CareerLoading, FixtureNotice, SingleSnapshotNotice } from "../components/CareerStates";
 import { JobDetail } from "../components/JobDetail";
+import { jobMeta } from "../seo";
 import { CareerTime } from "../time";
 
 export async function loader({ params, request }: LoaderArgs) {
@@ -18,8 +20,10 @@ export function headers() {
   return { "Cache-Control": "no-store" };
 }
 
-export function meta() {
-  return [{ title: "职位详情 · 职业洞察" }];
+/** 职位名 + 库里的公司/城市/职族等事实（见 web/seo.ts），canonical 带 id；加载失败时不索引。 */
+export function meta({ loaderData }: { loaderData?: Awaited<ReturnType<typeof loader>> }) {
+  if (!loaderData) return pageMeta({ title: "职位详情", path: "/career-insights/jobs", noindex: true });
+  return jobMeta(loaderData.detail);
 }
 
 export const HydrateFallback = CareerLoading;

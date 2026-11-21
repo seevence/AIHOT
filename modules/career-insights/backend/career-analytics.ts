@@ -9,6 +9,7 @@ import type {
 } from "../contracts/insights.ts";
 import type { RoleFamily } from "../contracts/job.ts";
 import { InvalidParameterError } from "./errors.ts";
+import { careerPolicyRelevanceSql } from "./policy-relevance.ts";
 import { resolveDataOrigin } from "./provenance.ts";
 
 export const DEFAULT_HOT_LIMIT = 10;
@@ -181,7 +182,8 @@ export async function loadCareerDaily(db: Db): Promise<CareerDailyResponseV1> {
     db<DailyPolicyRow[]>`
       SELECT COUNT(*)::int AS policies_total,
              COUNT(*) FILTER (WHERE first_seen_at >= ${dayStart})::int AS new_policies_today
-      FROM career_policies`,
+      FROM career_policies
+      WHERE ${careerPolicyRelevanceSql()}`,
     db<DailyRunRow[]>`
       SELECT source_key,
              COALESCE(SUM(job_count), 0)::int AS collected,

@@ -72,6 +72,8 @@ export interface JobFiltersV1 {
   employment_type?: EmploymentType;
   student_friendly?: StudentFriendly;
   skill?: string;
+  /** 关键词：同时匹配职位名、公司名、技能与城市；不区分大小写，空串忽略，最长 100 字符。 */
+  q?: string;
   page: number;
   page_size: number;
 }

@@ -108,38 +108,31 @@ function structured($: cheerio.CheerioAPI): Array<Record<string, unknown>> {
   return $("script[type='application/ld+json']").toArray().flatMap((node) => JSON.parse($(node).text()));
 }
 
-test("filtered feeds keep their exact content address but leave indexing to the public landing pages", async () => {
-  for (const query of ["channel=news", "category=ai-models", "tag=Agent", "channel=x&category=paper&tag=Agent"]) {
+test("the retired feed section is one noindex placeholder whatever its address says", async () => {
+  for (const query of ["channel=news", "category=ai-models", "tag=Agent", "channel=x&category=paper&tag=Agent", "q=Claude&tab=relevance&page=2&anchorAt=old"]) {
     const $ = await page(`/all?${query}&utm_source=fixture&anchorAt=old&deep=1`);
     assert.equal($("meta[name=robots]").attr("content"), "noindex, follow", `/all?${query}`);
-    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?${query}`);
-    assert.ok($("main").text().includes(item.title));
+    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all`, `/all?${query}`);
+    assert.match($("main").text(), /改版/, `/all?${query} shows the rebuild placeholder`);
   }
-  const $ = await page("/all?q=Claude&tab=relevance&page=2&anchorAt=old");
-  assert.equal($("meta[name=robots]").attr("content"), "noindex, follow");
-  assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?q=Claude&tab=relevance&page=2`);
-  // The home page is the career workbench now: a feed channel selects nothing there, so it keeps the
-  // landing page's own address and stays indexable.
+  // The home page is the career workbench now: it keeps its own address and stays indexable.
   const home = await page("/?channel=news");
   assert.equal(home("meta[name=robots]").attr("content"), "max-image-preview:large");
   assert.equal(home("link[rel=canonical]").attr("href"), `${web.origin}/`);
-  assert.ok(!home("main").text().includes(item.title), "the filtered feed lives on /all");
 });
 
-test("ordinary feed pages remain indexable and normalize ignored parameters", async () => {
-  for (const [requested, canonical] of [["/?channel=invalid&category=invalid&tag=%20&utm_source=fixture", "/"], ["/all?channel=all&tab=relevance&anchorAt=old&utm_source=fixture", "/all"]]) {
-    const $ = await page(requested!);
-    assert.equal($("meta[name=robots]").attr("content"), "max-image-preview:large");
-    assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}${canonical}`);
-  }
+test("the career home stays indexable and normalizes ignored parameters", async () => {
+  const $ = await page("/?channel=invalid&category=invalid&tag=%20&utm_source=fixture");
+  assert.equal($("meta[name=robots]").attr("content"), "max-image-preview:large");
+  assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/`);
 });
 
-test("全部动态's later pages leave search to its first page and keep their links followed", async () => {
+test("the retired feed section is not indexed from any of its later pages", async () => {
   const $ = await page("/all?channel=all&tab=relevance&anchorAt=old&page=2&utm_source=fixture");
   assert.equal($("meta[name=robots]").attr("content"), "noindex, follow");
-  assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all?page=2`);
-  assert.match($("title").text(), new RegExp(`^${SEO_TITLES.all} · 第 2 页`), "the title still names what the list is");
-  assert.ok($("main").text().includes(item.title), "the page itself is unchanged");
+  assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/all`);
+  assert.match($("title").text(), /改版中/, "the placeholder title says the section is under rebuild");
+  assert.match($("main").text(), /改版/);
 });
 
 test("an event page stands in search once it gathers more than one report", async () => {
@@ -150,28 +143,20 @@ test("an event page stands in search once it gathers more than one report", asyn
   assert.equal(several("meta[name=googlebot]").length, 0);
 });
 
-// Chinese readers search issues by the date as they write it ("10月4日 AI 新闻"), not by the key.
-// /daily is the career daily now, not an industry issue; the industry issues left are the weekly and monthly.
-for (const [kind, label, date] of [["weekly", "周报", "9月28日—10月4日"], ["monthly", "月报", "2026年10月"]] as const) {
-  test(`${kind} issue metadata describes its visible lead and the permanent entry names the latest issue's date`, async () => {
-    const r = report(kind);
-    const $ = await page(`/${kind}/${r.key}`);
-    const title = `${withSubject(label)}｜${date}：${r.lead!.title}`;
-    const description = `${date} ${withSubject("资讯")}：${r.lead!.leadParagraph}`;
-    assert.equal($("meta[name=description]").attr("content"), description);
-    assert.equal($("title").text(), `${title} · ${SITE.name}`);
-    assert.equal($("meta[property='og:title']").attr("content"), title);
-    assert.ok($("main").text().includes(r.lead!.title));
-    const article = structured($).find((entry) => entry["@type"] === "NewsArticle")!;
-    assert.equal(article.headline, title);
-    assert.equal(article.image, `${web.origin}/og/reports/${kind}/${r.key}.png`);
-    assert.equal("dateModified" in article, false);
-    const latest = await page(`/${kind}`);
-    assert.equal(latest("title").text(), `${SEO_TITLES.latestReport(kind, date)} · ${SITE.name}`);
-    assert.ok(latest("title").text().includes(date));
-    assert.equal(latest("meta[name=description]").attr("content"), description);
-    // The heading says what the page is searched by, as its title does, with the issue's full date.
-    assert.equal(latest("h1#report-start .sr-only").text(), SEO_TITLES.latestReport(kind, dateLine(kind, r.key)));
+// /weekly and /monthly keep their entries, but no edition exists yet: the entry is an honest placeholder.
+// any old issue address land on the same honest "being prepared" placeholder.
+for (const [kind, label] of [["weekly", "周报"], ["monthly", "月报"]] as const) {
+  test(`${kind} entry and old issue addresses are one noindex "being prepared" placeholder`, async () => {
+    for (const p of [`/${kind}`]) {
+      const $ = await page(p);
+      const name = withSubject(label);
+      assert.equal($("title").text(), `${name}筹备中 · ${SITE.name}`, p);
+      assert.equal($("meta[name=robots]").attr("content"), "noindex, follow", p);
+      assert.equal($("link[rel=canonical]").attr("href"), `${web.origin}/${kind}`, p);
+      assert.match($("meta[name=description]").attr("content") ?? "", /正在筹备/, p);
+      assert.ok($("main").text().includes(`${name}正在筹备`), p);
+      assert.ok($("main").text().includes("就业日报"), `${p} points readers at the daily`);
+    }
   });
 }
 
@@ -182,13 +167,13 @@ test("a daily without a lead is not headed by a report its highlights were only 
   assert.equal(structured($).find((entry) => entry["@type"] === "NewsArticle")!.headline, title);
 });
 
-test("the daily archive and the career daily have their own names instead of an issue's", async () => {
+test("the archive placeholder and the career daily have their own names instead of an issue's", async () => {
   const archive = await page("/daily/archive");
-  assert.equal(archive("title").text(), `${withSubject("日报")} · 历史存档 · ${SITE.name}`);
-  assert.equal(archive("meta[name=robots]").attr("content"), "max-image-preview:large");
+  assert.equal(archive("title").text(), `${withSubject("日报")}合订本筹备中 · ${SITE.name}`);
+  assert.equal(archive("meta[name=robots]").attr("content"), "noindex, follow");
   assert.equal(archive("link[rel=canonical]").attr("href"), `${web.origin}/daily/archive`);
-  // Its own description, not the latest issue's lead.
-  assert.equal(archive("meta[name=description]").attr("content"), `${SITE.name} 历史日报，按日期归档。`);
+  assert.match(archive("meta[name=description]").attr("content") ?? "", /正在筹备/);
+  assert.ok(archive("main").text().includes("合订本正在筹备"));
   const daily = await page("/daily");
   assert.equal(daily("title").text(), `就业日报（2026-10-04） · ${SITE.name}`);
   assert.equal(daily("link[rel=canonical]").attr("href"), `${web.origin}/daily`);

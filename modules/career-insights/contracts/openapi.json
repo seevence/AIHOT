@@ -33,6 +33,7 @@
           { "name": "employment_type", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/EmploymentType" } },
           { "name": "student_friendly", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/StudentFriendly" } },
           { "name": "skill", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "q", "in": "query", "required": false, "description": "关键词：同时匹配职位名、公司名、技能与城市；不区分大小写，trim 后为空不过滤，超过 100 字符返回 400。", "schema": { "type": "string", "maxLength": 100 } },
           { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "default": 1 } },
           { "name": "page_size", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
         ],
@@ -92,7 +93,7 @@
       "get": {
         "operationId": "listCareerPolicies",
         "summary": "政策文件列表",
-        "description": "facets 为全量分面：只统计 published_at 非空的全表，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
+        "description": "facets 为全量分面：只统计通过就业/产业发展相关性判定且 published_at 非空的政策，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
         "parameters": [
           { "name": "source_key", "in": "query", "required": false, "schema": { "type": "string" } },
           { "name": "theme", "in": "query", "required": false, "schema": { "type": "string" } },
@@ -281,7 +282,7 @@
         }
       },
       "PolicyFacetsV1": {
-        "description": "全量分面：只统计 published_at 非空的全表，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
+        "description": "全量分面：只统计通过就业/产业发展相关性判定且 published_at 非空的政策，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
         "type": "object",
         "required": ["sources", "themes"],
         "properties": {
@@ -532,6 +533,7 @@
           "employment_type": { "$ref": "#/components/schemas/EmploymentType" },
           "student_friendly": { "$ref": "#/components/schemas/StudentFriendly" },
           "skill": { "type": "string" },
+          "q": { "type": "string", "maxLength": 100 },
           "page": { "type": "integer", "minimum": 1 },
           "page_size": { "type": "integer", "minimum": 1, "maximum": 100 }
         }

@@ -11,6 +11,7 @@ import {
 } from "./backend/llm-incremental.ts";
 import { parseLastJsonLine, runModelCli, type ModelCliOutcome } from "./backend/model-cli.ts";
 import { careerIngestQueue } from "./backend/queue.ts";
+import { careerSitemapEntries } from "./backend/sitemap.ts";
 import { SqlCareerRepository } from "./backend/sql-repository.ts";
 
 const repository = new SqlCareerRepository();
@@ -320,6 +321,8 @@ const server: ServerModule = {
   http(app) {
     registerCareerHttp(app, repository);
   },
+  // 职业洞察、热门岗位、政策页与每个存在的岗位详情（上限与 lastmod 见 backend/sitemap.ts）。
+  sitemap: { entries: () => careerSitemapEntries() },
   alerts: careerIngestAlerts,
   queues: [careerIngestQueue],
   schedules: createCareerSchedules({

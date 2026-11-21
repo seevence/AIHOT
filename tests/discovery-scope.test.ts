@@ -24,7 +24,11 @@ test("llms and sitemap build from current topic scope rather than a cached direc
   assert.equal((await topicPageCounts()).find((topic) => topic.slug === "minimax")!.indexable, true);
   await sql`UPDATE publications SET visibility = 'withdrawn' WHERE source_id = ${source}`;
   assert.ok(!(await loadLlmsAvailability()).topics.some((topic) => topic.slug === "minimax"));
+  // /topics is a noindex placeholder now, so the directory page is not advertised; with no indexable
+  // topic page left there is no topics section at all.
+  const index = await app.inject("/sitemap.xml");
+  assert.ok(!index.body.includes("/sitemaps/topics.xml"), "no indexable topic page: no topics section");
   const sitemap = await app.inject("/sitemaps/topics.xml");
-  assert.equal(sitemap.statusCode, 200);
+  assert.equal(sitemap.statusCode, 404, "nothing to list for topics");
   assert.ok(!sitemap.body.includes("/topics/minimax</loc>"));
 });

@@ -5,6 +5,7 @@ import type { DataOrigin, PolicyEvidenceRefV1 } from "../contracts/index.ts";
 import { THEME_KEYWORDS } from "../data/dictionaries.ts";
 import type { MetricJobInputV1 } from "../data/metrics.ts";
 import { InvalidParameterError } from "./errors.ts";
+import { assessPolicyRelevance, careerPolicyRelevanceSql } from "./policy-relevance.ts";
 import { finishRun, startRun } from "./run-repository.ts";
 import { inTransaction } from "./transaction.ts";
 
@@ -161,6 +162,22 @@ export async function writePolicyBatch(db: Db, batch: PolicyBatchInputV1): Promi
           if (errors.length < MAX_REPORTED_ISSUES) errors.push({ index, code: "validation_failed", message: problem });
           continue;
         }
+        // 通用政府文件库会混进任免、选举、外事等与就业/产业无关的文件：入库即拒绝并计数，
+        // 不静默丢弃，也不让它们以后再进库。判定只看标题，与读侧过滤同一份规则。
+        const relevance = assessPolicyRelevance(item.title);
+        if (!relevance.relevant) {
+          rejected += 1;
+          if (errors.length < MAX_REPORTED_ISSUES) {
+            errors.push({
+              index,
+              code: "policy_irrelevant",
+              message: relevance.reason === "excluded_topic"
+                ? `title contains an excluded topic: ${relevance.matched}`
+                : "title has no employment or industry-development keyword",
+            });
+          }
+          continue;
+        }
 
         const existing = await tx<{ id: string; content_hash: string }[]>`
           SELECT id, content_hash FROM career_policies
@@ -237,7 +254,7 @@ export async function listPolicyEvidence(db: Db, limit = POLICY_EVIDENCE_LIMIT):
   const rows = await db<PolicyRow[]>`
     SELECT policy_item_id, title, issuer, published_at, official_url, source_tier, theme_ids, evidence_excerpt
     FROM career_policies
-    WHERE published_at IS NOT NULL
+    WHERE published_at IS NOT NULL AND ${careerPolicyRelevanceSql()}
     ORDER BY published_at DESC, policy_item_id ASC
     LIMIT ${Math.min(Math.max(limit, 0), POLICY_EVIDENCE_LIMIT)}`;
 

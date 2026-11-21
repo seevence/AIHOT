@@ -10,13 +10,11 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { chromium, webkit, expect, type Browser, type Page } from "@playwright/test";
-import type { ReportDetail, ReportKind } from "@aihot/contracts/site";
 import { FIXTURE_AT as at, careerDailyCommentFixture, fakeApi, feedItem, itemDetail, startWebServer, visit, type WebServer } from "./web-server.ts";
 
 const longText = "查看完整说明 https://example.org/announcements/" + "a".repeat(100) + "。";
 const longTitle = "一条很长的标题".repeat(30);
 const longUrl = "https://example.org/positions/" + "c".repeat(120);
-const keys = { daily: "2026-10-15", weekly: "2026-W42", monthly: "2026-10" };
 /** The career pages' data: numbers that let every block render its real layout, not just its fallback. */
 const careerSummary = {
   contract_version: "0.1", data_origin: "live", as_of: at, sample_size: 12, company_count: 3, source_count: 2,
@@ -98,17 +96,6 @@ const api = fakeApi((url) => {
       page: 1, pageCount: 1, total: 1, todayCount: 1, freshness: at,
     };
   }
-  const match = /^\/api\/site\/reports\/(daily|weekly|monthly)\/latest-page$/.exec(path);
-  if (match) {
-    const kind = match[1] as ReportKind;
-    const report: ReportDetail = {
-      kind, key: keys[kind], issueNumber: 1, title: "报告宽度", generatedAt: "2026-10-15T00:00:00Z",
-      lead: { title: "今日头条", leadParagraph: longText }, leadItemId: "fixture", overview: longText,
-      highlights: [], sections: [{ label: "动态", summary: null, items: [{ itemId: "fixture", title: "今日头条", summary: longText, sourceName: "Fixture", sourceUrl: "https://example.org/article", sourceIconUrl: null, firstParty: true, publishedAt: null, available: true }] }],
-      flashes: [], cover: null, metrics: {}, readingMinutes: 1, prev: null, next: null, mentions: [],
-    };
-    return { index: [{ key: report.key, issueNumber: 1 }], report };
-  }
 });
 let web: WebServer;
 let chrome: Browser;
@@ -128,11 +115,12 @@ type Shell = "phone" | "desktop";
  * and tab bar links only exist there, so the desktop shell waits on the page body instead.
  */
 const PAGES: Array<{ path: string; ready: (page: Page, shell: Shell) => Promise<void> }> = [
+  // The report latest pages now say they are being prepared; the entry row stays.
   ...["weekly", "monthly"].map((kind) => ({
     path: `/${kind}`,
-    ready: async (page: Page, shell: Shell) => {
-      await expect(page.getByRole("heading", { name: "今日头条", exact: true })).toBeVisible();
-      if (shell === "phone") await expect(page.getByRole("link", { name: "周报", exact: true }).filter({ visible: true })).toBeVisible();
+    ready: async (page: Page) => {
+      await expect(page.getByRole("heading", { level: 1 })).toContainText("筹备");
+      await expect(page.getByRole("navigation", { name: "报告入口" })).toBeVisible();
     },
   })),
   {
@@ -169,9 +157,19 @@ const PAGES: Array<{ path: string; ready: (page: Page, shell: Shell) => Promise<
   {
     path: "/all",
     ready: async (page: Page) => {
-      await expect(page.getByRole("link", { name: "代表文章", exact: true }).filter({ visible: true }).first()).toBeVisible();
-      // The same-event line renders the whole long title; it must not push the page wider.
-      await expect(page.getByText(longTitle).first()).toBeVisible();
+      await expect(page.getByRole("heading", { name: "该板块正在改版", exact: true })).toBeVisible();
+    },
+  },
+  {
+    path: "/topics",
+    ready: async (page: Page) => {
+      await expect(page.getByRole("heading", { name: "该板块正在改版", exact: true })).toBeVisible();
+    },
+  },
+  {
+    path: "/daily/archive",
+    ready: async (page: Page) => {
+      await expect(page.getByRole("heading", { level: 1 })).toContainText("筹备");
     },
   },
   {
