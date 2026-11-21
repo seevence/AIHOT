@@ -224,6 +224,13 @@
 - **已知限制 / 待办（L4 收口）**：置信度文案首页「低/中/高」与洞察页「低置信」待统一；`CareerDashboard.tsx` 与 `CareerSignals` 旧包装已无线上入口（死代码待清）；`modules/career-insights/web/README.md` 与 E8 的「8 区块/七段」口径已被本节取代。
 
 
+- **E9 比赛冲刺（2026-11-21 下午，P0 收口）**：
+  - **岗位搜索（`0521091`）**：`GET /api/site/career-insights/jobs?q=`（title/company/skills/locations 参数化 ILIKE、转义通配符、q≤100、与其它筛选/分页/total 一致）；岗位页「筛选岗位」顶部搜索框（回车提交、保留其它筛选、结果摘要「搜索“q” · N 个岗位」、无结果空态双出口）；jobs-catalog 页 meta（title/description/canonical）；全局搜索浮层对非空 q 增加「在岗位中搜索」入口（文章搜索随 /all 改版暂不可达）。
+  - **完整 SEO（`5ca3310`）**：`web/seo.ts` 统一构造；职位详情 title=职位名、description=公司/城市/职族等事实、canonical 带 id、JobPosting JSON-LD（datePosted/招聘组织/城市/directApply=false，无 validThrough，fixture 不索引）；洞察/政策页 meta；`backend/sitemap.ts` + `server.ts` 的 `sitemap.entries` 插座：`/sitemaps/career-insights.xml`（3 个索引页 + 最多 5000 个岗位，lastmod）；静态 sitemap 移除 `/all`、`/topics`，weekly/monthly 仅有期数才进。
+  - **空页收口与预留入口（`6abe614`）**：`/all`、`/topics` 改为「正在改版」占位 + noindex（不再渲染旧 AI 分类/38 主题）；`/weekly`、`/monthly`、`/daily/archive` 改为「筹备中」占位（保留报告入口行与导航，不彻底下线）；`/about` 统计改就业口径（5 来源/222 岗位/6 政策/3 天观测，取不到显示「数据更新中」）；terms/privacy 落地真实条款（公开来源、每日 06:10 采集、本地收藏、免责、反馈联系）。
+  - **政策相关性（`b7cb9fc` + `2f50bf2`）**：`policy-relevance.ts` 确定性判定（就业/人才/教育/劳动/社保 **+** 产业发展/战略/行动方案/守信激励/信用/营商环境白名单；选举/任免/党委/外事/军事/纪念表彰黑名单）；采集入库拒绝不相关（rejected 计数），列表/分面/日报计数/研判与评论的政策输入统一同一 SQL 口径；现有 6 条 → 显示 4（新型储能、中医药、守信激励清单、节约战略），隐藏 2（选举、党委条例）。
+  - **底座 AI 源停用（`0d5839a`）**：`industry/sources.json` 18 个 AI RSS 源显式 enabled:false（新部署 seed 也不会重开），本机库 sources 表同步停用，避免误开采集污染就业站。
+  - **未做（按用户安排）**：P0-7 告警可达留到赛后（需飞书 webhook）。
 - **E9 四次调整（2026-11-21 下午）**：
   - **收藏岗位显示可能已下架（1cf92be）**：新增只读批量接口 /api/site/career-insights/jobs/availability?ids=（≤200、UUID、visible/missing、no-store，与岗位详情可见性一致）；/starred 的「收藏的岗位」对 missing 行显示「可能已下架（仍可移除）」，链接与移除保留，接口失败静默降级；SSR 首帧无徽标。
   - **网站改名 THEWIND（655a930）**：用户可见品牌统一（站名/标题/结构化数据/RSS/og/后台/关于页），去掉上游 AIHOT 页脚与外链；公开技术标识 mcpPrefix myhot→thewind、interfaceVersion 4.0.0→5.0.0（分享/导出文件名同步）；基础设施标识（包名/DB/compose/env/localStorage/cookie/links.aihot）保持。详见 docs/specs/brand-rename-2026-11-21.md。

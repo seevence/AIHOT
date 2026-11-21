@@ -93,7 +93,7 @@
       "get": {
         "operationId": "listCareerPolicies",
         "summary": "政策文件列表",
-        "description": "facets 为全量分面：只统计 published_at 非空的全表，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
+        "description": "facets 为全量分面：只统计通过就业/产业发展相关性判定且 published_at 非空的政策，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
         "parameters": [
           { "name": "source_key", "in": "query", "required": false, "schema": { "type": "string" } },
           { "name": "theme", "in": "query", "required": false, "schema": { "type": "string" } },
@@ -282,7 +282,7 @@
         }
       },
       "PolicyFacetsV1": {
-        "description": "全量分面：只统计 published_at 非空的全表，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
+        "description": "全量分面：只统计通过就业/产业发展相关性判定且 published_at 非空的政策，不随 page / page_size / source_key / theme 变化；sources 按 source_key 升序，themes 按 count 降序；themes count 之和可小于 total（无主题的政策不计数）。",
         "type": "object",
         "required": ["sources", "themes"],
         "properties": {
