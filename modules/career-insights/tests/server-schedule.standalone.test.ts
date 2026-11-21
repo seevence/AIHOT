@@ -5,7 +5,12 @@
 // 下面的 fake 依赖不碰真实数据库、子进程与模型。
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { emptyIncrementalLlmDetail } from "../backend/llm-incremental.ts";
+import {
+  DEFAULT_BUDGET_PROMPT_TOKENS,
+  DEFAULT_BUDGET_ROWS,
+  DEFAULT_SINCE_HOURS,
+  emptyIncrementalLlmDetail,
+} from "../backend/llm-incremental.ts";
 import { buildIngestReport } from "../collector/cli/ingest-career.ts";
 import server, { createCareerSchedules, type CareerDailyDeps, type CareerDailyResult } from "../server.ts";
 
@@ -62,7 +67,11 @@ test("同一个 run 里先采集、等采集成功返回后才兜底：fake 调�
     async llm(options) {
       calls.push("llm");
       assert.deepEqual(calls, ["ingest:start", "ingest:done", "llm"], "兜底在采集 resolve 之后才开始，不是并发启动");
-      assert.deepEqual(options, { budgetRows: 80, budgetTokens: 120_000, sinceHours: 2 });
+      assert.deepEqual(
+        options,
+        { budgetRows: DEFAULT_BUDGET_ROWS, budgetTokens: DEFAULT_BUDGET_PROMPT_TOKENS, sinceHours: DEFAULT_SINCE_HOURS },
+        "注入的预算/窗口就是 llm-incremental 的导出默认值，server 不写死数字",
+      );
       return llmResult(true);
     },
   };
@@ -105,4 +114,17 @@ test("采集成功但兜底 ok:false：run 正常返回，detail 里采集结果
   assert.deepEqual(result.failedSources, ["career-dji"], "顶层 failedSources 供 alerts.ts 读取，形状不变");
   assert.equal(result.llm.ok, false, "兜底失败只记在 detail.llm，不升级为 job 失败");
   assert.match(result.llm.error ?? "", /退出码/);
+});
+
+test("兜底意外 throw（违反 runIncrementalLlmCron 不抛的契约）：job 失败", async () => {
+  // runIncrementalLlmCron 的契约是失败也返回 ok:false、不抛错。一旦它违反契约抛错，让整个 job 失败、
+  // 采集 report 不落 detail 是有意的：这类 bug 要在 job_runs 里显形，而不是被静默吞掉变成"成功"。
+  const [schedule] = createCareerSchedules({
+    ingest: async () => ingestResult(),
+    llm: async () => {
+      throw new Error("兜底子进程意外抛错");
+    },
+  });
+
+  await assert.rejects(schedule!.run(), /兜底子进程意外抛错/);
 });

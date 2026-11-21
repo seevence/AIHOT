@@ -21,8 +21,9 @@ import { LLM_NORMALIZER_VERSION } from "../data/normalize.ts";
  */
 export const DEFAULT_BUDGET_ROWS = 80;
 /**
- * 每次兜底的 prompt token 估算上限。估算公式按 chars/1.5 保守估计（2026-11-21 实测 27 行估算 48645、
- * 实际 usage 33070），120000 估算额约够 80 行，避免因估算偏保守提前触顶、把行留给已经不覆盖它的下一轮。
+ * 每次兜底的 prompt token 估算上限。估算公式按 chars/1.5 保守估计：2026-11-21 实测 27 行估算 48645
+ * （≈1802 token/行），120000 按这个比例只够约 60-67 行；一天新增约 30-50 行，余量充足。避免因估算
+ * 偏保守提前触顶、把行留给已经不覆盖它们的下一轮。
  */
 export const DEFAULT_BUDGET_PROMPT_TOKENS = 120_000;
 /** 默认只处理最近这么小时内被采集更新过的行（每天 06:10 采集成功后立即兜底，2 小时窗口覆盖整轮采集）。 */
@@ -33,7 +34,7 @@ export const CHARS_PER_TOKEN = 1.5;
 const MAX_ATTEMPTS = 2;
 /** 同时最多几个模型调用，与手工回填一致。 */
 export const DEFAULT_CONCURRENCY = 3;
-/** 兜底最多 50 行模型调用，15 分钟仍未结束视为失败。 */
+/** 兜底最多 80 行模型调用（与 DEFAULT_BUDGET_ROWS 同口径），15 分钟仍未结束视为失败。 */
 const CLI_TIMEOUT_MS = 15 * 60_000;
 const CLI_MAX_BUFFER = 4 * 1024 * 1024;
 /** 仓库根：cron 以子进程在仓库根目录执行 CLI。 */

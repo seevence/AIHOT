@@ -1,14 +1,14 @@
 // 每日采集后的增量 LLM 兜底 CLI：只对「--since-hours 窗口内被采集更新过、且仍未分类」的行调用模型。
 // node scripts/backfill-incremental-llm.ts                                   默认 dry-run（会真实调用模型，但不写库）
 // node scripts/backfill-incremental-llm.ts --apply                           写回派生字段
-// node scripts/backfill-incremental-llm.ts --budget-rows 50 --budget-tokens 50000 --since-hours 2 [--apply]
+// node scripts/backfill-incremental-llm.ts --budget-rows 80 --budget-tokens 120000 --since-hours 2 [--apply]
 //
-// 定时任务（modules/career-insights/server.ts 的 career.llm-normalize，06:40）以子进程方式带 --apply 调用
-// 本脚本，并在子进程环境里显式 MODEL_CALLS_ENABLED=true；worker 自己的开关保持原样，所以这一步不会替
-// 其它任务打开模型调用。写回只碰 role_family / student_friendly / skills / 经验年限 / normalizer_version /
-// updated_at，不写观测、不动 last_seen_at 和 content_hash。
+// 定时任务（modules/career-insights/server.ts 的 career.ingest，06:10 采集成功后在同一个 job 里串行执行）
+// 以子进程方式带 --apply 调用本脚本，并在子进程环境里显式 MODEL_CALLS_ENABLED=true；worker 自己的开关
+// 保持原样，所以这一步不会替其它任务打开模型调用。写回只碰 role_family / student_friendly / skills /
+// 经验年限 / normalizer_version / updated_at，不写观测、不动 last_seen_at 和 content_hash。
 //
-// 输出：人读日志与失败说明走 stderr；stdout 只有最后一行 JSON 汇总（job_runs.detail 用），定时任务直接解析。
+// 输出：人读日志与失败说明走 stderr；stdout 只有最后一行 JSON 汇总（写进 job_runs.detail.llm），定时任务直接解析。
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { parseEnv } from "node:util";

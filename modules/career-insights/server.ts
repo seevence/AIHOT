@@ -2,7 +2,13 @@ import type { Scheduled, ServerModule } from "@aihot/backend/modules";
 import { runCareerIngest, type CareerIngestRunResult } from "./collector/cli/ingest-career.ts";
 import { careerIngestAlerts } from "./backend/alerts.ts";
 import { registerCareerHttp } from "./backend/http.ts";
-import { runIncrementalLlmCron, type IncrementalLlmCronDetail } from "./backend/llm-incremental.ts";
+import {
+  DEFAULT_BUDGET_PROMPT_TOKENS,
+  DEFAULT_BUDGET_ROWS,
+  DEFAULT_SINCE_HOURS,
+  runIncrementalLlmCron,
+  type IncrementalLlmCronDetail,
+} from "./backend/llm-incremental.ts";
 import { careerIngestQueue } from "./backend/queue.ts";
 import { SqlCareerRepository } from "./backend/sql-repository.ts";
 
@@ -10,14 +16,6 @@ const repository = new SqlCareerRepository();
 
 /** 每个来源抓几页；与兜底同属一个 job，测试按这个值断言注入的采集参数。 */
 const INGEST_PAGE_LIMIT = 2;
-/**
- * 兜底预算：80 行约等于一天新增岗位量（约 30-50 行）的余量，12 万 prompt token 按 chars/1.5 的保守估算
- * 约够 80 行；窗口 2 小时覆盖整轮采集（采集成功后立即进入兜底，不必再错开）。
- * 预算必须够处理完一天的批次：被跳过的行不会被下一轮 2 小时窗口再选中。
- */
-const LLM_BUDGET_ROWS = 80;
-const LLM_BUDGET_TOKENS = 120_000;
-const LLM_SINCE_HOURS = 2;
 
 /** 每日 job 的两个步骤；测试注入 fake，不碰真实数据库、子进程与模型。 */
 export interface CareerDailyDeps {
@@ -38,11 +36,23 @@ export type CareerDailyResult = CareerIngestRunResult & { llm: IncrementalLlmCro
  *
  * 采集抛错时整个 job 失败：不执行兜底，也不吞错。兜底返回 ok:false（子进程失败/超时）不算 job 失败，
  * 只记在 detail.llm 里，采集成果照样保留在 detail 里。
+ *
+ * 预算与窗口直接用 llm-incremental 的默认值（80 行 / 120000 token / 2 小时），不在这里复制数值，
+ * 避免两处默认值漂移。120000 按实测 ≈1802 token/行 约够 60-67 行，一天新增约 30-50 行，余量充足；
+ * 2 小时窗口覆盖整轮采集（采集成功后立即进入兜底，不必再错开）。被预算跳过的行不会被下一轮 2 小时
+ * 窗口再选中，所以预算要够处理完一天的批次。
+ *
+ * 最坏耗时 = 采集约 53s + 兜底 CLI 15min（CLI_TIMEOUT_MS）< cron 队列 expireInSeconds=3600
+ * （apps/worker/src/schedules.ts 统一给 cron.* 队列设的过期时间），不会被 pg-boss 判过期。
  */
 function careerDailyRun(deps: CareerDailyDeps): () => Promise<CareerDailyResult> {
   return async () => {
     const ingest = await deps.ingest({ pageLimit: INGEST_PAGE_LIMIT });
-    const llm = await deps.llm({ budgetRows: LLM_BUDGET_ROWS, budgetTokens: LLM_BUDGET_TOKENS, sinceHours: LLM_SINCE_HOURS });
+    const llm = await deps.llm({
+      budgetRows: DEFAULT_BUDGET_ROWS,
+      budgetTokens: DEFAULT_BUDGET_PROMPT_TOKENS,
+      sinceHours: DEFAULT_SINCE_HOURS,
+    });
     return { ...ingest, llm };
   };
 }
