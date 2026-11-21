@@ -1,6 +1,6 @@
 // The catalog endpoint serves the direction/title/skill leaderboards. These tests seed real jobs
 // through ingest, then assert the ranking, the cross-city title merge, the skill share denominator
-// and the route's parameter bounds and no-store header.
+// and the route's parameter bounds and public cache header.
 import { createHash } from "node:crypto";
 import assert from "node:assert/strict";
 import { after, beforeEach, test } from "node:test";
@@ -153,7 +153,7 @@ test("skill share is computed over jobs that list skills", async () => {
   assert.equal(result.skills[1]!.share, 2 / 3, "the job without skills stays out of the denominator");
 });
 
-test("the catalog route enforces parameter bounds, no-store, defaults, and an empty table", async () => {
+test("the catalog route enforces parameter bounds, a public cache, defaults, and an empty table", async () => {
   const app = Fastify();
   registerCareerHttp(app, repository);
   await app.ready();
@@ -166,7 +166,7 @@ test("the catalog route enforces parameter bounds, no-store, defaults, and an em
 
   const empty = await app.inject({ url: "/api/site/career-insights/catalog" });
   assert.equal(empty.statusCode, 200);
-  assert.equal(empty.headers["cache-control"], "no-store");
+  assert.equal(empty.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
   assert.deepEqual(empty.json().directions, []);
   assert.deepEqual(empty.json().titles, []);
   assert.deepEqual(empty.json().skills, []);

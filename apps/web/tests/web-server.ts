@@ -10,6 +10,7 @@ import type { Page } from "@playwright/test";
 import type { DataRouter } from "react-router";
 import type { FeedItemSummary, SiteItemDetail } from "@aihot/contracts/site";
 import type { CareerBriefV1, CareerDailyCommentResponseV1 } from "@aihot/career-insights/contracts";
+import type { CareerDailyHistoryResponseV1 } from "../../../modules/career-insights/contracts/history.ts";
 
 /** When the synthetic reports were published. */
 export const FIXTURE_AT = "2026-10-04T08:00:00.000Z";
@@ -65,6 +66,10 @@ export function careerApi(url: URL, res: ServerResponse, overrides: CareerApiOve
         default:
           return overrides.dailyComment;
       }
+    case "/api/site/career-insights/daily/history":
+      // 往期目录默认是空的：还没有第二期时页面落回「筹备中」空态；要一页历史数据的测试
+      // 在自己的 fakeApi 路由里返回 careerDailyHistoryFixture()。
+      return careerDailyHistoryFixture();
     case "/api/site/career-insights/brief":
       res.statusCode = 204;
       res.end();
@@ -88,6 +93,31 @@ export function careerBriefFixture(overrides: Partial<CareerBriefV1> = {}): Care
     evidence: [{ kind: "job", id: "EVIDENCE-ONLY-IN-INSIGHTS", title: "EVIDENCE-ONLY-IN-INSIGHTS" }],
     limitations: ["LIMITATION-ONLY-IN-INSIGHTS"], confidence: "medium",
     ...overrides,
+  };
+}
+
+/** A page of the daily archive; empty by default so pages fall back to their "being prepared" state. */
+export function careerDailyHistoryFixture(overrides: Partial<CareerDailyHistoryResponseV1> = {}): CareerDailyHistoryResponseV1 {
+  return {
+    contract_version: "0.1",
+    data_origin: "live",
+    page: 1,
+    page_size: 20,
+    total: overrides.entries?.length ?? 0,
+    entries: [],
+    ...overrides,
+  };
+}
+
+/** One archived day, with the fields a page shows. */
+export function careerDailyHistoryEntry(fields: Partial<CareerDailyHistoryResponseV1["entries"][number]> & Pick<CareerDailyHistoryResponseV1["entries"][number], "date">): CareerDailyHistoryResponseV1["entries"][number] {
+  return {
+    sample_size: 0,
+    new_jobs: 0,
+    new_policies: 0,
+    confidence: null,
+    comment_summary: null,
+    ...fields,
   };
 }
 

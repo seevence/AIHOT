@@ -17,9 +17,9 @@ import {
   CareerCommentValidationError,
   generateCareerDailyComment,
 } from "../modules/career-insights/backend/career-daily-comment.ts";
+import { careerStepModel } from "../modules/career-insights/backend/models.ts";
 
 const REPO_ROOT = path.resolve(import.meta.dirname, "..");
-const LLM_MODEL = "default";
 const LLM_MAX_TOKENS = 800;
 const LLM_TIMEOUT_MS = 120_000;
 
@@ -134,11 +134,13 @@ async function run(jsonMode: boolean): Promise<void> {
 
   try {
     const { chatJson } = await import("../packages/backend/src/providers/llm.ts");
+    // 日报评论这一步的模型：后台切换 > CAREER_DAILY_COMMENT_MODEL > site/models.ts 的 DEFAULTS。
+    const model = await careerStepModel("career.daily-comment", sql);
     const record = await generateCareerDailyComment(
       sql,
       async (input, prompt) => {
         const result = await chatJson({
-          model: LLM_MODEL,
+          model,
           purpose: CAREER_DAILY_COMMENT_PURPOSE,
           subject: "career-daily-comment:" + input.date,
           promptVersion: CAREER_DAILY_COMMENT_PROMPT_VERSION,

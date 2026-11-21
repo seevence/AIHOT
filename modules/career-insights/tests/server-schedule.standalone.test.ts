@@ -127,8 +127,8 @@ async function runBriefScript(args: readonly string[], env: NodeJS.ProcessEnv) {
 
 test("career-insights 只有一条每日 06:10 的 schedule，missed 只补一次", () => {
   const schedules = server.schedules ?? [];
-  assert.equal(schedules.length, 1, "采集、兜底与研判在同一个 run 里，不再有独立的兜底/研判 schedule");
-  assert.deepEqual(schedules.map((entry) => entry.name), ["career.ingest"], "career.llm-normalize 已删除");
+  assert.equal(schedules.length, 2, "采集、兜底、研判与日报评论在同一个 run 里；推送是独立的默认关闭 schedule");
+  assert.deepEqual(schedules.map((entry) => entry.name), ["career.ingest", "career.push-daily"], "career.llm-normalize 已删除；推送默认关闭但 schedule 已注册");
 
   const [schedule] = schedules;
   assert.ok(schedule);

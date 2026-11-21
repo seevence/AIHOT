@@ -143,7 +143,7 @@ test("the hot route rejects limit and window_days outside the bounds", async () 
 
   const response = await app.inject({ url: "/api/site/career-insights/hot" });
   assert.equal(response.statusCode, 200);
-  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
   assert.equal(response.json().window_days, 30);
   assert.equal(response.json().entries.length, 2);
   await app.close();
@@ -269,7 +269,7 @@ test("the daily route rejects query parameters and answers today", async () => {
 
   const response = await app.inject({ url: "/api/site/career-insights/daily" });
   assert.equal(response.statusCode, 200);
-  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
   assert.equal(response.json().has_run, false);
   assert.equal(
     response.json().date,

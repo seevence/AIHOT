@@ -62,6 +62,10 @@ MCP 默认接受 `SITE_URL` 的主机以及 `localhost`、`127.0.0.1`、`[::1]`�
 
 ### 更新
 
+#### 空转的引擎定时任务清退（2026 年 11 月 21 日）
+
+没有数据库迁移，也没有新的必填配置。站点没有引擎文章时，`content.sweep`、`content.translate`、`hot.rank`、`hot.snapshot`、`stories.links`、`reports.compose`、`reports.source-health` 七个定时任务只在空表上空转（`reports.compose` 已失败 164 次），现在 worker 不再注册它们；worker 启动时会自动删掉它们留下的 `cron.*` 执行队列，后台“运行”页里已有的历史记录继续保留。页面路由和对应的引擎函数都还在，需要时可在后台手动触发或由别的流程调用。已关闭采集/模型（`COLLECT_ENABLED=false`、`MODEL_CALLS_ENABLED=false`）的站点本来就不会收到引擎日报缺期告警；以后重新打开引擎采集时，引擎日报要另外接回生成流程。
+
 **2026 年 10 月 31 日的引擎同步**有三个数据库迁移（`0090`–`0092`），照下面的命令更新时 setup 会跑它们：信源多一列可选的类别 `selection_class`，反馈多了 `kind`（类型）和 `idea`（归入的建议）两列，都可以为空，旧数据不用改。没有必填的新环境变量。要注意的变化：
 
 - **`industry/selection.ts` 多了 `classes` 和 `browseFloor`**，见 [精选与校准](selection.md#门槛industryselectionts)；自己改过这个文件的，合并时补上这两项，不补通不过类型检查。
@@ -263,6 +267,54 @@ docker compose exec -T db pg_dump -U aihot aihot | gzip > myhot-$(date +%F).sql.
 ```
 
 数据都在三个 Docker 卷里：`db`（数据库）、`data`（上传的图片、图片缓存、本地备份）、`caddy`（证书）。`docker compose down` 不会删除它们；`docker compose down -v` 会。
+
+#### 本地备份与恢复（不依赖对象存储）
+
+没有配置 `DB_BACKUP_STORE_*`（任何 S3 兼容的对象存储）时，上面的 `ops.backup` 不会注册，也就没有自动备份。仓库里的 `scripts/backup-local.ts` 用本机 `pg_dump` 做兜底：把数据库按自定义格式备份到 `<AIHOT_DATA_DIR>/backups/<UTC 时间戳>.dump`（目录不存在会建好），默认保留最近 7 份，更旧的自动删除；它只清理自己命名的 `<时间戳>.dump`，不碰同一目录里 `ops.backup` 写下的 `<库名>-<时间戳>.dump`。这个脚本只备份数据库，附件目录（`uploads/` 等）仍要靠对象存储备份或自己打包数据目录。
+
+手动跑一次（连接串先取 `DATABASE_URL`，也可以显式给；`--keep` 改保留份数）：
+
+```bash
+node scripts/backup-local.ts
+node scripts/backup-local.ts --database-url postgres://aihot:密码@127.0.0.1:5432/aihot --keep 14
+# Docker 部署：镜像自带 pg_dump/pg_restore，AIHOT_DATA_DIR=/data，备份落在 data 卷的 /data/backups
+docker compose exec worker node scripts/backup-local.ts
+```
+
+恢复默认只打印目标库和文件、不改任何数据；加 `--yes` 才执行 `pg_restore --clean --if-exists`，会覆盖目标库里同名对象，目标库必须已经存在：
+
+```bash
+# 先恢复到临时库演练（不要直接指向正式库）
+node scripts/restore-local.ts .data/backups/20261121T063012Z.dump --database-url postgres://aihot:密码@127.0.0.1:5432/aihot_restore_test --yes
+# Docker 部署在 worker 容器里跑，路径用 /data/backups/...
+docker compose exec worker node scripts/restore-local.ts /data/backups/20261121T063012Z.dump --database-url "$DATABASE_URL" --yes
+```
+
+演练步骤：
+
+1. 跑一次备份，确认输出的文件存在、大小合理（脚本会用 `pg_restore --list` 校验归档能读）。
+2. 建一个临时库（例如 `aihot_restore_test`），用 `--database-url` 指向它并加 `--yes` 恢复；正式库不受影响。
+3. 在临时库上抽查关键表行数（`articles`、`career_jobs`、`career_policies` 等），或让一个 API 实例连它启动、访问 `/api/health`。
+4. 确认无误后删掉临时库；需要正式恢复时先停 api/worker，按同样命令指向正式库，恢复后再启动。
+5. Windows 上没有 `pg_dump`：按上方说明在 WSL2 或 Docker 里跑，本机 Docker 部署用 `docker compose exec worker ...`。
+
+本地备份是兜底，不替代对象存储备份：它只有本机一份，机器或磁盘坏了备份也没了。有 `DB_BACKUP_STORE_*` 时仍以每天 04:10 的对象存储备份为准（含附件），本地脚本可以另按自己的节奏跑，比如发布前手工备份一次。脚本的数据库账号密码只通过环境变量 `PGUSER`/`PGPASSWORD` 传给 `pg_dump`/`pg_restore`，不出现在命令行里。
+
+### 就业日报推送（默认关闭）
+
+默认什么都不发。要让 worker 每天 06:30（Asia/Shanghai）把就业日报摘要（日期、新增岗位/政策、政策要闻与方向/岗位 Top3，带 `/daily`、`/career-insights` 等站内链接）推到飞书群：
+
+1. 在飞书群里添加一个“自定义机器人”，复制它的 webhook 地址。
+2. 在 `.env` 里设：
+
+   ```dotenv
+   CAREER_PUSH_ENABLED=true
+   CAREER_PUSH_WEBHOOK_URL=https://open.feishu.cn/open-apis/bot/v2/hook/...
+   ```
+
+3. 重启 worker（`docker compose up -d worker`）。之后每天 06:30 一条；worker 停过而漏掉的槽位在下次启动时补发一次（`missed: "once"`）。
+
+开关只认 `true`：`CAREER_PUSH_ENABLED` 不是 `true` 时任务照常到点，但只写一条 skipped 日志、不发请求；开关打开而 `CAREER_PUSH_WEBHOOK_URL` 为空时也只记日志、不发请求、不报错。发送失败（webhook 被删、飞书拒绝、网络不通）会记在后台“运行”页的 `career.push-daily` 失败里，并自动重试一次；机器人限流时等下一次即可。推送只读数据库里的每日聚合，不调用模型，页面和公开接口不受影响。任务由 `modules/career-insights/server.ts` 注册，和 `career.ingest` 并列；不想要就保持开关关闭或删掉 `CAREER_PUSH_WEBHOOK_URL`。
 
 ### 看日志
 
