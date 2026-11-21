@@ -5,7 +5,8 @@
 // 模型语义（prompt、输出 schema、后置校验、与既有值的合并）由调用方注入：定时任务用子进程跑
 // scripts/backfill-incremental-llm.ts，那里复用 scripts/backfill-normalizer-llm.ts 的同一套实现，
 // 模块本身不反向 import scripts。进程内核心是 runIncrementalLlm；cron 入口是 runIncrementalLlmCron
-// （子进程显式 MODEL_CALLS_ENABLED=true，worker 自己的开关不变），返回值直接进 job_runs.detail。
+// （子进程显式 MODEL_CALLS_ENABLED=true，worker 自己的开关不变），返回值进同一 job 的 job_runs.detail.llm，
+// 由 server.ts 的 career.ingest 在采集成功之后串行调用（两个步骤不能拆成两条 schedule）。
 import { execFile } from "node:child_process";
 import path from "node:path";
 import type { Sql } from "@aihot/backend/db";
@@ -13,11 +14,18 @@ import type { JSONValue } from "postgres";
 import type { RoleFamily, StudentFriendly } from "../contracts/index.ts";
 import { LLM_NORMALIZER_VERSION } from "../data/normalize.ts";
 
-/** 每次兜底最多调用模型的行数。 */
-export const DEFAULT_BUDGET_ROWS = 50;
-/** 每次兜底的 prompt token 估算上限。 */
-export const DEFAULT_BUDGET_PROMPT_TOKENS = 50_000;
-/** 默认只处理最近这么小时内被采集更新过的行（06:10 采集、06:40 兜底，留半小时余量）。 */
+/**
+ * 每次兜底最多调用模型的行数。80 约等于一天新增岗位量（约 30-50 行）的余量：预算触顶被跳过的行
+ * 仍是旧 normalizer_version，但下一轮 sinceHours 窗口已不含它们（除非当天又被采集到），等于永久漏掉，
+ * 所以行数预算要够处理完一天的批次。
+ */
+export const DEFAULT_BUDGET_ROWS = 80;
+/**
+ * 每次兜底的 prompt token 估算上限。估算公式按 chars/1.5 保守估计（2026-11-21 实测 27 行估算 48645、
+ * 实际 usage 33070），120000 估算额约够 80 行，避免因估算偏保守提前触顶、把行留给已经不覆盖它的下一轮。
+ */
+export const DEFAULT_BUDGET_PROMPT_TOKENS = 120_000;
+/** 默认只处理最近这么小时内被采集更新过的行（每天 06:10 采集成功后立即兜底，2 小时窗口覆盖整轮采集）。 */
 export const DEFAULT_SINCE_HOURS = 2;
 /** 与手工回填一致：中文按 1.5 字符约等于 1 token 估算。 */
 export const CHARS_PER_TOKEN = 1.5;

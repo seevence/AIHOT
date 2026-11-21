@@ -4,6 +4,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
+  DEFAULT_BUDGET_PROMPT_TOKENS,
+  DEFAULT_BUDGET_ROWS,
   emptyIncrementalLlmDetail,
   estimatePromptTokens,
   incrementalLlmArgs,
@@ -19,7 +21,7 @@ import {
 import { careerNormalizationSpec, parseBackfillArgs } from "../../../scripts/backfill-incremental-llm.ts";
 import { LLM_NORMALIZER_VERSION, NORMALIZER_VERSION } from "../data/normalize.ts";
 
-/** 06:40 的 cron 回看 2 小时的窗口起点（UTC；Asia/Shanghai 04:40）。 */
+/** 兜底回看 2 小时的窗口起点（UTC；Asia/Shanghai 04:40）；采集在 06:10 写入的行落在窗口内。 */
 const WINDOW_START = new Date("2026-11-19T20:40:00.000Z");
 
 interface JobRecord extends IncrementalJobRow {
@@ -391,8 +393,13 @@ test("cron 兜底：子进程失败不抛异常，结构化 detail 记录错误�
   assert.match(noSummary.error ?? "", /MODEL_CALLS_ENABLED/);
 });
 
+test("默认预算覆盖一天的批次：不少于 80 行 / 120000 prompt token", () => {
+  assert.ok(DEFAULT_BUDGET_ROWS >= 80, `预算行数 ${DEFAULT_BUDGET_ROWS} 至少要盖住一天新增的 30-50 行批次`);
+  assert.ok(DEFAULT_BUDGET_PROMPT_TOKENS >= 120_000, "token 预算按 chars/1.5 的保守估算要够 80 行");
+});
+
 test("CLI 默认 dry-run 与默认预算/窗口，显式参数覆盖；非法取值直接报错", () => {
-  assert.deepEqual(parseBackfillArgs([]), { apply: false, budgetRows: 50, budgetTokens: 50_000, sinceHours: 2 });
+  assert.deepEqual(parseBackfillArgs([]), { apply: false, budgetRows: 80, budgetTokens: 120_000, sinceHours: 2 });
   assert.deepEqual(
     parseBackfillArgs(["--apply", "--budget-rows", "12", "--budget-tokens", "3456", "--since-hours", "5"]),
     { apply: true, budgetRows: 12, budgetTokens: 3456, sinceHours: 5 },
@@ -400,8 +407,8 @@ test("CLI 默认 dry-run 与默认预算/窗口，显式参数覆盖；非法取
   assert.throws(() => parseBackfillArgs(["--budget-rows", "0"]), /正整数/);
   assert.throws(() => parseBackfillArgs(["--budget-tokens"]), /正整数/);
   assert.throws(() => parseBackfillArgs(["--since-hours", "2.5"]), /正整数/);
-  assert.deepEqual(incrementalLlmArgs(), ["--apply", "--budget-rows", "50", "--budget-tokens", "50000", "--since-hours", "2"]);
-  assert.deepEqual(incrementalLlmArgs({ apply: false }), ["--budget-rows", "50", "--budget-tokens", "50000", "--since-hours", "2"]);
+  assert.deepEqual(incrementalLlmArgs(), ["--apply", "--budget-rows", "80", "--budget-tokens", "120000", "--since-hours", "2"]);
+  assert.deepEqual(incrementalLlmArgs({ apply: false }), ["--budget-rows", "80", "--budget-tokens", "120000", "--since-hours", "2"]);
 });
 
 test("汇总 JSON 取 stdout 最后一行的对象，日志行与坏行被跳过", () => {
