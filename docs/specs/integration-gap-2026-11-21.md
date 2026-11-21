@@ -14,6 +14,25 @@
 - ✅ **P0-6 政策相关性**（`b7cb9fc` + `2f50bf2`）：宽口径（就业 + 产业发展支持指导类），采集拒绝 + 读侧一致；现有 6 条显示 4、隐藏 2。
 - ✅ **P0-7 清理底座 AI RSS 源**（`0d5839a`）：18 个源 seed 显式停用 + 本机库停用。
 
+### 2026-11-21 傍晚：P1/P2 已全部落地
+
+- P1-1 后台就业数据视图（`/admin/career` + `/api/admin/career`）。
+- P1-2 retention（observations 180 天 / ingest_runs 90 天，模块 socket）。
+- P1-3 career 模型步骤（`career.brief`/`career.daily-comment`/`career.llm-normalize`）。
+- P1-4 底座 7 个空转 cron 清退（sweep/translate/hot.rank/hot.snapshot/stories.links/reports.compose/reports.source-health）。
+- P1-5 备份可用（本地 `scripts/backup-local.ts`/`restore-local.ts`，含恢复演练与部署文档；对象存储备份仍可选）。
+- P1-6 就业日报归档（history API + `/daily/archive` 真实列表）与 06:10 文案统一。
+- P1-7 `/hot` 导航入口（「就业热点」）。
+- P1-8 日报推送（默认关闭，`CAREER_PUSH_ENABLED`+`CAREER_PUSH_WEBHOOK_URL`）。
+- P2-1 公开 API v1 + MCP abilities + llms。
+- P2-2 就业 RSS（jobs/policies/career-daily）+ 页面 alternate。
+- P2-3 IndexNow/百度：sitemap 已含 career，开开关即覆盖（需 key/token）。
+- P2-4 结构化数据 ItemList/Breadcrumb 补充；分享图沿用站点默认 og（P3 可做单岗位图）。
+- P2-5 主题：`/topics` 已隐藏 + noindex（等价“隐藏并 noindex”方案）。
+- P2-6 career API 缓存分级（ETag/304 + public 缓存）。
+
+仍未做/依赖外部凭据：告警 webhook 实配（P0-7，赛后）、对象存储备份（可选）、IndexNow/百度 key（可选）、读者账号云同步（P3）。
+
 仍待办（P1/P2，见上文）：后台 career 视图、retention、models 注册、空转 cron 清退、备份启用、日报归档与 08:00 文案、`/hot` 入口、内容群推送；公开岗位/政策 API + OpenAPI + llms + MCP、就业 RSS、IndexNow/百度、分享图、主题就业化、career API 缓存。
 
 ## 一、结论

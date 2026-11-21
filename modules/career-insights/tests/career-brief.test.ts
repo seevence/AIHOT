@@ -529,7 +529,7 @@ test("an empty catalog skips the model and writes nothing", async () => {
   assert.equal(counts[0]!.count, 0);
 });
 
-test("the brief route answers 204 without a cache and 200 with no-store when cached", async () => {
+test("the brief route answers 204 without a cache and 200 with a public cache when cached", async () => {
   const cached: CareerBriefV1 = {
     contract_version: "0.1",
     generated_at: "2026-11-20T01:00:00.000Z",
@@ -554,7 +554,7 @@ test("the brief route answers 204 without a cache and 200 with no-store when cac
   const cachedApp = await build(fakeRepository(async () => cached));
   const served = await cachedApp.inject({ method: "GET", url: "/api/site/career-insights/brief" });
   assert.equal(served.statusCode, 200);
-  assert.equal(served.headers["cache-control"], "no-store");
+  assert.equal(served.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
   assert.deepEqual(served.json(), cached);
   await cachedApp.close();
 });

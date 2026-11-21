@@ -73,7 +73,7 @@ test("the policy route passes the parsed filters to the repository", async () =>
 
   assert.equal(response.statusCode, 200);
   assert.deepEqual(seen, { source_key: "ndrc-policy", theme: "employment_promotion", page: 2, page_size: 5 });
-  assert.equal(response.headers["cache-control"], "no-store");
+  assert.equal(response.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
 });
 
 test("the policy route rejects unsupported and malformed parameters", async () => {

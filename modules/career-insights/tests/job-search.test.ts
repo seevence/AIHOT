@@ -179,7 +179,7 @@ test("the route accepts a keyword, ignores blank keywords, and rejects oversized
   try {
     const matched = await app.inject({ url: jobsUrl("?q=%E6%95%B0%E6%8D%AE") });
     assert.equal(matched.statusCode, 200);
-    assert.equal(matched.headers["cache-control"], "no-store");
+    assert.equal(matched.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
     const matchedBody = matched.json();
     assert.equal(matchedBody.total, 1);
     assert.deepEqual(matchedBody.items.map((item: { title: string }) => item.title), ["数据分析工程师"]);

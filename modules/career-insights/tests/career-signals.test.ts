@@ -189,7 +189,7 @@ test("an algorithm-titled job requiring mechanical skills reports skill_mismatch
   assert.match(signal.reason_text, /疑似跨界错配/);
 });
 
-test("the signals route enforces limit bounds, no-store, and answers an empty table with empty lists", async () => {
+test("the signals route enforces limit bounds, a public cache, and answers an empty table with empty lists", async () => {
   const app = Fastify();
   registerCareerHttp(app, repository);
   await app.ready();
@@ -202,7 +202,7 @@ test("the signals route enforces limit bounds, no-store, and answers an empty ta
 
   const empty = await app.inject({ url: "/api/site/career-insights/signals" });
   assert.equal(empty.statusCode, 200);
-  assert.equal(empty.headers["cache-control"], "no-store");
+  assert.equal(empty.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
   assert.deepEqual(empty.json().signals, []);
   assert.deepEqual(empty.json().skipped, []);
   assert.equal(empty.json().window_days, 30);

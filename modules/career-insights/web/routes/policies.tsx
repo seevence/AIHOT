@@ -69,9 +69,9 @@ export function headers() {
   return { "Cache-Control": "no-store" };
 }
 
-/** 标题/描述/canonical 见 web/seo.ts；来源与主题筛选是浏览视图，canonical 回到政策页本身。 */
+/** 标题/描述/canonical/ItemList/RSS 发现链接见 web/seo.ts 的 careerPoliciesMeta；筛选是浏览视图，canonical 回到政策页本身。 */
 export function meta({ loaderData }: { loaderData?: Awaited<ReturnType<typeof loader>> }) {
-  return careerPoliciesMeta(loaderData?.policies.data_origin);
+  return careerPoliciesMeta(loaderData?.policies);
 }
 
 export const HydrateFallback = CareerLoading;

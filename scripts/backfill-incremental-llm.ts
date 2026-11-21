@@ -23,9 +23,9 @@ import {
   type LlmCaller,
   type NormalizationSpec,
 } from "../modules/career-insights/backend/llm-incremental.ts";
+import { careerStepModel } from "../modules/career-insights/backend/models.ts";
 import {
   LLM_MAX_TOKENS,
-  LLM_MODEL,
   LLM_PROMPT_VERSION,
   LLM_PURPOSE,
   LLM_TIMEOUT_MS,
@@ -168,9 +168,11 @@ async function main(): Promise<void> {
   try {
     const { chatJson } = await import("../packages/backend/src/providers/llm.ts");
     const { sql, closeDb } = await import("../packages/backend/src/db.ts");
+    // 兜底这一步的模型：后台切换 > CAREER_LLM_NORMALIZE_MODEL > site/models.ts 的 DEFAULTS。
+    const model = await careerStepModel("career.llm-normalize", sql);
     const callLlm: LlmCaller = async ({ subject, system, user }) => {
       const result = await chatJson({
-        model: LLM_MODEL,
+        model,
         purpose: LLM_PURPOSE,
         subject,
         promptVersion: LLM_PROMPT_VERSION,

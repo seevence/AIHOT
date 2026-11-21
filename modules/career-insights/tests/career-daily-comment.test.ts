@@ -428,7 +428,7 @@ test("the daily-comment route answers 204 without a cache and 200 with the store
 
   const served = await app.inject({ method: "GET", url: "/api/site/career-insights/daily-comment?date=" + DAY_TWO });
   assert.equal(served.statusCode, 200);
-  assert.equal(served.headers["cache-control"], "no-store");
+  assert.equal(served.headers["cache-control"], "public, max-age=60, stale-while-revalidate=300");
   const cached = await loadCareerDailyComment(sql, DAY_TWO);
   assert.deepEqual(served.json(), cached);
   await app.close();

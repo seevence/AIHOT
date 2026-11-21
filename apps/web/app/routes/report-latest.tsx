@@ -1,7 +1,7 @@
 import { useLoaderData } from "react-router";
 import type { Route } from "./+types/report-latest";
 import { REPORT_NAMES } from "@aihot/contracts/site";
-import { withSubject } from "@aihot/site";
+import { EDITION_WHEN, withSubject } from "@aihot/site";
 import { cachedPage } from "../lib/api.server";
 import { pageReuse } from "../lib/page-reuse";
 import { pageMeta } from "../lib/seo";
@@ -54,7 +54,7 @@ export default function ReportLatestPage() {
           { to: "/daily/archive", label: "往期" },
         ]}
         entries={[
-          { to: "/daily", label: "就业日报", note: "每天 08:00 更新：新增岗位、政策与采集情况。" },
+          { to: "/daily", label: "就业日报", note: `${EDITION_WHEN.daily} 更新：新增岗位、政策与采集情况。` },
           { to: "/career-insights", label: "职业洞察", note: "就业趋势、异常信号与技能需求。" },
           { to: "/career-insights/jobs", label: "热门岗位", note: "按方向、职位与技能看正在招聘的岗位。" },
         ]}

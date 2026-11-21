@@ -162,3 +162,22 @@ test("the next-page link lands on the job list instead of resetting the page to 
     await expect(page.getByRole("heading", { level: 2, name: "岗位明细", exact: true })).toBeInViewport();
   } finally { await context.close(); }
 });
+
+
+test("a direction's evidence link lands on the filtered job list, not back at the direction board", async () => {
+  const context = await chrome.newContext({ viewport: VIEWPORT });
+  const page = await context.newPage();
+  try {
+    await openJobsPage(page);
+    const link = page.locator("[data-direction-evidence]").first();
+    const href = await link.getAttribute("href");
+    assert.ok(href?.includes("#catalog-jobs"), `direction evidence links should carry the list anchor (href=${href})`);
+    await link.scrollIntoViewIfNeeded();
+    await expect(link).toBeInViewport();
+    await link.click();
+    await page.waitForURL(/role_family=/);
+    await expect(page.getByRole("heading", { level: 2, name: "岗位明细", exact: true })).toBeInViewport();
+    const after = await scrollY(page);
+    assert.ok(after > 200, `查看该方向岗位 must land at the job list, not the page top (scrollY=${after})`);
+  } finally { await context.close(); }
+});

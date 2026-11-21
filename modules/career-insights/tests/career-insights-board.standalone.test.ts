@@ -692,8 +692,8 @@ test("the catalog page ranks directions and titles and links evidence", () => {
   const titles = html("[data-catalog-title]").map((_, element) => html(element).attr("data-catalog-title")).get();
   assert.deepEqual(titles, ["算法工程师", "社招算法专家"]);
 
-  assert.equal(html("[data-direction-evidence='ai_algorithm']").attr("href"), "/career-insights/jobs?role_family=ai_algorithm&page=1&page_size=20");
-  assert.equal(html("[data-title-evidence='算法工程师']").attr("href"), "/career-insights/jobs?skill=python&page=1&page_size=20");
+  assert.equal(html("[data-direction-evidence='ai_algorithm']").attr("href"), "/career-insights/jobs?role_family=ai_algorithm&page=1&page_size=20#catalog-jobs");
+  assert.equal(html("[data-title-evidence='算法工程师']").attr("href"), "/career-insights/jobs?skill=python&page=1&page_size=20#catalog-jobs");
   assert.equal(html("[data-catalog-title='算法工程师'] [data-rank-count]").text(), "4 个岗位");
   assert.equal(html("[data-catalog-job='job-1'] [data-job-evidence]").attr("href"), "https://careers.example/jobs/1");
 });

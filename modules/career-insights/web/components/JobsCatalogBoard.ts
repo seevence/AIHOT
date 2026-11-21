@@ -212,7 +212,7 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
               h(
                 Link,
                 Object.assign(
-                  { to: buildCatalogHref(filters, { role_family: direction.role_family, page: 1 }), preventScrollReset: true, className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
+                  { to: withJobsListAnchor(buildCatalogHref(filters, { role_family: direction.role_family, page: 1 })), className: "mt-2 inline-flex text-[12.5px] font-medium text-accent hover:underline" },
                   { "data-direction-evidence": direction.role_family },
                 ),
                 "查看该方向岗位",
@@ -260,7 +260,7 @@ function TitleRanking({ catalog, filters }: { catalog: CareerCatalogResponseV1; 
                     h(
                       Link,
                       Object.assign(
-                        { to: buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 }), preventScrollReset: true, className: "text-[12.5px] font-medium text-accent hover:underline" },
+                        { to: withJobsListAnchor(buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 })), className: "text-[12.5px] font-medium text-accent hover:underline" },
                         { "data-title-evidence": title.title_key },
                       ),
                       "查看证据",

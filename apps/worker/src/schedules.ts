@@ -1,18 +1,19 @@
 // Cron-style schedules (Asia/Shanghai), the engine's and then the site's modules'. Each run is recorded in
 // job_runs; missed slots run once.
+//
+// Retired on 2026-11-21 (P1-4): content.sweep, content.translate, hot.rank, hot.snapshot, stories.links,
+// reports.compose and reports.source-health ran over a site with no articles, so they only produced noise
+// (reports.compose had failed 164 times). They are not registered any more; the engine functions stay for
+// the admin pages and for tests, and registerSchedules below deletes their old cron.* queues on start. The
+// pages they fed (/weekly, /monthly, /hot, ...) are unchanged.
 import type { PgBoss } from "pg-boss";
 import { ensureQueue, recordRun } from "@aihot/backend/jobs/queue";
 import { serverModules, type Scheduled } from "@aihot/backend/modules";
-import { sweepUnprocessed } from "@aihot/backend/jobs/content";
-import { translatePending } from "@aihot/backend/editorial/translate";
 import { adaptIntervals, scheduleDueSources } from "@aihot/backend/sources/collect";
 import { scheduleMpReconcile } from "@aihot/backend/sources/mp";
 import { followXRenames } from "@aihot/backend/sources/x-renames";
 import { dajialaConfigured } from "@aihot/backend/providers/dajiala";
 import { refreshSourceIcons } from "@aihot/backend/sources/icons";
-import { computeHotRanking, snapshotHeat } from "@aihot/backend/events/hot";
-import { linkRelatedStories } from "@aihot/backend/events/consolidate";
-import { composeDueReports } from "@aihot/backend/reports/compose";
 import { dailyRetention } from "@aihot/backend/operations/retention";
 import { submitIndexNow } from "@aihot/backend/operations/indexnow";
 import { submitBaiduPush } from "@aihot/backend/operations/baidu-push";
@@ -20,20 +21,11 @@ import { checkAlerts, sendDigest } from "@aihot/backend/operations/alerts";
 import { recoverStaleWork } from "@aihot/backend/operations/recover";
 import { forwardPendingFeedback } from "@aihot/backend/operations/feedback";
 import { backupConfigured, runBackup } from "@aihot/backend/operations/backup";
-import { sourceHealthWeekly } from "@aihot/backend/operations/reports";
 
 const collecting = process.env.COLLECT_ENABLED === "true";
 
-const ENGINE_SCHEDULES: Scheduled[] = [
-  { name: "content.sweep", cron: "*/5 * * * *", run: sweepUnprocessed },
-  // Full-text translations of newly selected items (model calls; off with MODEL_CALLS_ENABLED=false).
-  { name: "content.translate", cron: "*/5 * * * *", run: () => translatePending() },
-  { name: "hot.rank", cron: "*/5 * * * *", run: () => computeHotRanking() },
-  { name: "hot.snapshot", cron: "2 * * * *", run: () => snapshotHeat() },
-  { name: "stories.links", cron: "12 * * * *", run: linkRelatedStories },
-  // Every issue that is due and not written yet, each from its edition time (site/site.ts EDITION_TIMES)
-  // at the next half hour; a missed or failed one at the next run.
-  { name: "reports.compose", cron: "0,30 * * * *", missed: "once", run: () => composeDueReports() },
+/** The engine's schedules; exported so the worker's schedule tests can see exactly what it registers. */
+export const ENGINE_SCHEDULES: Scheduled[] = [
   // The deletions the privacy notice promises, once their retention periods are over.
   { name: "ops.retention", cron: "30 3 * * *", missed: "once", run: () => dailyRetention() },
   // IndexNow for added, changed and removed discovery URLs, hourly so a new story or report reaches Bing,
@@ -50,7 +42,6 @@ const ENGINE_SCHEDULES: Scheduled[] = [
   // Feedback that did not reach the internal Feishu chat when it was sent (off with FEISHU_INTERNAL_ENABLED).
   { name: "feedback.forward", cron: "*/10 * * * *", run: () => forwardPendingFeedback() },
   ...(backupConfigured() ? [{ name: "ops.backup", cron: "10 4 * * *", missed: "once" as const, run: () => runBackup() }] : []),
-  { name: "reports.source-health", cron: "0 9 * * 1", missed: "once", run: () => sourceHealthWeekly() },
   ...(collecting
     ? [
         { name: "sources.schedule", cron: "* * * * *", run: () => scheduleDueSources() },

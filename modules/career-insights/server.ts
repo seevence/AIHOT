@@ -12,6 +12,15 @@ import {
 import { parseLastJsonLine, runModelCli, type ModelCliOutcome } from "./backend/model-cli.ts";
 import { careerIngestQueue } from "./backend/queue.ts";
 import { careerSitemapEntries } from "./backend/sitemap.ts";
+import { registerCareerAdminOverview } from "./backend/admin-overview.ts";
+import { careerAgent } from "./backend/agent.ts";
+import { llms as careerLlms } from "./backend/llms.ts";
+import { CAREER_MODEL_STEPS } from "./backend/models.ts";
+import { careerRetention } from "./backend/retention.ts";
+import { careerPushDailySchedule } from "./backend/notify.ts";
+import { registerCareerArchiveRoutes } from "./backend/routes/archive.ts";
+import { registerCareerPublicV1 } from "./backend/routes/public-v1.ts";
+import { registerCareerFeeds } from "./backend/routes/feeds.ts";
 import { SqlCareerRepository } from "./backend/sql-repository.ts";
 
 const repository = new SqlCareerRepository();
@@ -320,17 +329,31 @@ const server: ServerModule = {
   name: "career-insights",
   http(app) {
     registerCareerHttp(app, repository);
+    // P1/P2 新增的只读路由插件：日报归档、公开 API v1、就业 RSS、后台就业数据。
+    registerCareerArchiveRoutes(app, repository);
+    registerCareerPublicV1(app, repository);
+    registerCareerFeeds(app, repository);
+    registerCareerAdminOverview(app);
   },
+  agent: careerAgent(repository),
+  llms: careerLlms,
+  // 后台「模型与评测」页列出/切换就业研判、日报评论与归一化兜底三步（默认见 site/models.ts）。
+  models: CAREER_MODEL_STEPS,
+  retention: (now: Date) => careerRetention.clear(now) as unknown as Promise<Record<string, unknown>>,
   // 职业洞察、热门岗位、政策页与每个存在的岗位详情（上限与 lastmod 见 backend/sitemap.ts）。
   sitemap: { entries: () => careerSitemapEntries() },
   alerts: careerIngestAlerts,
   queues: [careerIngestQueue],
-  schedules: createCareerSchedules({
-    ingest: runCareerIngest,
-    llm: runIncrementalLlmCron,
-    brief: () => runCareerBriefCron(),
-    comment: () => runCareerDailyCommentCron(),
-  }),
+  schedules: [
+    ...createCareerSchedules({
+      ingest: runCareerIngest,
+      llm: runIncrementalLlmCron,
+      brief: () => runCareerBriefCron(),
+      comment: () => runCareerDailyCommentCron(),
+    }),
+    // 就业日报/新增岗位推送：默认关闭，配置 CAREER_PUSH_ENABLED + webhook 后生效（backend/notify.ts）。
+    careerPushDailySchedule(),
+  ],
 };
 
 export default server;

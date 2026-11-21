@@ -238,6 +238,10 @@
   - **岗位收藏（`a07693b`）**：收藏栏此前只用于文章，现在也用于职业岗位。存储为**浏览器本地收藏**（`aihot-starred-jobs`，上限 200，与文章收藏 `aihot-starred-items` 互不影响；保存岗位快照，下架后仍可回看）；入口在热门岗位列表行与职位详情标题区（`JobStarButton`，`aria-pressed`/`data-job-star`），`/starred` 新增「收藏的岗位」区块（中文职族/公司/城市/收藏时间/移除/跳详情 + 空态引导）。SSR/hydration 首帧为未收藏态、挂载后恢复（`useSyncExternalStore` server snapshot），跨标签 storage 事件同步；不可解析/不可显示日期会被安全替换，不会让 `/starred` 崩；**无后端/表/契约改动**（设备本地数据，换浏览器不迁移；导出/导入目前只含文章收藏，岗位收藏仅存在本浏览器，页面文案已说明）。
   - **筛选/翻页不再重置滚动（`20cd1b0` + 回归 `f3a8f38`）**：React Router 的 `ScrollRestoration` 会为新 location 滚到页顶；给筛选 chips、清除筛选、方向/职位证据、上一页/下一页的 Link 加 `preventScrollReset`。浏览器回归（chromium）实测：点筛选后 `scrollY` 保持（478）、点下一页后落到岗位明细（3006→1336）而非页顶；变异验证（去掉 preventScrollReset / 去掉锚点）会让测试失败。
   - **验证**：模块 standalone 含新增 `job-favorites` 7/7；`test:web` 61/61（含新增浏览器用例：收藏 2 条 + 滚动 2 条）；typecheck 0；web build 成功。
+- **P1/P2 全量落地（2026-11-21 傍晚）**：
+  - **P1 运营可观测**：`/admin/career` 就业数据视图（采集 run/来源健康/LLM 兜底/研判/评论/数据规模，API `GET /api/admin/career` 管理员会话保护，单段失败降级）；career 三步模型注册（`career.brief`/`career.daily-comment`/`career.llm-normalize`，后台模型页可见可切换）；retention（observations 180 天 / ingest_runs 90 天，模块 socket 接线）；就业日报归档（`/api/site/career-insights/daily/history` + `/daily/archive` 真实列表、点击看当天评论）；出刊时间文案统一为 06:10（与采集 cron 对齐）；`/hot` 放出导航（「就业热点」）；底座 7 个空转 cron 清退（`reports.compose` 不再刷失败）；本地备份/恢复脚本（`scripts/backup-local.ts`/`restore-local.ts`，演练通过）；就业日报/新增岗位推送（默认关闭，配 `CAREER_PUSH_ENABLED`+`CAREER_PUSH_WEBHOOK_URL` 生效）。
+  - **P2 分发与性能**：公开 API v1 `/api/v1/career/{jobs,jobs/:id,policies,insights}`（匿名、公开字段、ETag+304、public 缓存）；MCP 能力（`agent.abilities`：search_jobs/get_job/list_policies/get_insights，工具名 `thewind_*`）；llms.txt 补岗位/政策能力；就业 RSS（`/feed/jobs.xml`、`/feed/policies.xml`、`/feed/career-daily.xml` + 页面 alternate）；结构化数据补充（岗位/政策 ItemList、BreadcrumbList）；/all、/topics 退出 sitemap（已 noindex），IndexNow/百度开关开启后自动覆盖 career sitemap；career API 缓存分级（公开内容 ETag+max-age=60/swr=300，availability/admin 保持 no-store）。
+  - **顺带修复**：方向榜「查看该方向岗位」与职位榜「查看证据」改为带 `#catalog-jobs` 跳转（之前只改 URL 不移动视口，读者以为没反应），并补浏览器回归。
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）
 
 | # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |

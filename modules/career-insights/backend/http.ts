@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { beijingDate, isValidDate } from "@aihot/contracts/time";
-import type { FastifyInstance, FastifyReply } from "fastify";
+import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { ApiErrorResponseV1, JobFiltersV1 } from "../contracts/api.ts";
 import type { EmploymentType, RoleFamily, StudentFriendly } from "../contracts/index.ts";
 import { CAREER_SOURCE_DEFINITIONS } from "../collector/sources.ts";
@@ -236,35 +237,88 @@ function parseDailyCommentDate(query: unknown): string {
   return raw;
 }
 
+/** 公开只读内容的 Cache-Control：60 秒内可直接复用，过期后 5 分钟内先返回旧值再后台复核。 */
+export const PUBLIC_CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=300";
+
+/** 弱 ETag：内容哈希的前 16 位，只在内容变化时改变。 */
+export function weakEtag(prefix: string, body: string): string {
+  return `W/"${prefix}-${createHash("sha256").update(body).digest("hex").slice(0, 16)}"`;
+}
+
+/** If-None-Match 是否命中（弱比较：W/ 前缀不算差异）。 */
+export function etagMatches(header: string | undefined, etag: string): boolean {
+  if (!header) return false;
+  const strip = (value: string) => value.trim().replace(/^W\//, "");
+  return header.split(",").some((value) => value.trim() === "*" || strip(value) === strip(etag));
+}
+
+/** 公开 JSON：带弱 ETag 与 public 缓存；If-None-Match 命中时回 304，没有正文。 */
+export function sendJsonWithEtag(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  body: unknown,
+  etagPrefix: string,
+  cacheControl: string,
+): FastifyReply {
+  const text = JSON.stringify(body);
+  const etag = weakEtag(etagPrefix, text);
+  reply.header("ETag", etag).header("Cache-Control", cacheControl).header("Vary", "Accept-Encoding");
+  if (etagMatches(request.headers["if-none-match"], etag)) return reply.code(304).send();
+  return reply.header("Content-Type", "application/json; charset=utf-8").send(text);
+}
+
+/** 公开错误体：模块自己的 ApiErrorResponseV1，未知错误不外泄内部信息。 */
+function sendError(reply: FastifyReply, error: unknown): FastifyReply {
+  const apiError = error instanceof CareerApiError
+    ? error
+    : new CareerApiError(500, "internal_error", "Internal server error.");
+  const body: ApiErrorResponseV1 = {
+    error: {
+      code: apiError.code,
+      message: apiError.message,
+      ...(apiError.details === undefined ? {} : { details: apiError.details }),
+    },
+  };
+  return reply.code(apiError.statusCode).send(body);
+}
+
+/** 不做缓存的只读回答（收藏探测）：错误也保持 no-store。 */
 async function respond(reply: FastifyReply, read: () => Promise<unknown>): Promise<FastifyReply> {
   reply.header("Cache-Control", "no-store");
   try {
-    const value = await read();
-    // 研判/日报评论缓存未生成时对外是 204，而不是一个空对象。
-    if (value === null) return reply.code(204).send();
-    return reply.send(value);
+    return reply.send(await read());
   } catch (error) {
-    const apiError = error instanceof CareerApiError
-      ? error
-      : new CareerApiError(500, "internal_error", "Internal server error.");
-    const body: ApiErrorResponseV1 = {
-      error: {
-        code: apiError.code,
-        message: apiError.message,
-        ...(apiError.details === undefined ? {} : { details: apiError.details }),
-      },
-    };
-    return reply.code(apiError.statusCode).send(body);
+    return sendError(reply, error);
+  }
+}
+
+/**
+ * 公开只读回答：成功响应带 public 缓存与弱 ETag，If-None-Match 命中回 304；
+ * 研判/日报评论缓存未生成时仍回 204 + no-store，错误同样 no-store。
+ */
+async function respondPublic(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  etagPrefix: string,
+  read: () => Promise<unknown>,
+): Promise<FastifyReply> {
+  reply.header("Cache-Control", "no-store");
+  try {
+    const value = await read();
+    if (value === null) return reply.code(204).send();
+    return sendJsonWithEtag(request, reply, value, etagPrefix, PUBLIC_CACHE_CONTROL);
+  } catch (error) {
+    return sendError(reply, error);
   }
 }
 
 export function registerCareerHttp(app: FastifyInstance, repository: CareerRepository): void {
-  app.get("/api/site/career-insights/summary", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/summary", async (request, reply) => respondPublic(request, reply, "career-summary", async () => {
     assertNoQuery(request.query);
     return repository.summary();
   }));
 
-  app.get("/api/site/career-insights/jobs", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/jobs", async (request, reply) => respondPublic(request, reply, "career-jobs", async () => {
     return repository.listJobs(parseJobFilters(request.query));
   }));
 
@@ -274,7 +328,7 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
     return repository.jobAvailability(parseJobAvailabilityIds(request.query));
   }));
 
-  app.get<{ Params: { id: string } }>("/api/site/career-insights/jobs/:id", async (request, reply) => respond(reply, async () => {
+  app.get<{ Params: { id: string } }>("/api/site/career-insights/jobs/:id", async (request, reply) => respondPublic(request, reply, "career-job", async () => {
     assertNoQuery(request.query);
     if (!UUID_PATTERN.test(request.params.id)) throw invalidParameter("id", "Job id must be a UUID.");
     const detail = await repository.jobDetail(request.params.id);
@@ -282,32 +336,32 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
     return detail;
   }));
 
-  app.get("/api/site/career-insights/policies", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/policies", async (request, reply) => respondPublic(request, reply, "career-policies", async () => {
     return repository.listPolicies(parsePolicyFilters(request.query));
   }));
 
-  app.get("/api/site/career-insights/hot", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/hot", async (request, reply) => respondPublic(request, reply, "career-hot", async () => {
     return repository.hotCompanies(parseHotOptions(request.query));
   }));
 
-  app.get("/api/site/career-insights/daily", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/daily", async (request, reply) => respondPublic(request, reply, "career-daily", async () => {
     assertNoQuery(request.query);
     return repository.dailySummary();
   }));
 
-  app.get("/api/site/career-insights/daily-comment", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/daily-comment", async (request, reply) => respondPublic(request, reply, "career-daily-comment", async () => {
     return repository.careerDailyComment(parseDailyCommentDate(request.query));
   }));
 
-  app.get("/api/site/career-insights/signals", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/signals", async (request, reply) => respondPublic(request, reply, "career-signals", async () => {
     return repository.careerSignals(parseSignalOptions(request.query));
   }));
 
-  app.get("/api/site/career-insights/catalog", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/catalog", async (request, reply) => respondPublic(request, reply, "career-catalog", async () => {
     return repository.careerCatalog(parseCatalogOptions(request.query));
   }));
 
-  app.get("/api/site/career-insights/brief", async (request, reply) => respond(reply, async () => {
+  app.get("/api/site/career-insights/brief", async (request, reply) => respondPublic(request, reply, "career-brief", async () => {
     assertNoQuery(request.query);
     return repository.careerBrief();
   }));

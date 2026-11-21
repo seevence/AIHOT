@@ -7,11 +7,15 @@ import type { Founder } from "@aihot/contracts/site-config";
 /**
  * 日报、周报、月报什么时候出（北京时间，HH:mm）：日报收这个时间之前的 24 小时，周报在每个自然周之后的周一出，
  * 月报在每月 1 日出。排程、成刊时间窗口、缺期告警和所有提到时间的文案都读它（public/ 里的文件写占位
- * {{dailyTime}}、{{weeklyTime}}、{{monthlyTime}}）；排程每半小时检查一次，所以写整点或半点。
+ * {{dailyTime}}、{{weeklyTime}}、{{monthlyTime}}）。
+ *
+ * 日报与岗位/政策采集对齐在 06:10（career-insights 的采集 cron 也是 10 6 * * *），读者早上一打开就能看到
+ * 当天新增，文案也不再写与实际不符的 08:00。成刊检查每半小时一次（0/30 分），06:10 的日报会在 06:30 的
+ * 检查里编出；检查条件是「已过出刊时间」，所以这里不必写整点或半点。
  */
-export const EDITION_TIMES = { daily: "08:00", weekly: "10:00", monthly: "10:30" };
+export const EDITION_TIMES = { daily: "06:10", weekly: "10:00", monthly: "10:30" };
 
-/** “每天 08:00”“每周一 10:00”“每月 1 日 10:30”：写进句子里的出刊时间。 */
+/** “每天 06:10”“每周一 10:00”“每月 1 日 10:30”：写进句子里的出刊时间。 */
 export const EDITION_WHEN = {
   daily: `每天 ${EDITION_TIMES.daily}`,
   weekly: `每周一 ${EDITION_TIMES.weekly}`,
@@ -126,9 +130,10 @@ export const POLICY = {
 export const NAV = {
   /**
    * 不放进主导航的引擎入口，支持全部动态（"/all"）、热点榜（"/hot"）和主题（"/topics"）；拿掉哪一项，它就回到电脑侧栏和手机底栏。
-   * 默认三项都不放：页面照样能打开，原来回到它们的返回按钮和链接改回首页；写 "/hot" 时首页也不放当前热点。
+   * 本站把就业热点（"/hot"，即企业招聘热度榜）放进主导航，只藏 "/topics" 与 "/all"：这两个页面照样能打开，
+   * 原来回到它们的返回按钮和链接改回首页。
    */
-  hidden: ["/hot", "/topics", "/all"] as Array<"/all" | "/hot" | "/topics">,
+  hidden: ["/topics", "/all"] as Array<"/all" | "/hot" | "/topics">,
 };
 
 /** 条目卡片和详情页上的几处说法和显示。 */
@@ -331,7 +336,7 @@ export function subjectAfter(text: string, noun?: string): string {
   return `${text}${gap}${noun ? withSubject(noun) : SITE.subject}`;
 }
 
-/** “8 点”“10 点 30 分”：口语里的 HH:mm。 */
+/** “6 点 10 分”“10 点 30 分”：口语里的 HH:mm。 */
 function spokenTime(time: string): string {
   const [hour, minute] = time.split(":").map(Number) as [number, number];
   return `${hour} 点${minute ? ` ${minute} 分` : ""}`;

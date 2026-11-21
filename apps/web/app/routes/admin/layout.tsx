@@ -46,6 +46,7 @@ const nav = (): Array<{ group: string; items: AdminNavEntry[] }> => [
     group: "系统",
     items: [
       { to: "/admin/runs", label: "运行", count: "runs", tone: "bad" },
+      { to: "/admin/career", label: "就业数据" },
       { to: "/admin/models", label: "模型与评测" },
       { to: "/admin/selectbench", label: "SelectBench" },
       { to: "/admin/settings", label: "设置" },
