@@ -65,7 +65,59 @@ export function sortDirections(directions: readonly CareerDirectionV1[], filters
 }
 
 function hasFilters(filters: JobFiltersV1): boolean {
-  return Boolean(filters.role_family || filters.city || filters.student_friendly || filters.skill || filters.company || filters.employment_type);
+  return Boolean(filters.role_family || filters.city || filters.student_friendly || filters.skill || filters.company || filters.employment_type || filters.q);
+}
+
+/** 关键词搜索框保留的其它筛选（页码除外：换关键词从第一页看起）。 */
+const SEARCH_KEPT_KEYS = ["role_family", "company", "city", "employment_type", "student_friendly", "skill", "page_size"] as const;
+export const MAX_SEARCH_LENGTH = 100;
+
+/**
+ * 「筛选岗位」里的关键词搜索：普通 GET 表单提交回本页，无 JS 也能用；隐藏域带上当前其它筛选，
+ * 提交后关键词与筛选同时生效，页码由浏览器按缺少 page 重置为 1。
+ */
+function SearchForm({ filters }: { filters: JobFiltersV1 }): ReactElement {
+  const keyword = filters.q?.trim() ?? "";
+  return h(
+    "div",
+    { className: "mt-3" },
+    h(
+      "form",
+      { method: "get", action: CATALOG_PATH, role: "search", "data-job-search": "", className: "flex flex-wrap items-center gap-2" },
+      ...SEARCH_KEPT_KEYS.flatMap((key) => {
+        const value = filters[key];
+        return value === undefined ? [] : [h("input", { key, type: "hidden", name: key, value: String(value) })];
+      }),
+      h("label", { htmlFor: "catalog-search-q", className: "sr-only" }, "按关键词搜索岗位"),
+      // key 让关键词随导航重建输入框：defaultValue 只在挂载时生效，切换筛选后输入框必须显示当前 q。
+      h("input", {
+        key: keyword,
+        id: "catalog-search-q",
+        name: "q",
+        type: "search",
+        defaultValue: keyword,
+        maxLength: MAX_SEARCH_LENGTH,
+        placeholder: "搜索岗位 / 公司 / 技能，如：数据分析",
+        enterKeyHint: "search",
+        autoComplete: "off",
+        "data-search-input": "",
+        className: "h-10 min-w-0 flex-1 rounded-control border border-line-strong bg-bg px-3 text-[14px] text-ink outline-none placeholder:text-ink-4 focus:border-accent sm:max-w-md",
+      }),
+      // 单提交按钮：在输入框里按回车就是提交这个 GET 表单。
+      h(
+        "button",
+        { type: "submit", "data-search-submit": "", className: "inline-flex h-10 shrink-0 items-center rounded-control bg-accent px-4 text-[13.5px] font-medium text-accent-contrast" },
+        "搜索",
+      ),
+    ),
+    keyword === ""
+      ? h("p", { "data-search-hint": "", className: `mt-2 ${MUTED_CLASS}` }, "也可以点方向/职位榜进入对应筛选。")
+      : h(
+          "p",
+          { "data-search-current": "", className: `mt-2 ${MUTED_CLASS}` },
+          `当前搜索“${keyword}” · 也可以点方向/职位榜进入对应筛选。`,
+        ),
+  );
 }
 
 function filterChip(label: string, href: string, active: boolean, dataAttr: string, key: string): ReactElement {
@@ -86,7 +138,8 @@ function FilterBar({ catalog, filters }: { catalog: CareerCatalogResponseV1; fil
     "section",
     { "aria-labelledby": "catalog-filters", className: CARD_CLASS },
     h("h2", { id: "catalog-filters", className: "text-[16px] font-semibold text-ink" }, "筛选岗位"),
-    h("h3", { className: "mt-3 text-[12px] text-ink-4" }, "学生友好"),
+    h(SearchForm, { filters }),
+    h("h3", { className: "mt-4 text-[12px] text-ink-4" }, "学生友好"),
     h(
       "ul",
       { className: "mt-1.5 flex flex-wrap gap-2" },
@@ -278,7 +331,33 @@ function JobListSection({ jobs, filters, Star }: { jobs: JobListResponseV1; filt
     ),
     jobs.items.length === 0
       ? h("div", { className: "mt-3 rounded-card border border-line bg-surface px-5 py-8 text-center" },
-          h("p", { "data-jobs-empty": "", role: "status", className: "text-[14px] font-medium text-ink-2" }, jobs.total === 0 ? "当前筛选没有职位" : "当前页没有职位，可能已超出结果页数"),
+          h(
+            "p",
+            { "data-jobs-empty": "", role: "status", className: "text-[14px] font-medium text-ink-2" },
+            filters.q ? `没有找到与“${filters.q}”匹配的岗位` : jobs.total === 0 ? "当前筛选没有职位" : "当前页没有职位，可能已超出结果页数",
+          ),
+          filters.q
+            ? h(
+                "div",
+                { className: "mt-2 flex flex-wrap items-center justify-center gap-3" },
+                h(
+                  Link,
+                  Object.assign(
+                    { to: buildCatalogHref(filters, { q: undefined, page: 1 }), preventScrollReset: true, className: "inline-flex text-[13px] font-medium text-accent hover:underline" },
+                    { "data-job-search-empty-clear": "" },
+                  ),
+                  "清除搜索",
+                ),
+                h(
+                  Link,
+                  Object.assign(
+                    { to: CATALOG_PATH, preventScrollReset: true, className: "inline-flex text-[13px] font-medium text-ink-3 hover:underline" },
+                    { "data-job-search-empty-all": "" },
+                  ),
+                  "查看全部岗位",
+                ),
+              )
+            : null,
         )
       : h(
           "ul",
@@ -303,6 +382,21 @@ export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
       "header",
       null,
       h("h1", { "data-page-title": "", className: "text-[24px] font-semibold text-ink" }, "热门岗位"),
+      filters.q
+        ? h(
+            "div",
+            { "data-search-summary": "", className: "mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] leading-relaxed text-ink-2" },
+            h("span", null, `搜索“${filters.q}” · ${jobs.total} 个岗位`),
+            h(
+              Link,
+              Object.assign(
+                { to: buildCatalogHref(filters, { q: undefined, page: 1 }), preventScrollReset: true, className: "inline-flex text-[12.5px] font-medium text-accent hover:underline" },
+                { "data-search-clear": "" },
+              ),
+              "清除搜索",
+            ),
+          )
+        : null,
       h("p", { className: "mt-1 text-[13px] leading-relaxed text-ink-3" }, "方向榜与职位榜按当前有效岗位数量排序，不代表新闻热度、公司热度或未来增长。"),
       h(
         "p",

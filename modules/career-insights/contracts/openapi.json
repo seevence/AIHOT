@@ -33,6 +33,7 @@
           { "name": "employment_type", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/EmploymentType" } },
           { "name": "student_friendly", "in": "query", "required": false, "schema": { "$ref": "#/components/schemas/StudentFriendly" } },
           { "name": "skill", "in": "query", "required": false, "schema": { "type": "string" } },
+          { "name": "q", "in": "query", "required": false, "description": "关键词：同时匹配职位名、公司名、技能与城市；不区分大小写，trim 后为空不过滤，超过 100 字符返回 400。", "schema": { "type": "string", "maxLength": 100 } },
           { "name": "page", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "default": 1 } },
           { "name": "page_size", "in": "query", "required": false, "schema": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 } }
         ],
@@ -532,6 +533,7 @@
           "employment_type": { "$ref": "#/components/schemas/EmploymentType" },
           "student_friendly": { "$ref": "#/components/schemas/StudentFriendly" },
           "skill": { "type": "string" },
+          "q": { "type": "string", "maxLength": 100 },
           "page": { "type": "integer", "minimum": 1 },
           "page_size": { "type": "integer", "minimum": 1, "maximum": 100 }
         }

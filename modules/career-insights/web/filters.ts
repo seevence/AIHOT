@@ -10,7 +10,7 @@ const STUDENT_FRIENDLY_VALUES: readonly StudentFriendly[] = ["yes", "no", "unkno
 
 export function serializeJobFilters(filters: Partial<JobFiltersV1>): string {
   const params = new URLSearchParams();
-  const keys = ["role_family", "company", "city", "employment_type", "student_friendly", "skill", "page", "page_size"] as const;
+  const keys = ["role_family", "company", "city", "employment_type", "student_friendly", "skill", "q", "page", "page_size"] as const;
   for (const key of keys) {
     const value = filters[key];
     if (value !== undefined) params.set(key, String(value));
@@ -49,7 +49,7 @@ export function parseDashboardFilters(search: URLSearchParams): JobFiltersV1 {
   const studentFriendly = pickEnum(search.get("student_friendly"), STUDENT_FRIENDLY_VALUES);
   if (studentFriendly) filters.student_friendly = studentFriendly;
 
-  for (const key of ["company", "city", "skill"] as const) {
+  for (const key of ["company", "city", "skill", "q"] as const) {
     const value = search.get(key)?.trim();
     if (value) filters[key] = value;
   }

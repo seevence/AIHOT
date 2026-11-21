@@ -130,6 +130,22 @@ function toObservation(row: ObservationRow): ObservationPublicV1 {
   };
 }
 
+/** ILIKE 的通配符与转义符本身要转义，否则关键词里的 % _ 会当通配符匹配到无关岗位。 */
+function escapeLikePattern(keyword: string): string {
+  return keyword.replace(/[\\%_]/g, (match) => `\\${match}`);
+}
+
+/** 关键词同时匹配职位名、公司名、技能与城市；pg 的 ILIKE 对 ASCII 不区分大小写，中文按字面匹配。 */
+function keywordCondition(keyword: string): ReturnType<typeof sql> {
+  const pattern = `%${escapeLikePattern(keyword)}%`;
+  return sql`AND (
+    title ILIKE ${pattern}
+    OR company_name ILIKE ${pattern}
+    OR skills::text ILIKE ${pattern}
+    OR locations::text ILIKE ${pattern}
+  )`;
+}
+
 function jobFilterCondition(filters: JobFiltersV1): ReturnType<typeof sql> {
   return sql`
     ${filters.role_family === undefined ? sql`` : sql`AND role_family = ${filters.role_family}`}
@@ -138,6 +154,7 @@ function jobFilterCondition(filters: JobFiltersV1): ReturnType<typeof sql> {
     ${filters.employment_type === undefined ? sql`` : sql`AND employment_type = ${filters.employment_type}`}
     ${filters.student_friendly === undefined ? sql`` : sql`AND student_friendly = ${filters.student_friendly}`}
     ${filters.skill === undefined ? sql`` : sql`AND skills @> to_jsonb(ARRAY[${filters.skill}::text])`}
+    ${filters.q === undefined ? sql`` : keywordCondition(filters.q)}
   `;
 }
 

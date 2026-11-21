@@ -8,6 +8,7 @@ import { IconClose, IconSearch } from "../../components/icons";
 import { inNav } from "../../components/shell/nav";
 import { addRecentSearch, clearRecentSearches, useRecentSearches } from "../../lib/local-state";
 import { useModal } from "../../components/ui/modal";
+import { jobsSearchHref } from "./jobs-search";
 
 // One overlay for the whole site, opened from any bar.
 let overlay: HTMLDivElement | null = null;
@@ -55,6 +56,8 @@ export function SearchOverlay() {
   const input = useRef<HTMLInputElement>(null);
   // The field is uncontrolled: openSearch() fills and focuses it inside the tap, before React renders.
   const [hasText, setHasText] = useState(false);
+  // The keyword as typed, for the "search in jobs" shortcut; the field itself stays uncontrolled.
+  const [query, setQuery] = useState("");
   const recent = useRecentSearches();
   const navigation = useNavigation();
   const { key } = useLocation();
@@ -76,6 +79,7 @@ export function SearchOverlay() {
     if (!shown) return;
     let active = true;
     setHasText(!!input.current?.value);
+    setQuery(input.current?.value ?? "");
     setMore(null);
     void loadSuggestions().then(value => { if (active) setMore(value); }).catch(() => {});
     // At the desktop breakpoint this layer is hidden by CSS; it must stop holding the page still too.
@@ -103,6 +107,9 @@ export function SearchOverlay() {
   }
 
   const companies = (more?.topics ?? []).filter((t) => t.group === "company").slice(0, 6);
+  const keyword = query.trim();
+  // The articles' search stays the default; while a query is typed, offer the same query on the jobs page.
+  const jobsHref = jobsSearchHref(query);
   const chip = "inline-flex h-11 max-w-full items-center rounded-full px-3.5 text-[14px] transition-colors";
   return (
     <div
@@ -135,7 +142,10 @@ export function SearchOverlay() {
             ref={input}
             name="q"
             type="search"
-            onInput={(e) => setHasText(!!e.currentTarget.value)}
+            onInput={(e) => {
+              setHasText(!!e.currentTarget.value);
+              setQuery(e.currentTarget.value);
+            }}
             tabIndex={shown ? 0 : -1}
             placeholder="搜索标题、摘要…"
             maxLength={200}
@@ -151,6 +161,7 @@ export function SearchOverlay() {
               onClick={() => {
                 if (input.current) input.current.value = "";
                 setHasText(false);
+                setQuery("");
                 input.current?.focus();
               }}
               className="absolute right-1 top-1/2 grid size-11 -translate-y-1/2 place-items-center rounded-full text-ink-4"
@@ -166,6 +177,19 @@ export function SearchOverlay() {
 
       {shown && (
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 pb-[max(24px,env(safe-area-inset-bottom))]">
+          {jobsHref !== null && (
+            <section className="pt-3">
+              <Link
+                to={jobsHref}
+                data-search-jobs=""
+                className="flex min-h-11 items-center gap-2 rounded-tile bg-accent-soft px-3.5 text-[14px] font-medium text-accent active:opacity-60"
+              >
+                <IconSearch size={16} />
+                <span className="truncate">在岗位中搜索「{keyword}」</span>
+              </Link>
+            </section>
+          )}
+
           {recent.length > 0 && (
             <section className="pt-3">
               <div className="flex items-center justify-between">

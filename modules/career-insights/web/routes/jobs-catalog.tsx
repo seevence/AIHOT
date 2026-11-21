@@ -1,5 +1,6 @@
-import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError } from "react-router";
+import { isRouteErrorResponse, useLoaderData, useNavigation, useRouteError, type MetaFunction } from "react-router";
 import type { LoaderArgs } from "@aihot/web/lib/route-types";
+import { pageMeta } from "@aihot/web/lib/seo";
 import type { Screen } from "@aihot/web/components/shell/screens";
 import type { JobListResponseV1 } from "@aihot/career-insights/contracts";
 import type { CareerCatalogResponseV1 } from "../../contracts/index.ts";
@@ -27,9 +28,20 @@ export function headers() {
 
 export const handle: Screen = { tab: "jobs", name: "热门岗位" };
 
-export function meta() {
-  return [{ title: "热门岗位" }];
-}
+/**
+ * 关键词只改这一页的结果视图，因此 canonical 固定指向不带查询的列表页，避免把每个搜索词都登记成
+ * 独立页面；标题带关键词，读者与分享预览能看出这是搜索结果。
+ */
+export const meta: MetaFunction<typeof loader> = ({ loaderData }) => {
+  const keyword = loaderData?.filters.q;
+  return pageMeta({
+    title: keyword ? `岗位搜索：${keyword}` : "热门岗位",
+    description: keyword
+      ? `「${keyword}」相关岗位：按职位名、公司、技能与城市搜索当前有效岗位，每条岗位附官方原文链接。`
+      : "按职族与职位聚合的当前有效岗位，可按关键词、学生友好与城市筛选，每条岗位附官方原文链接。",
+    path: "/career-insights/jobs",
+  });
+};
 
 export const HydrateFallback = CareerLoading;
 
