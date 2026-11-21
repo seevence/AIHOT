@@ -3,7 +3,7 @@
 import { createElement as h, type ReactElement } from "react";
 import { Link } from "react-router";
 import type { CareerSignalSkippedV1, CareerSignalV1 } from "../../contracts/index.ts";
-import { SIGNAL_EMPTY_HINT, SIGNAL_EMPTY_TITLE, SIGNAL_RULE_LABELS, careerJobHref, skippedSurgeNotice } from "../feeds.ts";
+import { SIGNAL_EMPTY_HINT, SIGNAL_EMPTY_TITLE, SIGNAL_RULE_LABELS, careerJobHref, formatRatioPercent, skippedSurgeNotice } from "../feeds.ts";
 import { ROLE_FAMILY_LABELS } from "../labels.ts";
 import { formatCareerDateTime } from "../time.ts";
 
@@ -17,10 +17,6 @@ const CONFIDENCE_LABELS: Record<CareerSignalV1["confidence"], string> = {
   medium: "中置信",
 };
 
-function percent(ratio: number): string {
-  return `${(Math.round(ratio * 1000) / 10).toFixed(1)}%`;
-}
-
 /** 把后端 evidence 里该规则用到的数字转成可读依据；契约没给的字段不硬凑，避免编造数字。 */
 export function signalEvidenceFacts(signal: CareerSignalV1): string[] {
   const evidence = signal.evidence;
@@ -28,7 +24,7 @@ export function signalEvidenceFacts(signal: CareerSignalV1): string[] {
 
   if (signal.rule === "cross_industry") {
     if (evidence.company_job_count !== undefined && evidence.ai_family_job_count !== undefined) {
-      const ratio = evidence.ai_family_ratio !== undefined ? ` · 占比 ${percent(evidence.ai_family_ratio)}` : "";
+      const ratio = evidence.ai_family_ratio !== undefined ? ` · 占比 ${formatRatioPercent(evidence.ai_family_ratio)}` : "";
       facts.push(`公司岗位 ${evidence.company_job_count} 个 · AI 族 ${evidence.ai_family_job_count} 个${ratio}`);
     }
     if (evidence.matched_terms !== undefined && evidence.matched_terms.length > 0) {

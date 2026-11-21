@@ -69,12 +69,25 @@ function section(id: string, title: string, children: ReadonlyArray<ReactElement
   );
 }
 
+const UNAVAILABLE_HINT = "请求失败或接口暂不可用；不影响其它区块，可稍后重试。";
+
+/** 样本不足/继续积累观测：带“观测日不足”的归因。 */
 function note(text: string, dataAttr: string): ReactElement {
   return h(
     "div",
     { [dataAttr]: "", role: "status", className: "mt-3 rounded-card border border-line-soft bg-bg-sunk px-4 py-4" },
     h("p", { className: "text-[14px] font-medium text-ink-2" }, text),
     h("p", { className: "mt-1 text-[12.5px] leading-relaxed text-ink-4 break-words" }, INSUFFICIENT_DATA_HINT),
+  );
+}
+
+/** API 失败/降级：只说明本块不可用，不套用样本不足的归因。 */
+function unavailableNote(): ReactElement {
+  return h(
+    "div",
+    { "data-section-unavailable": "", role: "status", className: "mt-3 rounded-card border border-line-soft bg-bg-sunk px-4 py-4" },
+    h("p", { className: "text-[14px] font-medium text-ink-2" }, BLOCK_UNAVAILABLE_TEXT),
+    h("p", { className: "mt-1 text-[12.5px] leading-relaxed text-ink-4 break-words" }, UNAVAILABLE_HINT),
   );
 }
 
@@ -187,7 +200,7 @@ function BriefSection({ brief }: { brief: CareerBriefV1 | null }): ReactElement 
 
 /** 第 2 段：不同寻常的信号（自首页移入）。skipped 有值才提示，空数组不渲染。 */
 function SignalsSection({ signals }: { signals: CareerSignalsResponseV1 | null }): ReactElement {
-  if (!signals) return section("career-signals", "不同寻常的信号", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!signals) return section("career-signals", "不同寻常的信号", [unavailableNote()]);
 
   return section("career-signals", "不同寻常的信号", [
     mutedLine(SIGNAL_DEFINITION, "data-signal-definition"),
@@ -232,7 +245,7 @@ function jobTrendRows(catalog: CareerCatalogResponseV1): ReactElement {
 
 /** 第 3 段：职族结构与观察窗新增；unknown 单列，不混进方向结构。 */
 function JobTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | null; catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-job-trend", "岗位趋势", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!catalog) return section("career-job-trend", "岗位趋势", [unavailableNote()]);
   if (catalog.directions.length === 0 || catalog.sample_size === 0) {
     return section("career-job-trend", "岗位趋势", [note(INSUFFICIENT_DATA_TEXT, "data-job-trend-empty")]);
   }
@@ -252,7 +265,7 @@ function JobTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | nu
 /** 第 4 段：高频技能与组合，并说明计数口径（提及次数，不是需求概率）。 */
 function SkillTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | null; catalog: CareerCatalogResponseV1 | null }): ReactElement {
   // 高频技能与组合来自 catalog；catalog 失败时本段整体不可用，不用空数据冒充“样本不足”。
-  if (!catalog) return section("career-skill-trend", "技能趋势", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!catalog) return section("career-skill-trend", "技能趋势", [unavailableNote()]);
 
   const skills = catalog.skills;
   const unknownSkill = unknownSkillMetric(summary);
@@ -309,7 +322,7 @@ function SkillTrendSection({ summary, catalog }: { summary: SummaryResponseV1 | 
 
 /** 第 5 段：只放摘要卡与一个入口；完整方向榜/职位榜/筛选/分页都在岗位页。 */
 function HotJobsSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-hot-jobs", "热门岗位", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!catalog) return section("career-hot-jobs", "热门岗位", [unavailableNote()]);
   if (catalog.sample_size === 0 || (catalog.directions.length === 0 && catalog.titles.length === 0)) {
     return section("career-hot-jobs", "热门岗位", [note(INSUFFICIENT_DATA_TEXT, "data-hot-jobs-empty")]);
   }
@@ -370,7 +383,7 @@ function HotJobsSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }
 
 /** 第 6 段：可投方向 / 需补技能 / 岗位证据，全部从 catalog 的当前窗口派生，不重复研判的行动建议。 */
 function StudentAdviceSection({ catalog }: { catalog: CareerCatalogResponseV1 | null }): ReactElement {
-  if (!catalog) return section("career-student-advice", "学生就业建议", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!catalog) return section("career-student-advice", "学生就业建议", [unavailableNote()]);
   if (catalog.sample_size === 0 || catalog.directions.length === 0) {
     return section("career-student-advice", "学生就业建议", [note(INSUFFICIENT_DATA_TEXT, "data-advice-empty")]);
   }
@@ -433,7 +446,7 @@ function StudentAdviceSection({ catalog }: { catalog: CareerCatalogResponseV1 | 
 
 /** 第 7 段：政策与岗位联动；没有共同主题时整段隐藏，不留空卡片。 */
 function PolicyJobsSection({ summary }: { summary: SummaryResponseV1 | null }): ReactElement | null {
-  if (!summary) return section("career-policy-jobs", "政策与岗位联动", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!summary) return section("career-policy-jobs", "政策与岗位联动", [unavailableNote()]);
   if (summary.shared_themes.length === 0) return null;
 
   return section("career-policy-jobs", "政策与岗位联动", [
@@ -480,7 +493,7 @@ function MethodSection({ summary, catalog }: {
   summary: SummaryResponseV1 | null;
   catalog: CareerCatalogResponseV1 | null;
 }): ReactElement {
-  if (!summary) return section("career-method", "数据范围与方法", [note(BLOCK_UNAVAILABLE_TEXT, "data-section-unavailable")]);
+  if (!summary) return section("career-method", "数据范围与方法", [unavailableNote()]);
 
   const unknownFamily = unknownFamilyMetric(summary);
   const unknownSkill = unknownSkillMetric(summary);
@@ -497,7 +510,7 @@ function MethodSection({ summary, catalog }: {
       h("div", null, h("dt", { className: MUTED_CLASS }, "采集来源"), h("dd", { "data-method-source": String(summary.source_count), className: "text-[13px] text-ink-2" }, `${summary.source_count} 个来源`)),
       h("div", null, h("dt", { className: MUTED_CLASS }, "样本量"), h("dd", { "data-method-sample": String(catalog?.sample_size ?? summary.sample_size), className: "text-[13px] text-ink-2" }, `${catalog?.sample_size ?? summary.sample_size} 个有效岗位 · ${summary.company_count} 家公司`)),
       h("div", null, h("dt", { className: MUTED_CLASS }, "数据截止"), h("dd", { className: "text-[13px] text-ink-2" }, h(CareerTime, { value: summary.as_of }))),
-      h("div", null, h("dt", { className: MUTED_CLASS }, "采集窗口"), h("dd", { className: "text-[13px] text-ink-2" }, `${catalog?.window_days ?? 30} 天`)),
+      h("div", null, h("dt", { className: MUTED_CLASS }, "采集窗口"), h("dd", { "data-method-window": catalog ? String(catalog.window_days) : "unknown", className: "text-[13px] text-ink-2" }, catalog ? `${catalog.window_days} 天` : "窗口未知")),
       h("div", null, h("dt", { className: MUTED_CLASS }, "观测日"), h("dd", { "data-method-observed-days": summary.has_multiple_snapshots ? "multi" : "single", className: "text-[13px] text-ink-2" }, summary.has_multiple_snapshots ? "≥2 个观测日" : "仅 1 个快照")),
       h("div", null, h("dt", { className: MUTED_CLASS }, "词典版本"), h("dd", { className: "text-[13px] text-ink-2" }, `v${summary.dictionary_version}`)),
     ),
