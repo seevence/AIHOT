@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router";
 import type { ItemAvailability } from "@aihot/contracts/site";
+import type { JobAvailabilityResponseV1 } from "@aihot/career-insights/contracts";
 import { shortAddresses } from "@aihot/contracts/addresses";
 import { SITE } from "@aihot/site";
 import { Presence } from "../components/ui/Presence";
@@ -26,6 +27,13 @@ export function meta() {
   return pageMeta({ title: "我的收藏", description: `收藏的 ${SITE.name} 内容，适合稍后阅读和回看。`, path: "/starred", noindex: true });
 }
 
+// 岗位可用性探测的批次大小：后端一次接受去重后 200 个，但 UUID 比文章 id 长，
+// 200 个的 query 约 7.8k 字符，贴近反向代理常见的 8K 请求行上限，所以和文章收藏一样按 100/批发送。
+const AVAILABILITY_BATCH_SIZE = 100;
+// 只探测严格 UUID：收藏里可能残留旧格式 id（job-favorites 的 ID_PATTERN 更宽），
+// 不能因为一条坏 id 让后端 400，把所有徽标都吞掉。
+const JOB_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 function reportText(r: ImportReport): string {
   const parts = [`新增收藏 ${r.starredAdded} 条`, `已读记录 ${r.readAdded} 条`];
   if (r.starredSkipped || r.readSkipped) parts.push(`有 ${r.starredSkipped + r.readSkipped} 条没导入（超出数量上限或格式不对）`);
@@ -40,6 +48,8 @@ export default function StarredPage() {
   const starredJobs = useStarredJobs();
   const [mounted, setMounted] = useState(false);
   const [availability, setAvailability] = useState<Record<string, ItemAvailability>>({});
+  // 岗位收藏是本地快照，可能早已下架；只记 missing 的 id，接口没答出结果的 id 不显示徽标。
+  const [missingJobs, setMissingJobs] = useState<Record<string, true>>({});
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   useEffect(() => setMounted(true), []);
@@ -63,6 +73,37 @@ export default function StarredPage() {
     });
     return () => controller.abort();
   }, [mounted, starredIds]);
+
+  // 岗位可用性同样只探测已收藏的 id，按 100 个一批发送（见 AVAILABILITY_BATCH_SIZE）。
+  // 接口失败或超时静默降级：不显示徽标，收藏列表照常渲染。
+  const starredJobIds = starredJobs.map((job) => job.id).filter((id) => JOB_ID_PATTERN.test(id)).join(",");
+  useEffect(() => {
+    if (!mounted) return;
+    if (!starredJobIds) {
+      // 收藏清空（或只剩旧格式 id）时清掉旧结果，避免之后再收藏同一 id 时先闪一下过期徽标。
+      setMissingJobs({});
+      return;
+    }
+    const controller = new AbortController();
+    const ids = starredJobIds.split(",");
+    const batches: string[][] = [];
+    for (let i = 0; i < ids.length; i += AVAILABILITY_BATCH_SIZE) batches.push(ids.slice(i, i + AVAILABILITY_BATCH_SIZE));
+    Promise.all(
+      batches.map((batch) =>
+        fetch(`/api/site/career-insights/jobs/availability?ids=${encodeURIComponent(batch.join(","))}`, { signal: controller.signal })
+          .then((r) => (r.ok ? (r.json() as Promise<JobAvailabilityResponseV1>) : null))
+          .catch(() => null),
+      ),
+    ).then((parts) => {
+      if (controller.signal.aborted) return;
+      const missing: Record<string, true> = {};
+      for (const part of parts) {
+        for (const [id, status] of Object.entries(part?.ids ?? {})) if (status === "missing") missing[id] = true;
+      }
+      setMissingJobs(missing);
+    });
+    return () => controller.abort();
+  }, [mounted, starredJobIds]);
 
   // Back from an item: the list renders only after mounting (it lives in this browser), so the
   // position comes back once it is there, by the same card anchor the other lists use.
@@ -153,31 +194,39 @@ export default function StarredPage() {
             </p>
           ) : (
             <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
-              {starredJobs.map((job) => (
-                <li key={job.id} data-starred-job={job.id} className="flex items-start justify-between gap-3 px-4 py-3">
-                  <div className="min-w-0">
-                    <h3 className="text-[15px] font-semibold leading-[1.6] text-ink">
-                      <Link viewTransition to={`/career-insights/jobs/${encodeURIComponent(job.id)}`} className="break-words transition-colors hover:text-accent">
-                        {job.title}
-                      </Link>
-                    </h3>
-                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3 break-words">
-                      {[job.company, job.locations?.join("、") || "地点未知", ROLE_FAMILY_LABELS[job.roleFamily ?? "unknown"]].join(" · ")}
-                    </p>
-                    <p className="mt-1 text-[11.5px] text-ink-4">
-                      收藏于 <span className="num">{fullDateTime(job.savedAt)}</span>
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    aria-label={`移除收藏：${job.title}`}
-                    onClick={() => removeStarredJob(job.id)}
-                    className="shrink-0 text-[12.5px] text-ink-3 transition-colors hover:text-accent"
-                  >
-                    移除
-                  </button>
-                </li>
-              ))}
+              {starredJobs.map((job) => {
+                const missing = missingJobs[job.id] === true;
+                return (
+                  <li key={job.id} data-starred-job={job.id} data-starred-job-missing={missing ? "true" : undefined} className="flex items-start justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <h3 className="text-[15px] font-semibold leading-[1.6] text-ink">
+                        <Link viewTransition to={`/career-insights/jobs/${encodeURIComponent(job.id)}`} className="break-words transition-colors hover:text-accent">
+                          {job.title}
+                        </Link>
+                        {missing && (
+                          <span className="ml-2 inline-flex shrink-0 items-center rounded-full bg-hot-soft px-2 py-0.5 align-middle text-[11.5px] font-medium text-hot">
+                            可能已下架（仍可移除）
+                          </span>
+                        )}
+                      </h3>
+                      <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3 break-words">
+                        {[job.company, job.locations?.join("、") || "地点未知", ROLE_FAMILY_LABELS[job.roleFamily ?? "unknown"]].join(" · ")}
+                      </p>
+                      <p className="mt-1 text-[11.5px] text-ink-4">
+                        收藏于 <span className="num">{fullDateTime(job.savedAt)}</span>
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      aria-label={`移除收藏：${job.title}`}
+                      onClick={() => removeStarredJob(job.id)}
+                      className="shrink-0 text-[12.5px] text-ink-3 transition-colors hover:text-accent"
+                    >
+                      移除
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>

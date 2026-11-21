@@ -68,6 +68,26 @@
         }
       }
     },
+    "/api/site/career-insights/jobs/availability": {
+      "get": {
+        "operationId": "getCareerJobAvailability",
+        "summary": "收藏岗位批量可用性",
+        "description": "收藏页在浏览器本地保存岗位快照，无法从列表判断岗位是否还在；这里按 id 批量回答详情页现在是否存在（可见性与 jobDetail 一致）。只读、no-store；未知 id 记 missing，不返回岗位的其它字段；空、非法格式或去重后超过 200 个 id 返回 400。",
+        "parameters": [
+          { "name": "ids", "in": "query", "required": true, "schema": { "type": "string", "description": "逗号分隔的 UUID，去重后最多 200 个" } }
+        ],
+        "responses": {
+          "200": {
+            "description": "每个请求 id 的可用性",
+            "headers": { "Cache-Control": { "schema": { "type": "string", "const": "no-store" } } },
+            "content": { "application/json": { "schema": { "$ref": "#/components/schemas/JobAvailabilityResponseV1" } } }
+          },
+          "400": { "$ref": "#/components/responses/InvalidParameter" },
+          "503": { "$ref": "#/components/responses/DataUnavailable" },
+          "500": { "$ref": "#/components/responses/InternalError" }
+        }
+      }
+    },
     "/api/site/career-insights/policies": {
       "get": {
         "operationId": "listCareerPolicies",
@@ -599,6 +619,20 @@
           "job": { "$ref": "#/components/schemas/JobDetailV1" },
           "observations": { "type": "array", "items": { "$ref": "#/components/schemas/ObservationPublicV1" } },
           "notice": { "type": "string" }
+        }
+      },
+      "JobAvailabilityStatus": {
+        "type": "string",
+        "enum": ["visible", "missing"],
+        "description": "visible：详情页现在可访问；missing：库内没有该岗位（可能已下架）。"
+      },
+      "JobAvailabilityResponseV1": {
+        "description": "键为小写 UUID，每个请求 id（去重后）都有一项；未知 id 记 missing。",
+        "type": "object",
+        "required": ["contract_version", "ids"],
+        "properties": {
+          "contract_version": { "type": "string", "const": "0.1" },
+          "ids": { "type": "object", "additionalProperties": { "$ref": "#/components/schemas/JobAvailabilityStatus" } }
         }
       },
       "ApiErrorResponseV1": {

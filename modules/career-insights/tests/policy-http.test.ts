@@ -31,6 +31,7 @@ function fakeRepository(overrides: Partial<CareerRepository> = {}): CareerReposi
       throw new Error("not used");
     },
     jobDetail: async () => null,
+    jobAvailability: async () => ({ contract_version: "0.1", ids: {} }),
     listPolicies: async (filters) => policyResponse(filters),
     hotCompanies: async () => {
       throw new Error("not used");

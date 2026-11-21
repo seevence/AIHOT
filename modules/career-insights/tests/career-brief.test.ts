@@ -103,6 +103,7 @@ function fakeRepository(read: () => Promise<CareerBriefV1 | null>): CareerReposi
     summary: notUsed,
     listJobs: notUsed,
     jobDetail: notUsed,
+    jobAvailability: notUsed,
     listPolicies: notUsed,
     hotCompanies: notUsed,
     dailySummary: notUsed,

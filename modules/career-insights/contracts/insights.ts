@@ -199,3 +199,17 @@ export interface CareerDailyCommentResponseV1 {
   facts: string[];
   evidence: Array<{ kind: "job" | "policy"; id: string; title: string }>;
 }
+
+/** 收藏的岗位在站内是否还能打开详情页。 */
+export type JobAvailabilityStatus = "visible" | "missing";
+
+/**
+ * 收藏页的岗位可用性批量探测（GET /api/site/career-insights/jobs/availability）。
+ * 收藏快照只存在浏览器本地，收藏页无法从列表判断岗位是否还在；这里只回答「详情页现在是否存在」，
+ * 可见性与 jobDetail 一致（career_jobs 有该行即可见）。未知 id 记 missing，不泄露岗位的其它信息。
+ */
+export interface JobAvailabilityResponseV1 {
+  contract_version: "0.1";
+  /** 键为小写 UUID，每个请求 id（去重后）都有一项。 */
+  ids: Record<string, JobAvailabilityStatus>;
+}

@@ -39,6 +39,13 @@ const HOT_FILTER_KEYS = new Set(["limit", "window_days"]);
 const SIGNAL_FILTER_KEYS = new Set(["limit", "window_days"]);
 const CATALOG_FILTER_KEYS = new Set(["limit", "window_days"]);
 const DAILY_COMMENT_FILTER_KEYS = new Set(["date"]);
+const JOB_AVAILABILITY_FILTER_KEYS = new Set(["ids"]);
+/**
+ * 后端一次接受去重后最多 200 个 id，与岗位收藏上限（STARRED_JOBS_LIMIT=200）一致。
+ * 前端按 100 个一批发送：UUID 比文章 id 长，200 个的 query 约 7.8k 字符，贴近反向代理常见的 8K 请求行上限。
+ * 文章侧后端一次接受 500 个、前端同样拆成 100/批，两边的上限数字因此不同。
+ */
+const JOB_AVAILABILITY_MAX_IDS = 200;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function invalidParameter(parameter: string, message: string): InvalidParameterError {
@@ -169,6 +176,36 @@ function parseCatalogOptions(query: unknown): CareerCatalogOptions {
   };
 }
 
+/**
+ * /jobs/availability 的 ids：逗号分隔的 UUID，去重后最多 200 个。
+ * 空列表、空片段、非 UUID 或超限都按参数错误返回 400，而不是把坏 id 当 missing 静默吞掉。
+ */
+function parseJobAvailabilityIds(query: unknown): string[] {
+  const input = queryRecord(query);
+  const unsupported = Object.keys(input).find((key) => !JOB_AVAILABILITY_FILTER_KEYS.has(key));
+  if (unsupported !== undefined) throw invalidParameter(unsupported, `Unsupported query parameter: ${unsupported}.`);
+
+  const raw = input.ids;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw invalidParameter("ids", "Query parameter must be a comma-separated list of job ids: ids.");
+  }
+
+  const ids: string[] = [];
+  const seen = new Set<string>();
+  for (const part of raw.split(",")) {
+    // UUID 不区分大小写；响应键统一为小写，和 career_jobs.id 的文本形式一致。
+    const id = part.trim().toLowerCase();
+    if (!UUID_PATTERN.test(id)) throw invalidParameter("ids", "Every job id must be a UUID: ids.");
+    if (seen.has(id)) continue;
+    seen.add(id);
+    ids.push(id);
+  }
+  if (ids.length > JOB_AVAILABILITY_MAX_IDS) {
+    throw invalidParameter("ids", `At most ${JOB_AVAILABILITY_MAX_IDS} job ids are allowed: ids.`);
+  }
+  return ids;
+}
+
 /** /daily-comment 的 date 缺省为今天（Asia/Shanghai）；页面读的是后台预生成的缓存，这里只选日期。 */
 function parseDailyCommentDate(query: unknown): string {
   const input = queryRecord(query);
@@ -212,6 +249,12 @@ export function registerCareerHttp(app: FastifyInstance, repository: CareerRepos
 
   app.get("/api/site/career-insights/jobs", async (request, reply) => respond(reply, async () => {
     return repository.listJobs(parseJobFilters(request.query));
+  }));
+
+  // 收藏页在浏览器本地保存岗位快照，用这个只读接口判断哪些岗位的详情页现在还在；
+  // 静态段 /availability 优先于下面的 :id，不会被当成岗位 id。
+  app.get("/api/site/career-insights/jobs/availability", async (request, reply) => respond(reply, async () => {
+    return repository.jobAvailability(parseJobAvailabilityIds(request.query));
   }));
 
   app.get<{ Params: { id: string } }>("/api/site/career-insights/jobs/:id", async (request, reply) => respond(reply, async () => {
