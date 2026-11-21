@@ -6,13 +6,12 @@
 // scripts/backfill-incremental-llm.ts，那里复用 scripts/backfill-normalizer-llm.ts 的同一套实现，
 // 模块本身不反向 import scripts。进程内核心是 runIncrementalLlm；cron 入口是 runIncrementalLlmCron
 // （子进程显式 MODEL_CALLS_ENABLED=true，worker 自己的开关不变），返回值进同一 job 的 job_runs.detail.llm，
-// 由 server.ts 的 career.ingest 在采集成功之后串行调用（两个步骤不能拆成两条 schedule）。
-import { execFile } from "node:child_process";
-import path from "node:path";
+// 由 server.ts 的 career.ingest 在采集成功之后串行调用；采集→兜底→研判三步不能拆成多条 schedule。
 import type { Sql } from "@aihot/backend/db";
 import type { JSONValue } from "postgres";
 import type { RoleFamily, StudentFriendly } from "../contracts/index.ts";
 import { LLM_NORMALIZER_VERSION } from "../data/normalize.ts";
+import { parseLastJsonLine, runModelCli, type ModelCliOutcome } from "./model-cli.ts";
 
 /**
  * 每次兜底最多调用模型的行数。80 约等于一天新增岗位量（约 30-50 行）的余量：预算触顶被跳过的行
@@ -37,8 +36,6 @@ export const DEFAULT_CONCURRENCY = 3;
 /** 兜底最多 80 行模型调用（与 DEFAULT_BUDGET_ROWS 同口径），15 分钟仍未结束视为失败。 */
 const CLI_TIMEOUT_MS = 15 * 60_000;
 const CLI_MAX_BUFFER = 4 * 1024 * 1024;
-/** 仓库根：cron 以子进程在仓库根目录执行 CLI。 */
-const REPO_ROOT = path.resolve(import.meta.dirname, "../../..");
 export const INCREMENTAL_LLM_CLI = "scripts/backfill-incremental-llm.ts";
 
 export interface IncrementalJobRow {
@@ -475,12 +472,7 @@ export class SqlIncrementalJobStore implements IncrementalCandidateStore {
 
 // ===== 定时任务入口：子进程跑 CLI，显式只为本步骤打开模型调用 =====
 
-export interface IncrementalLlmCliOutcome {
-  code: number | null;
-  stdout: string;
-  stderr: string;
-  timedOut?: boolean;
-}
+export type IncrementalLlmCliOutcome = ModelCliOutcome;
 
 export type IncrementalLlmCliRun = (
   args: readonly string[],
@@ -522,46 +514,16 @@ export function incrementalLlmArgs(
   return args;
 }
 
-/** CLI 的 stdout 最后一行是汇总 JSON（人读日志走 stderr），这里按行倒着找第一条汇总。 */
+/** CLI 的 stdout 最后一行是汇总 JSON（人读日志走 stderr），这里按行倒着找第一条带 candidates 的汇总。 */
 export function parseIncrementalLlmDetail(stdout: string): IncrementalLlmDetail | null {
-  const lines = stdout.split(/\r?\n/u).map((line) => line.trim()).filter((line) => line !== "");
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    try {
-      const value: unknown = JSON.parse(lines[index]!);
-      if (value !== null && typeof value === "object" && typeof (value as { candidates?: unknown }).candidates === "number") {
-        return value as IncrementalLlmDetail;
-      }
-    } catch {
-      // 不是汇总行（例如模块的 console.log 混进了 stdout），继续往前找。
-    }
-  }
-  return null;
+  return parseLastJsonLine<IncrementalLlmDetail>(
+    stdout,
+    (value) => value !== null && typeof value === "object" && typeof (value as { candidates?: unknown }).candidates === "number",
+  );
 }
 
 function execCli(args: readonly string[], env: NodeJS.ProcessEnv): Promise<IncrementalLlmCliOutcome> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      process.execPath,
-      [path.join(REPO_ROOT, INCREMENTAL_LLM_CLI), ...args],
-      { cwd: REPO_ROOT, env, timeout: CLI_TIMEOUT_MS, maxBuffer: CLI_MAX_BUFFER },
-      (error, stdout, stderr) => {
-        if (error === null) {
-          resolve({ code: 0, stdout: String(stdout), stderr: String(stderr) });
-          return;
-        }
-        const failure = error as { code?: string | number | null; killed?: boolean };
-        if (failure.killed === true) {
-          resolve({ code: null, stdout: String(stdout), stderr: String(stderr), timedOut: true });
-          return;
-        }
-        if (typeof failure.code !== "number") {
-          reject(error);
-          return;
-        }
-        resolve({ code: failure.code, stdout: String(stdout), stderr: String(stderr) });
-      },
-    );
-  });
+  return runModelCli({ script: INCREMENTAL_LLM_CLI, args, env, timeoutMs: CLI_TIMEOUT_MS, maxBuffer: CLI_MAX_BUFFER });
 }
 
 function failureDetail(
