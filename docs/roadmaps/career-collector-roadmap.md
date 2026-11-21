@@ -441,7 +441,7 @@ B 侧落地要点：
 2. 31 行 `llm-0.1` 的派生字段已完整、不在兜底范围（按裁决不重跑以省成本）；若只需统一版本号，用 `scripts/backfill-normalizer.ts`（只刷派生字段与版本，不调模型）。
 3. 2 行仍 `llm-0.2`（B端产品经理等）经 dry-run 复核 aipo 判定不变，未再次付费。
 4. 版本保持 `llm-0.3` 不 bump：本次收紧只影响「标题非 AI 主体且正文仅在任职要求行提及 AI」的行，全库此类仅 3 行（B端产品经理 / 伙伴FDE教研 / 金融解决方案架构师）且已逐行复核；bump 会让 132 行变 stale 并触发全库重新调用，收益不成比例。
-5. 每日 cron 采集后仍会新增 unknown 行，未接 cron 前需要人工回填（T-A 把兜底接进 cron，见下节）。
+5. 每日 cron 采集后仍会新增 unknown 行：兜底已接进每日管线（见下节「每日管线：采集 → 有预算的 LLM 兜底」），同一 job 内串行执行，预算 80 行 / 12 万 prompt token。
 
 ### 证据文件
 
@@ -450,8 +450,29 @@ B 侧落地要点：
 - `.../20261120T1523Z-llm-03-reconcile.json`（130 行回填对账 + 定向纠偏 + 豁免回归检查）
 - `.../20261120T1555Z-llm-04-word-boundary.json`（ASCII 词边界 bug 修复 + AI Agent 产品经理改判）
 
+## 每日管线：采集 → 有预算的 LLM 兜底 → 研判/日报评论预生成（2026-11-21）
+
+### 设计
+- 只有一条 schedule：`career.ingest`（cron `10 6 * * *`、`missed: "once"`，队列由 worker 统一按 singleton 注册）。它的 run 严格串行四步：`await runCareerIngest({ pageLimit: 2 })` → `await runIncrementalLlmCron({ budgetRows: 80, budgetTokens: 120_000, sinceHours: 2 })` → `await runCareerBriefCron()` → `await runCareerDailyCommentCron()`，detail 返回 `{ ...ingest, llm, brief, comment }`（顶层 `report` / `rejected` / `failedSources` 保留，`backend/alerts.ts` 的 `career.ingest` 告警口径不变）。
+- **日报评论预生成（L3b-1 `0b69f95`）**：第四步子进程跑 `scripts/build-career-daily-comment.ts --json`（env 强制 `MODEL_CALLS_ENABLED=true`），按 Asia/Shanghai 自然日聚合（当日观测样本 / 新增岗位 / 方向·职位·技能 Top3（unknow 单列、技能 share 带分母）/ 新增政策），写 `career_daily_comments`（`0165`，UNIQUE(comment_date,prompt_version)）；失败只记 `detail.comment.ok=false`，不失败 job。页面 `/daily` 只读缓存。最坏耗时 53s + 3×15min ≈ 46 分钟 < 队列 `expireInSeconds=3600`。
+- **研判预生成（L3a，`454c01d`）**：第三步用子进程跑 `scripts/build-career-brief.ts --json`（env 强制 `MODEL_CALLS_ENABLED=true`），页面 `/api/site/career-insights/brief` 只读缓存、不触发模型；脚本 `--json` 契约 = stderr 人类日志 + stdout 单行 JSON（`{ok,as_of,sample_size,observation_days,confidence,receipt_id,model,skipped}`；无样本 skipped；失败 ok:false + exit 1）；brief 失败/超时只记 `detail.brief.ok=false`，不失败 job、不影响采集与兜底结果。
+- 兜底在子进程里显式 `MODEL_CALLS_ENABLED=true`，worker 全局开关不动；候选 = 时间窗内更新过、版本不是当前、且 role/student unknown 或 skills 为空的行（新职位优先）；写回只碰派生字段白名单（不写 observations、不动 last_seen_at/content_hash）；行数 80 / prompt token 12 万双预算，超限即停并记 `stopped_by_budget`；CLI 失败返回 `ok:false` 不抛（job 仍 ok，采集结果保留在 detail）。
+- 采集抛错 → 整个 job 失败且不执行兜底（错误不吞）。
+
+### 2026-11-21 首次真实运行与 review（发现并修复两个缺陷）
+- **补跑错序（Critical，已修 `d9bb313`）**：最初把兜底拆成独立 cron `career.llm-normalize`（06:40）。pg-boss 的 `missed: "once"` 补跑在 worker 启动时会把两个漏掉的槽位**同时**触发——2026-11-21 09:28 实测两 job 同一刻启动，采集跑 53s，兜底 185ms 就结束（候选 0 / 调用 0），当天新增 34 行没有被兜底。改为同一 job 串行，独立 schedule 删除（旧 `cron.career.llm-normalize` 队列由 worker 启动清理）。
+- **预算偏小（Important，已修 `ae329f1`）**：首次预算 50 行 / 5 万 token 时 47 个候选只跑了 27 行（估算 48645 触顶，实际 33070）；被跳过的行不会再被 2 小时窗口选中，等于永久漏掉。预算改为 80 行 / 12 万 token（实测 ≈1802 token/行，12 万约够 60–67 行，覆盖一天 30–50 行新增）；server.ts 改为 import `DEFAULT_*` 常量并加测试断言，防默认值漂移。
+- **独立评审（review-cron-order）**：PASS with minors。排序测试是 fake 调用序列断言并有变异验证（把 run 改成先 llm 后 ingest → 2 条测试失败）；minor 已修（`ae329f1`），最终 `server-schedule`+`cron-llm`+`backfill-normalizer-llm` 43/43、`tsc -p modules` 0。
+- **今日补跑实测**（2026-11-21 09:33 / 09:35 两次 `scripts/backfill-incremental-llm.ts --apply`，真实 DeepSeek）：候选 47 → 调用 47 行、更新 47、失败 0、规则降级 2；usage prompt 58926 / completion 1889；observations 500 行未变。兜底后当天新增行全部落到 `llm-0.3` 或词典已知分类。
+- 当前库（2026-11-21 09:40 CST）：jobs **222** / observations **500** / policies 6；`role_family` unknown **141** / aad 33 / aipo 18 / data 10 / alg 7（unknown 63.5%）；normalizer `llm-0.3` 187 / `0.3.0` 35。
+- **日报评论真实生成（L3b-1 验收，2026-11-21 10:35 CST）**：`node --env-file=../AIHOT/.env scripts/build-career-daily-comment.ts --json` → exit 0、单行 JSON：`date=2026-11-21, as_of=2026-11-21T01:29:35Z, sample_size=60（当日有观测岗位）, new_jobs=34, confidence=low, receipt_id=334`；评论正文含「当日带技能岗位 45 个」「36 个岗位方向未归类」等口径披露，数字全部 grounded。
+- **研判真实生成（L3a 验收，2026-11-21 10:00 CST）**：`node --env-file=../AIHOT/.env scripts/build-career-brief.ts --json` → exit 0、stdout 单行 JSON：`as_of=2026-11-21T01:29:35Z, sample_size=222, observation_days=3, confidence=low, receipt_id=331, model=default`；usage total 2887（prompt 2094 / completion 793）；`career_briefs` 新增一行（旧 2026-11-20 行保留，按 `(as_of,prompt_version)` upsert）。`GET /brief` 返回 200 且 sample_size=222，证明页面只读缓存。
+- **数字校验修复（`5024652`，L3a 验收发现）**：研判生成曾因「证据标题里的数字片段（`J107214`）被判编造」而永远失败；修复为把输入**所有字符串值里的连续数字片段**加入白名单（精确匹配才放行），并补 3 条断言（标题内数字通过、输入外 999 拒绝、43% 仍按百分比语义拒绝）；`career-brief` 测试 13→16、原有 0.4266→42.7% 等语义不变。
+
 ## 最近更新
 
+- **2026-11-21**：每日管线扩为 `career.ingest` 单 job 串行三步（采集 → 有预算 LLM 兜底 → 研判预生成，`454c01d`/`5024652`）；修复研判数字校验对输入字符串数字片段的误判，真实生成成功（as_of 2026-11-21、样本 222、观测日 3、receipt 331）。
+- **2026-11-21**：每日管线改为 `career.ingest` 单 job 串行（采集 → 有预算 LLM 兜底），修复 pg-boss 补跑错序（`d9bb313`）与预算偏小（`ae329f1`）；今日补跑 47 行、0 失败；新增本节「每日管线：采集 → 有预算的 LLM 兜底」。
 - **2026-11-20**：新增「LLM 归一化兜底与职族精度」：`llm-0.1` 全量兜底 → `llm-0.2` 精度收紧（aipo 70→20）→ `llm-0.3` 豁免只认职责行 → 修 ASCII 词边界 bug（AI Agent 标题误降）。最终 aipo 18、unknown 120/188；回填只写白名单派生字段（observations 与 last_seen_at/content_hash digest 前后一致），二次回填 0 候选 0 调用。另新增 cron 每日 06:40 有预算增量兜底（`career.llm-normalize`）。
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`（merge：按 A 裁定修正 unknown 与应届友好文案，源提交 `04f7cc4`）。

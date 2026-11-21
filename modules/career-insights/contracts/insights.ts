@@ -179,3 +179,23 @@ export interface CareerBriefV1 {
   limitations: string[];
   confidence: "low" | "medium" | "high";
 }
+
+/**
+ * 就业日报 AI 评论缓存（后台预生成）：每日管线按 (comment_date, prompt_version) upsert，
+ * 学生访问 /daily-comment 只读这一行，无缓存时 API 返回 204，页面不触发模型调用。
+ * comment 里的数字只来自输入 facts 与聚合字段（sample_size / new_jobs / Top3 计数），模型不参与数字计算；
+ * evidence 是当日新增岗位/政策的可引用 id，title 以库内为准。
+ */
+export interface CareerDailyCommentResponseV1 {
+  contract_version: "0.1";
+  /** Asia/Shanghai 自然日（YYYY-MM-DD）。 */
+  date: string;
+  as_of: string;
+  generated_at: string;
+  sample_size: number;
+  new_jobs: number;
+  confidence: "low" | "medium" | "high";
+  comment: string;
+  facts: string[];
+  evidence: Array<{ kind: "job" | "policy"; id: string; title: string }>;
+}

@@ -1,4 +1,6 @@
-// 首页数据工作台：已有什么岗位、需求在怎么变、我该怎么准备。
+// 首页只回答「今天有什么机会、有什么变化」：五段——今日概览、AI 就业研判、
+// 需求变化三指标、最新就业日报摘要与入口、热门方向 Top 3 入口。
+// 完整事实/限制/信号、方向与职位完整榜、技能榜只在洞察页与岗位页出现一次。
 // 每个区块独立降级——某一接口失败只让该区块显示「本区块暂时不可用」，其余照常渲染。
 import type { ReactNode } from "react";
 import { Link } from "react-router";
@@ -6,35 +8,23 @@ import type {
   CareerCatalogResponseV1,
   CareerDailyResponseV1,
   CareerDirectionV1,
-  CareerSignalsResponseV1,
-  JobListItemV1,
-  JobListResponseV1,
   SummaryResponseV1,
 } from "@aihot/career-insights/contracts";
-import {
-  ROLE_FAMILY_LABELS,
-  STUDENT_FRIENDLY_LABELS,
-  skillLabel,
-} from "../../../../../modules/career-insights/web/labels.ts";
-import { buildDirectionHref } from "../../../../../modules/career-insights/web/filters.ts";
+import { ROLE_FAMILY_LABELS, confidenceLabel } from "../../../../../modules/career-insights/web/labels.ts";
 import { UNKNOWN_RATIO_LABEL, formatRatioPercent } from "../../../../../modules/career-insights/web/feeds.ts";
 import { CareerTime } from "../../../../../modules/career-insights/web/time.ts";
-import { CareerSignals } from "../../../../../modules/career-insights/web/components/CareerSignals.ts";
 import type { HomeBriefState } from "./contracts.ts";
-import { HOME_LATEST_JOBS } from "./contracts.ts";
+import { HOME_BRIEF_LIMIT, HOME_CATALOG_LIMIT } from "./contracts.ts";
 import {
   BLOCK_UNAVAILABLE,
   BLOCK_UNAVAILABLE_HINT,
   KEEP_OBSERVING,
   KEEP_OBSERVING_HINT,
   homeIndicators,
-  prepareHints,
 } from "./view.ts";
 
 const SECTION_CLASS = "rounded-card border border-line bg-surface p-5";
 const JOBS_CATALOG_HREF = "/career-insights/jobs";
-
-const CONFIDENCE_LABELS = { low: "置信度低", medium: "置信度中", high: "置信度高" } as const;
 
 /** 区块级降级：不整页失败，也不隐藏其它区块。 */
 function Unavailable({ title }: { title: string }) {
@@ -55,6 +45,7 @@ function SectionHeader({ id, title, aside }: { id: string; title: string; aside?
   );
 }
 
+/** 今日概览：as_of / 样本量 / 来源 / 观察窗。 */
 function Overview({ summary, catalog }: { summary: SummaryResponseV1 | null; catalog: CareerCatalogResponseV1 | null }) {
   return (
     <section aria-labelledby="home-overview" className={SECTION_CLASS}>
@@ -96,16 +87,21 @@ function Overview({ summary, catalog }: { summary: SummaryResponseV1 | null; cat
   );
 }
 
+/** 结论列表：只展示前几条；没有内容时退回「继续积累观测」。 */
+function ConclusionList({ lines, limit }: { lines: readonly string[]; limit: number }) {
+  if (lines.length === 0) return <p className="mt-2 text-[13px] text-ink-3">{KEEP_OBSERVING}</p>;
+  return (
+    <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-2">
+      {lines.slice(0, limit).map((line) => <li key={line} className="break-words">{line}</li>)}
+    </ul>
+  );
+}
+
+/** AI 就业研判：只留趋势判断（带置信度）与可以做的事，各最多 3 条。 */
 function Brief({ brief }: { brief: HomeBriefState }) {
   return (
     <section aria-labelledby="home-brief" className={SECTION_CLASS}>
-      <SectionHeader
-        id="home-brief"
-        title="AI 就业研判"
-        aside={brief.status === "ok" ? (
-          <span className="rounded-full bg-bg-sunk px-2 py-0.5 text-[11px] text-ink-3">{CONFIDENCE_LABELS[brief.data.confidence]}</span>
-        ) : undefined}
-      />
+      <SectionHeader id="home-brief" title="AI 就业研判" />
       {brief.status === "failed" && <Unavailable title="AI 就业研判" />}
       {brief.status === "empty" && (
         <div role="status" className="mt-3 rounded-card border border-line-soft bg-bg-sunk px-4 py-4">
@@ -115,38 +111,22 @@ function Brief({ brief }: { brief: HomeBriefState }) {
       )}
       {brief.status === "ok" && (
         <>
-          <dl className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <dl className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
             <div>
-              <dt className="text-[12px] font-medium text-ink-4">已观测事实</dt>
-              <dd>
-                <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-2">
-                  {brief.data.facts.map((fact) => <li key={fact} className="break-words">{fact}</li>)}
-                </ul>
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[12px] font-medium text-ink-4">趋势推断</dt>
-              <dd>
-                <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-2">
-                  {brief.data.inferences.map((line) => <li key={line} className="break-words">{line}</li>)}
-                </ul>
-              </dd>
+              <dt className="flex flex-wrap items-baseline gap-2 text-[12px] font-medium text-ink-4">
+                趋势判断
+                <span className="rounded-full bg-bg-sunk px-2 py-0.5 text-[11px] font-normal text-ink-3">
+                  {confidenceLabel(brief.data.confidence)}
+                </span>
+              </dt>
+              <dd><ConclusionList lines={brief.data.inferences} limit={HOME_BRIEF_LIMIT} /></dd>
             </div>
             <div>
               <dt className="text-[12px] font-medium text-ink-4">可以做的事</dt>
-              <dd>
-                <ul className="mt-2 space-y-1.5 text-[13px] leading-relaxed text-ink-2">
-                  {brief.data.actions.map((line) => <li key={line} className="break-words">{line}</li>)}
-                </ul>
-              </dd>
+              <dd><ConclusionList lines={brief.data.actions} limit={HOME_BRIEF_LIMIT} /></dd>
             </div>
           </dl>
-          {brief.data.limitations.length > 0 && (
-            <p className="mt-3 text-[12px] leading-relaxed text-ink-4 break-words">
-              限制：{brief.data.limitations.join("；")}
-            </p>
-          )}
-          <p className="mt-2 text-[11.5px] text-ink-4 break-words">
+          <p className="mt-3 text-[11.5px] text-ink-4 break-words">
             离线生成于 <CareerTime value={brief.data.generated_at} /> · 基于样本 {brief.data.sample_size} 个岗位，读者打开页面不调用模型。
           </p>
         </>
@@ -155,6 +135,7 @@ function Brief({ brief }: { brief: HomeBriefState }) {
   );
 }
 
+/** 需求变化三指标：学生友好岗位只计明确证据，口径写在注里。 */
 function Indicators({ summary }: { summary: SummaryResponseV1 | null }) {
   return (
     <section aria-labelledby="home-indicators">
@@ -180,114 +161,14 @@ function Indicators({ summary }: { summary: SummaryResponseV1 | null }) {
   );
 }
 
-function DirectionRow({ direction }: { direction: CareerDirectionV1 }) {
-  return (
-    <li className="px-4 py-3.5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <Link to={buildDirectionHref(direction.role_family)} className="text-[15px] font-semibold text-ink break-words hover:text-accent">
-          {ROLE_FAMILY_LABELS[direction.role_family]}
-        </Link>
-        <span className="num text-[13px] text-ink-2">{direction.job_count} 个岗位</span>
-      </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[12px] text-ink-4">
-        <span className="num">观察窗新增 {direction.new_in_window}</span>
-        <span className="num">应届友好 {direction.student_friendly_count}</span>
-        <span className="num">{direction.company_count} 家公司</span>
-      </div>
-      {direction.top_skills.length > 0 && (
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {direction.top_skills.map((skill) => (
-            <span key={skill.skill} className="rounded-full bg-bg-sunk px-2 py-0.5 text-[11.5px] text-ink-3">
-              {skillLabel(skill.skill)} · {skill.count}
-            </span>
-          ))}
-        </div>
-      )}
-      <Link to={buildDirectionHref(direction.role_family)} className="mt-2 inline-block text-[12px] font-medium text-accent hover:underline">
-        查看证据
-      </Link>
-    </li>
-  );
-}
-
-function TopDirections({ catalog }: { catalog: CareerCatalogResponseV1 | null }) {
-  return (
-    <section aria-labelledby="home-top-directions" className={SECTION_CLASS}>
-      <SectionHeader
-        id="home-top-directions"
-        title="热门岗位 Top 6"
-        aside={<Link to={JOBS_CATALOG_HREF} className="text-[12px] font-medium text-accent hover:underline">查看全部岗位 →</Link>}
-      />
-      <p className="mt-1 text-[12px] leading-relaxed text-ink-4 break-words">
-        “热门”指当前有效岗位数量，不表示新闻热度、公司热度或未来增长。
-      </p>
-      {catalog === null ? (
-        <Unavailable title="热门岗位" />
-      ) : catalog.directions.length === 0 ? (
-        <div role="status" className="mt-3 rounded-card border border-line-soft bg-bg-sunk px-4 py-5 text-center">
-          <p className="text-[14px] font-medium text-ink-2">{KEEP_OBSERVING}</p>
-          <p className="mt-1 text-[12px] text-ink-4">还没有可按方向聚合的岗位。</p>
-        </div>
-      ) : (
-        <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line-soft">
-          {catalog.directions.map((direction) => <DirectionRow key={direction.role_family} direction={direction} />)}
-        </ul>
-      )}
-    </section>
-  );
-}
-
-function MarketSignals({ signals }: { signals: CareerSignalsResponseV1 | null }) {
-  if (signals === null) {
-    return (
-      <section aria-labelledby="home-signals" className={SECTION_CLASS}>
-        <SectionHeader id="home-signals" title="市场信号" />
-        <Unavailable title="市场信号" />
-      </section>
-    );
-  }
-  return <CareerSignals signals={signals.signals} skipped={signals.skipped} />;
-}
-
-function SkillsAndAdvice({ catalog }: { catalog: CareerCatalogResponseV1 | null }) {
-  return (
-    <section aria-labelledby="home-skills" className={SECTION_CLASS}>
-      <SectionHeader id="home-skills" title="热门技能与准备建议" />
-      {catalog === null ? (
-        <Unavailable title="热门技能与准备建议" />
-      ) : (
-        <>
-          {catalog.skills.length > 0 ? (
-            <ul className="mt-3 grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-              {catalog.skills.slice(0, 6).map((skill) => (
-                <li key={skill.skill} className="flex items-baseline justify-between gap-3 text-[13px]">
-                  <span className="text-ink-2 break-words">{skillLabel(skill.skill)}</span>
-                  <span className="num shrink-0 text-[12px] text-ink-4">
-                    {skill.job_count} 个岗位 · {formatRatioPercent(skill.share)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-3 text-[13px] text-ink-3">{KEEP_OBSERVING}</p>
-          )}
-          <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-ink-2">
-            {prepareHints(catalog.skills).map((hint) => <li key={hint} className="break-words">{hint}</li>)}
-          </ol>
-          <p className="mt-2 text-[11.5px] text-ink-4">建议按当前样本的技能出现次数给出，样本变化时自动更新。</p>
-        </>
-      )}
-    </section>
-  );
-}
-
+/** 最新就业日报摘要与入口；AI 评论在后续阶段接后端后加。入口属于导航而非数据，请求失败时也保留。 */
 function DailySummary({ daily }: { daily: CareerDailyResponseV1 | null }) {
   return (
     <section aria-labelledby="home-daily" className={SECTION_CLASS}>
       <SectionHeader
         id="home-daily"
         title="最新就业日报"
-        aside={daily ? <Link to="/daily" className="text-[12px] font-medium text-accent hover:underline">查看今日日报 →</Link> : undefined}
+        aside={<Link to="/daily" className="text-[12px] font-medium text-accent hover:underline">查看今日日报 →</Link>}
       />
       {daily === null ? (
         <Unavailable title="最新就业日报" />
@@ -321,56 +202,38 @@ function DailySummary({ daily }: { daily: CareerDailyResponseV1 | null }) {
   );
 }
 
-function JobRow({ job }: { job: JobListItemV1 }) {
+/** 一行入口：只给热门方向名与岗位数，完整方向榜与职位列表在岗位页。 */
+function DirectionEntry({ catalog }: { catalog: CareerCatalogResponseV1 | null }) {
   return (
-    <li className="px-4 py-3.5">
-      <a
-        href={job.official_url}
-        target="_blank"
-        rel="noreferrer noopener"
-        className="text-[14px] font-semibold text-ink break-words hover:text-accent"
-      >
-        {job.title}
-      </a>
-      <div className="mt-1 text-[12px] text-ink-3 break-words">
-        {job.company_name} · {job.locations.length > 0 ? job.locations.join("、") : "城市未知"}
+    <section aria-labelledby="home-top-directions" className="rounded-card border border-line bg-surface px-5 py-4">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <h2 id="home-top-directions" className="text-[15px] font-semibold text-ink">热门方向 Top {HOME_CATALOG_LIMIT}</h2>
+        {catalog === null ? (
+          <span role="status" className="text-[12px] text-ink-4">{BLOCK_UNAVAILABLE}</span>
+        ) : catalog.directions.length === 0 ? (
+          <span role="status" className="text-[12px] text-ink-4">{KEEP_OBSERVING}</span>
+        ) : (
+          <ul className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[13px] text-ink-2">
+            {catalog.directions.slice(0, HOME_CATALOG_LIMIT).map((direction: CareerDirectionV1) => (
+              <li key={direction.role_family} className="break-words">
+                {ROLE_FAMILY_LABELS[direction.role_family]}
+                <span className="num ml-1 text-ink-4">{direction.job_count} 个岗位</span>
+              </li>
+            ))}
+          </ul>
+        )}
+        <Link to={JOBS_CATALOG_HREF} className="text-[12px] font-medium text-accent hover:underline sm:ml-auto">
+          查看全部岗位 →
+        </Link>
       </div>
-      <div className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-[11.5px] text-ink-4">
-        <span>{ROLE_FAMILY_LABELS[job.role_family]}</span>
-        <span>应届友好：{STUDENT_FRIENDLY_LABELS[job.student_friendly]}</span>
-        <span>官方链接</span>
-      </div>
-    </li>
-  );
-}
-
-function LatestJobs({ jobs }: { jobs: JobListResponseV1 | null }) {
-  return (
-    <section aria-labelledby="home-latest-jobs" className={SECTION_CLASS}>
-      <SectionHeader
-        id="home-latest-jobs"
-        title="最新岗位"
-        aside={<Link to={JOBS_CATALOG_HREF} className="text-[12px] font-medium text-accent hover:underline">查看全部 →</Link>}
-      />
-      {jobs === null ? (
-        <Unavailable title="最新岗位" />
-      ) : jobs.items.length === 0 ? (
-        <p className="mt-3 text-[13px] text-ink-3">{KEEP_OBSERVING}</p>
-      ) : (
-        <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line-soft">
-          {jobs.items.slice(0, HOME_LATEST_JOBS).map((job) => <JobRow key={job.id} job={job} />)}
-        </ul>
-      )}
     </section>
   );
 }
 
-export function HomeWorkbench({ summary, catalog, signals, daily, latestJobs, brief }: {
+export function HomeWorkbench({ summary, catalog, daily, brief }: {
   summary: SummaryResponseV1 | null;
   catalog: CareerCatalogResponseV1 | null;
-  signals: CareerSignalsResponseV1 | null;
   daily: CareerDailyResponseV1 | null;
-  latestJobs: JobListResponseV1 | null;
   brief: HomeBriefState;
 }) {
   return (
@@ -378,22 +241,15 @@ export function HomeWorkbench({ summary, catalog, signals, daily, latestJobs, br
       <header>
         <h1 data-page-title="" className="text-[24px] font-semibold text-ink">就业数据工作台</h1>
         <p className="mt-1 text-[13px] leading-relaxed text-ink-3 break-words">
-          已有什么岗位、需求在怎么变、我该怎么准备——同一屏看完，数据只来自已采集的公开岗位与政策。
+          今天有什么机会、需求在怎么变——一屏看完；完整事实与完整岗位榜在洞察页和岗位页。
         </p>
       </header>
 
       <Overview summary={summary} catalog={catalog} />
       <Brief brief={brief} />
       <Indicators summary={summary} />
-      <TopDirections catalog={catalog} />
-      <MarketSignals signals={signals} />
-      <SkillsAndAdvice catalog={catalog} />
       <DailySummary daily={daily} />
-      <LatestJobs jobs={latestJobs} />
-
-      <p className="text-[12px] text-ink-4">
-        <Link to="/all" className="font-medium text-accent hover:underline">浏览全部行业动态 →</Link>
-      </p>
+      <DirectionEntry catalog={catalog} />
     </div>
   );
 }

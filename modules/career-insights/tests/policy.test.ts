@@ -373,6 +373,7 @@ test("the openapi contract registers the hot, daily and signals endpoints", () =
   for (const path of [
     "/api/site/career-insights/hot",
     "/api/site/career-insights/daily",
+    "/api/site/career-insights/daily-comment",
     "/api/site/career-insights/signals",
   ]) {
     assert.ok(contract.paths[path], `missing path ${path}`);
@@ -380,6 +381,7 @@ test("the openapi contract registers the hot, daily and signals endpoints", () =
   for (const schema of [
     "CareerHotResponseV1",
     "CareerDailyResponseV1",
+    "CareerDailyCommentResponseV1",
     "CareerSignalsResponseV1",
     "CareerHotEntryV1",
     "CareerDailySourceV1",

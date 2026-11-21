@@ -105,6 +105,7 @@ function fakeRepository(read: () => Promise<CareerBriefV1 | null>): CareerReposi
     careerSignals: notUsed,
     careerCatalog: notUsed,
     careerBrief: read,
+    careerDailyComment: notUsed,
     writeBatch: notUsed,
   };
 }
@@ -192,6 +193,59 @@ test("sample sizes and the as_of date are quotable", () => {
   );
 
   assert.deepEqual(record.facts, ["样本量 188 个岗位", "数据截止 2026 年 11 月"]);
+});
+
+test("digits inside input strings are quotable: an evidence title may carry its job id", () => {
+  const withJobId = input({
+    evidence_candidates: [{ kind: "job", id: JOB_ID, title: "大客户服务经理 TAM（J107214）" }],
+  });
+
+  const record = composeCareerBrief(
+    withJobId,
+    draft({ facts: ["证据里的职位 J107214 是大客户服务经理"] }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+  assert.equal(record.facts[0], "证据里的职位 J107214 是大客户服务经理");
+
+  assert.throws(
+    () => composeCareerBrief(withJobId, draft({ facts: ["证据里的职位 999 不存在"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
+    (error: unknown): boolean => error instanceof CareerBriefValidationError && error.message.includes("999"),
+  );
+});
+
+test("digit runs in other input strings pass too, but numbers absent from the input still reject", () => {
+  // skill_2024 的数字片段同时落在 as_of 年份白名单里；track_202445 只能靠字符串片段通过。
+  const withSkillIds = input({
+    skills: [
+      { skill: "skill_2024", job_count: 42, share: 0.4266 },
+      { skill: "track_202445", job_count: 7, share: 0.1 },
+    ],
+  });
+
+  const record = composeCareerBrief(
+    withSkillIds,
+    draft({ facts: ["技能 skill_2024 与 track_202445 都在输入里"] }),
+    { generated_at: "2026-11-20T01:00:00.000Z" },
+  );
+  assert.equal(record.facts[0], "技能 skill_2024 与 track_202445 都在输入里");
+
+  assert.throws(
+    () => composeCareerBrief(withSkillIds, draft({ facts: ["技能 skill_2024000 不在输入里"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
+    (error: unknown): boolean => error instanceof CareerBriefValidationError && error.message.includes("2024000"),
+  );
+});
+
+test("the string whitelist does not blanket-pass percentages", () => {
+  const withJobId = input({
+    skills: [{ skill: "data_analysis", job_count: 42, share: 0.4266 }],
+    evidence_candidates: [{ kind: "job", id: JOB_ID, title: "大客户服务经理 TAM（J107214）" }],
+  });
+
+  assert.throws(
+    () => composeCareerBrief(withJobId, draft({ facts: ["技能占比 43%"] }), { generated_at: "2026-11-20T01:00:00.000Z" }),
+    (error: unknown): boolean =>
+      error instanceof CareerBriefValidationError && error.message.includes("43%") && error.message.includes("技能占比 43%"),
+  );
 });
 
 test("evidence ids outside the input candidates are dropped silently", () => {

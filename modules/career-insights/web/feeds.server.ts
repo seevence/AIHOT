@@ -25,6 +25,12 @@ export function careerDailyPath(): string {
   return careerApiPath("/daily");
 }
 
+/** 日报 AI 评论缓存；date 缺省时后端按 Asia/Shanghai 的今天取，页面只读缓存。 */
+export function careerDailyCommentPath(date?: string): string {
+  const path = careerApiPath("/daily-comment");
+  return date === undefined ? path : `${path}?date=${encodeURIComponent(date)}`;
+}
+
 export function careerSummaryPath(): string {
   return careerApiPath("/summary");
 }
@@ -71,16 +77,26 @@ export function loadCareerLatestJobs<T>(signal?: AbortSignal): Promise<T> {
 }
 
 /**
- * C-BRIEF@1：只读离线缓存，无缓存时接口返回 204。null 表示「还没生成」，
- * 与请求失败区分开；读者访问不触发模型调用。
+ * 只读离线缓存：无缓存时接口返回 204。null 表示「还没生成」，与请求失败区分开；
+ * 请求失败抛给调用方逐块降级，读者访问不触发模型调用。
  */
-export async function loadCareerBrief<T>(signal?: AbortSignal): Promise<T | null> {
+async function loadCachedJson<T>(path: string, signal?: AbortSignal): Promise<T | null> {
   const timeout = AbortSignal.timeout(15_000);
-  const res = await fetch(`${API_BASE_URL}${careerBriefPath()}`, {
+  const res = await fetch(`${API_BASE_URL}${path}`, {
     headers: { accept: "application/json", "x-aihot-ssr": "1" },
     signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
   });
   if (res.status === 204) return null;
-  if (!res.ok) throw new Error(`career brief api ${res.status}`);
+  if (!res.ok) throw new Error(`career cached read api ${res.status}`);
   return (await res.json()) as T;
+}
+
+/** C-BRIEF@1：洞察页的研判缓存，204 → null。 */
+export function loadCareerBrief<T>(signal?: AbortSignal): Promise<T | null> {
+  return loadCachedJson<T>(careerBriefPath(), signal);
+}
+
+/** C-DAILY-COMMENT@1：日报页的 AI 评论缓存，204 → null；失败抛给路由，按区块隐藏。 */
+export function loadCareerDailyComment<T>(signal?: AbortSignal, date?: string): Promise<T | null> {
+  return loadCachedJson<T>(careerDailyCommentPath(date), signal);
 }

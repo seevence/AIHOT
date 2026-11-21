@@ -1,5 +1,6 @@
-// 职业洞察七段与岗位目录页的展示口径，standalone：不连数据库、不连 API。
+// 职业洞察八段与岗位目录页的展示口径，standalone：不连数据库、不连 API。
 // 路由文件是 JSX，Node 不能直接执行；可测的渲染与筛选口径都在 web/components/*.ts，由路由与这里共用。
+// 这里用 react-dom/server 的 renderToStaticMarkup + cheerio 渲染 SSR HTML，断言八段顺序与关键词。
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { test } from "node:test";
@@ -8,8 +9,21 @@ import { createElement, type ReactElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router";
 import type { JobFiltersV1, JobListResponseV1, SummaryResponseV1 } from "@aihot/career-insights/contracts";
-import type { CareerCatalogResponseV1 } from "../contracts/index.ts";
-import { CareerInsightsBoard, INSIGHT_SECTIONS, INSUFFICIENT_DATA_TEXT } from "../web/components/CareerInsightsBoard.ts";
+import type { CareerCatalogResponseV1, CareerSignalsResponseV1 } from "../contracts/index.ts";
+import {
+  ADVICE_DIRECTION_LIMIT,
+  ADVICE_SKILL_LIMIT,
+  BLOCK_UNAVAILABLE_TEXT,
+  BRIEF_EMPTY_TEXT,
+  CareerInsightsBoard,
+  COLLECTOR_CITATION,
+  HOT_DEFINITION,
+  HOT_JOBS_SUMMARY_LIMIT,
+  INSIGHT_SECTIONS,
+  INSUFFICIENT_DATA_TEXT,
+  SKILL_DEFINITION,
+} from "../web/components/CareerInsightsBoard.ts";
+import { formatRatioPercent } from "../web/feeds.ts";
 import {
   CATALOG_EMPTY_TEXT,
   JobsCatalogBoard,
@@ -158,14 +172,144 @@ const BRIEF = {
   confidence: "low" as const,
 };
 
-const SIGNALS = {
-  contract_version: "0.1" as const,
-  data_origin: "live" as const,
+const SIGNALS: CareerSignalsResponseV1 = {
+  contract_version: "0.1",
+  data_origin: "live",
   window_days: 30,
   signals: [],
   skipped: [],
   generated_at: AS_OF,
 };
+
+const SIGNALS_WITH: CareerSignalsResponseV1 = {
+  ...SIGNALS,
+  signals: [
+    {
+      rule: "cross_industry",
+      company: "示例科技",
+      job_id: "job-2",
+      job_title: "机械设计工程师",
+      evidence: { company_job_count: 6, ai_family_job_count: 5, ai_family_ratio: 0.83, matched_terms: ["机械"] },
+      reason_text: "该公司 6 个岗位中 5 个为算法/AI 族，本岗位要求 机械。",
+      source_key: "tencent-official-careers",
+      official_url: "https://careers.example/jobs/2",
+      first_seen_at: AS_OF,
+      confidence: "high",
+    },
+    {
+      rule: "surge",
+      company: "示例科技",
+      job_id: "job-3",
+      job_title: "算法工程师",
+      evidence: { last_24h_jobs: 6, history_days: 3, history_daily_average: 1.5, surge_ratio: 4 },
+      reason_text: "该公司最近 24 小时新增 6 个岗位，为历史日均（1.5 个/天，3 天）的 4 倍。",
+      source_key: "tencent-official-careers",
+      official_url: "https://careers.example/jobs/3",
+      first_seen_at: AS_OF,
+      confidence: "high",
+    },
+  ],
+  skipped: [{ rule: "surge", company: "示例科技", reason: "insufficient_history", history_days: 1.5 }],
+};
+
+/** 四条规则各一条，覆盖 new_family / skill_mismatch / surge_ratio=null 与半值舍入。 */
+const SIGNALS_RULES: CareerSignalsResponseV1 = {
+  ...SIGNALS,
+  signals: [
+    {
+      rule: "cross_industry",
+      company: "舍入样例公司",
+      job_id: "job-4",
+      job_title: "结构设计工程师",
+      evidence: { company_job_count: 8, ai_family_job_count: 7, ai_family_ratio: 0.8335, matched_terms: ["结构设计"] },
+      reason_text: "该公司 8 个岗位中 7 个为算法/AI 族，本岗位要求 结构设计。",
+      source_key: "tencent-official-careers",
+      official_url: "https://careers.example/jobs/4",
+      first_seen_at: AS_OF,
+      confidence: "high",
+    },
+    {
+      rule: "new_family",
+      company: "新职族公司",
+      job_id: "job-5",
+      job_title: "AI 应用开发工程师",
+      evidence: {
+        role_family: "ai_application_development",
+        family_job_count: 4,
+        window_days: 30,
+        earliest_first_seen_at: "2026-11-19T00:00:00.000Z",
+      },
+      reason_text: "该公司近 30 天首次出现「AI 应用开发」职族岗位，窗口内 4 个。",
+      source_key: "tencent-official-careers",
+      official_url: "https://careers.example/jobs/5",
+      first_seen_at: AS_OF,
+      confidence: "medium",
+    },
+    {
+      rule: "surge",
+      company: "无历史公司",
+      job_id: "job-6",
+      job_title: "算法工程师",
+      evidence: { last_24h_jobs: 5, history_days: 2, history_daily_average: 0, surge_ratio: null },
+      reason_text: "该公司最近 24 小时新增 5 个岗位，历史 2 天内没有新增记录。",
+      source_key: "tencent-official-careers",
+      official_url: "https://careers.example/jobs/6",
+      first_seen_at: AS_OF,
+      confidence: "high",
+    },
+    {
+      rule: "skill_mismatch",
+      company: "错配公司",
+      job_id: "job-7",
+      job_title: "大模型算法工程师",
+      evidence: { matched_title_terms: ["大模型", "算法"], matched_skill_terms: ["机械", "硬件"] },
+      reason_text: "岗位标题「大模型算法工程师」属于算法/AI 类，但技能要求出现 机械、硬件。",
+      source_key: "tencent-official-careers",
+      official_url: "https://careers.example/jobs/7",
+      first_seen_at: AS_OF,
+      confidence: "high",
+    },
+  ],
+  skipped: [],
+};
+
+/** 超额目录：7 个方向 / 7 个职位 / 7 个技能，用来断言摘要卡与建议区的截断上限。 */
+const MANY: CareerCatalogResponseV1 = {
+  ...CATALOG,
+  sample_size: 30,
+  directions: ["ai_algorithm", "ai_application_development", "data", "ai_product_operations", "unknown", "ai_algorithm", "ai_application_development"].map(
+    (role_family, index) => ({
+      role_family: role_family as CareerCatalogResponseV1["directions"][number]["role_family"],
+      job_count: 10 - index,
+      company_count: 2,
+      new_in_window: 1,
+      student_friendly_count: 1,
+      top_skills: [{ skill: `skill_${index}`, count: 3 }],
+    }),
+  ),
+  titles: Array.from({ length: 7 }, (_, index) => ({
+    title_key: `title-${index + 1}`,
+    title_display: `职位 ${index + 1}`,
+    job_count: 7 - index,
+    company_count: 1,
+    cities: ["北京"],
+    top_skills: [{ skill: "python", count: 2 }],
+    student_friendly_count: 1,
+    latest_published_at: AS_OF,
+  })),
+  skills: Array.from({ length: 7 }, (_, index) => ({ skill: `skill_${index}`, job_count: 9 - index, share: 0.5 })),
+};
+
+const EXPECTED_SECTIONS = [
+  "career-brief",
+  "career-signals",
+  "career-job-trend",
+  "career-skill-trend",
+  "career-hot-jobs",
+  "career-student-advice",
+  "career-policy-jobs",
+  "career-method",
+];
 
 const JOBS: JobListResponseV1 = {
   contract_version: "0.1",
@@ -199,42 +343,236 @@ function render(page: ReactElement): cheerio.CheerioAPI {
   return cheerio.load(renderToStaticMarkup(createElement(MemoryRouter, { initialEntries: ["/career-insights"] }, page)));
 }
 
-function board(summary: SummaryResponseV1, catalog: CareerCatalogResponseV1 | null, brief: typeof BRIEF | null = BRIEF): cheerio.CheerioAPI {
-  return render(createElement(CareerInsightsBoard, { summary, catalog, signals: SIGNALS, brief }));
+function board(
+  summary: SummaryResponseV1 | null,
+  catalog: CareerCatalogResponseV1 | null,
+  options: { brief?: typeof BRIEF | null; signals?: CareerSignalsResponseV1 | null } = {},
+): cheerio.CheerioAPI {
+  const { brief = BRIEF, signals = SIGNALS } = options;
+  return render(createElement(CareerInsightsBoard, { summary, catalog, signals, brief }));
 }
 
 function sectionIds(html: cheerio.CheerioAPI): Array<string | undefined> {
   return html("[data-insight-section]").map((_, element) => html(element).attr("data-insight-section")).get();
 }
 
-test("the dashboard renders the seven sections in contract order", () => {
+function unavailableSections(html: cheerio.CheerioAPI): string[] {
+  return html("[data-insight-section]")
+    .filter((_, element) => html(element).find("[data-section-unavailable]").length > 0)
+    .map((_, element) => html(element).attr("data-insight-section"))
+    .get();
+}
+
+/** 失败态只说明“本块不可用”，不得套用“观测日不足/样本过少”的样本不足归因。 */
+function assertUnavailableCopy(html: cheerio.CheerioAPI): void {
+  html("[data-section-unavailable]").each((_, element) => {
+    const text = html(element).text();
+    assert.equal(text.includes(BLOCK_UNAVAILABLE_TEXT), true);
+    assert.doesNotMatch(text, /观测日不足/);
+    assert.doesNotMatch(text, new RegExp(INSUFFICIENT_DATA_TEXT));
+  });
+}
+
+test("the dashboard renders the eight sections in contract order", () => {
   const html = board(SUMMARY, CATALOG);
+  assert.deepEqual(sectionIds(html), EXPECTED_SECTIONS);
   assert.deepEqual(sectionIds(html), INSIGHT_SECTIONS.map((section) => section.id));
-  assert.deepEqual(sectionIds(html), [
-    "career-brief",
-    "career-job-trend",
-    "career-skill-trend",
-    "career-hot-jobs",
-    "career-student-advice",
-    "career-policy-jobs",
-    "career-method",
-  ]);
+  for (const id of EXPECTED_SECTIONS) {
+    const section = html(`[data-insight-section='${id}']`);
+    assert.equal(section.length, 1, `missing section ${id}`);
+    assert.equal(section.attr("aria-labelledby"), id, `aria-labelledby mismatch on ${id}`);
+    assert.equal(section.find("h2").attr("id"), id, `h2 id mismatch on ${id}`);
+  }
   assert.equal(html("#career-brief").text(), "AI 趋势研判");
+  assert.equal(html("#career-signals").text(), "不同寻常的信号");
   assert.equal(html("#career-method").text(), "数据范围与方法");
 });
 
-test("a missing offline brief shows 继续积累观测 instead of a hard prediction", () => {
-  const html = board(SUMMARY, CATALOG, null);
-  assert.match(html("[data-brief-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
-  assert.match(html("[data-advice-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
+test("the complete brief renders facts, inferences, actions, limitations and evidence with metadata", () => {
+  const html = board(SUMMARY, CATALOG);
+  const brief = html("[data-insight-section='career-brief']");
+  assert.equal(brief.find("[data-brief-fact]").text(), BRIEF.facts[0]);
+  assert.equal(brief.find("[data-brief-inference]").text(), BRIEF.inferences[0]);
+  assert.equal(brief.find("[data-brief-action]").text(), BRIEF.actions[0]);
+  assert.equal(brief.find("[data-brief-limitation]").text(), BRIEF.limitations[0]);
+  assert.equal(brief.find("[data-brief-evidence]").first().text(), "算法工程师");
+  assert.equal(brief.find("[data-brief-confidence]").attr("data-brief-confidence"), "low");
+  assert.equal(brief.find("[data-brief-sample]").attr("data-brief-sample"), "12");
+  assert.equal(brief.find("[data-brief-as-of]").attr("data-brief-as-of"), AS_OF);
+  assert.match(brief.text(), /数据截至/);
+  assert.match(brief.text(), /样本 12 个岗位/);
+  assert.equal(brief.find("[data-brief-confidence]").text(), "低置信");
+  assert.match(brief.text(), /低置信/);
+  // 行动建议只完整出现在第 1 段，后面不重复。
+  assert.equal(html("[data-insight-section='career-student-advice'] [data-brief-action]").length, 0);
+});
+
+test("a missing offline brief shows 暂无研判 without breaking the other sections", () => {
+  const html = board(SUMMARY, CATALOG, { brief: null });
+  assert.match(html("[data-brief-empty]").text(), new RegExp(BRIEF_EMPTY_TEXT));
   assert.equal(html("[data-brief-confidence]").length, 0);
+  assert.equal(sectionIds(html).length, 8);
+});
+
+test("unusual signals show numeric evidence and source links, with skipped notice only when non-empty", () => {
+  const html = board(SUMMARY, CATALOG, { signals: SIGNALS_WITH });
+  const section = html("[data-insight-section='career-signals']");
+  const items = section.find("[data-signal-item]");
+  assert.equal(items.length, 2);
+
+  const crossIndustry = items.first();
+  assert.equal(crossIndustry.find("[data-signal-rule]").text(), "跨界组合");
+  assert.equal(crossIndustry.find("[data-signal-confidence]").text(), "高置信");
+  assert.match(crossIndustry.find("[data-signal-evidence]").text(), /公司岗位 6 个 · AI 族 5 个 · 占比 83.0%/);
+  assert.equal(crossIndustry.find("[data-signal-title]").parent().attr("href"), "/career-insights/jobs/job-2");
+  assert.equal(crossIndustry.find("[data-signal-source]").attr("href"), "https://careers.example/jobs/2");
+  assert.equal(items.last().find("[data-signal-evidence]").text().includes("24 小时新增 6 个"), true);
+  assert.match(section.find("[data-signals-skipped]").text(), /历史不足 2 天/);
+
+  const emptySkips = board(SUMMARY, CATALOG, { signals: { ...SIGNALS_WITH, skipped: [] } });
+  assert.equal(emptySkips("[data-signals-skipped]").length, 0);
+
+  const noSignals = board(SUMMARY, CATALOG, { signals: { ...SIGNALS_WITH, signals: [] } });
+  assert.equal(noSignals("[data-insight-section='career-signals'] [data-signals-empty]").length, 1);
+  assert.equal(noSignals("[data-signals-skipped]").length, 1);
+});
+
+test("all four signal rules render their own numeric evidence and share one percent formatter", () => {
+  const html = board(SUMMARY, CATALOG, { signals: SIGNALS_RULES });
+  const items = html("[data-insight-section='career-signals'] [data-signal-item]");
+  assert.equal(items.length, 4);
+
+  const ruleItem = (rule: string) => items.filter((_, element) => html(element).attr("data-signal-item") === rule).first();
+
+  // cross_industry：0.8335 的占比必须与公共格式化函数 formatRatioPercent 的输出完全一致。
+  const crossIndustry = ruleItem("cross_industry");
+  assert.ok(
+    crossIndustry.find("[data-signal-evidence]").text().includes(`占比 ${formatRatioPercent(0.8335)}`),
+    "signal card must reuse formatRatioPercent",
+  );
+
+  // new_family：职族、窗口内数量、观察窗与最早出现时间。
+  assert.equal(ruleItem("new_family").find("[data-signal-confidence]").text(), "中置信");
+  const newFamily = ruleItem("new_family").find("[data-signal-evidence]").text();
+  assert.match(newFamily, /新职族：AI 应用开发/);
+  assert.match(newFamily, /窗口内 4 个/);
+  assert.match(newFamily, /观察窗 30 天/);
+  assert.match(newFamily, /最早出现 2026年11月19日/);
+
+  // skill_mismatch：标题词与技能词。
+  const skillMismatch = ruleItem("skill_mismatch").find("[data-signal-evidence]").text();
+  assert.match(skillMismatch, /标题词：大模型、算法/);
+  assert.match(skillMismatch, /技能词：机械、硬件/);
+
+  // surge_ratio === null：历史日均无新增记录，不写倍数。
+  const surgeNull = ruleItem("surge").find("[data-signal-evidence]").text();
+  assert.match(surgeNull, /24 小时新增 5 个/);
+  assert.match(surgeNull, /历史日均无新增记录/);
+  assert.doesNotMatch(surgeNull, /倍/);
+});
+
+test("each block degrades on its own when one API result is missing", () => {
+  const noSignals = board(SUMMARY, CATALOG, { signals: null });
+  assert.deepEqual(unavailableSections(noSignals), ["career-signals"]);
+  assertUnavailableCopy(noSignals);
+
+  const noBrief = board(SUMMARY, CATALOG, { brief: null });
+  assert.deepEqual(unavailableSections(noBrief), []);
+
+  const noCatalog = board(SUMMARY, null);
+  assert.deepEqual(unavailableSections(noCatalog), ["career-job-trend", "career-skill-trend", "career-hot-jobs", "career-student-advice"]);
+  assertUnavailableCopy(noCatalog);
+
+  const noSummary = board(null, CATALOG);
+  assert.deepEqual(unavailableSections(noSummary), ["career-policy-jobs", "career-method"]);
+  assertUnavailableCopy(noSummary);
+  assert.equal(noSummary("[data-insight-section='career-job-trend'] [data-direction-row]").length, 2);
+
+  const allNull = board(null, null, { brief: null, signals: null });
+  assert.deepEqual(sectionIds(allNull), EXPECTED_SECTIONS);
+  assert.equal(allNull("[data-brief-empty]").length, 1);
+  assert.equal(allNull("[data-section-unavailable]").length, 7);
+  assertUnavailableCopy(allNull);
+});
+
+test("job trend lists families with window adds and keeps unknown on its own line", () => {
+  const html = board(SUMMARY, CATALOG);
+  const section = html("[data-insight-section='career-job-trend']");
+  assert.deepEqual(
+    section.find("[data-direction-row]").map((_, element) => section.find(element).attr("data-direction-row")).get(),
+    ["ai_algorithm", "data"],
+  );
+  assert.equal(section.find("[data-direction-row='ai_algorithm'] [data-direction-jobs]").text(), "6 个岗位");
+  assert.match(section.text(), /近 30 天新增 3/);
+  assert.match(section.find("[data-job-trend-unknown]").text(), /未分类职位 1 个 · 占比 8.3%/);
+  assert.match(section.find("[data-job-trend-unknown]").text(), /不进入方向结构/);
+});
+
+test("skill trend states the counting rule and keeps the unknown share visible", () => {
+  const html = board(SUMMARY, CATALOG);
+  const section = html("[data-insight-section='career-skill-trend']");
+  assert.equal(section.find("[data-skill-definition]").text(), SKILL_DEFINITION);
+  assert.match(section.find("[data-skill-definition]").text(), /岗位提及次数/);
+  assert.match(section.find("[data-skill-definition]").text(), /不等于岗位需求概率/);
+  assert.match(section.find("[data-skill-unknown]").text(), /未识别技能岗位 2 个 · 占比 20.0%/);
+  assert.deepEqual(
+    section.find("[data-skill-row]").map((_, element) => section.find(element).attr("data-skill-row")).get(),
+    ["python", "sql"],
+  );
+  assert.match(section.text(), /方向内高频技能组合/);
+});
+
+test("hot jobs keeps only summary cards and one link into the full catalog", () => {
+  const html = board(SUMMARY, CATALOG);
+  const section = html("[data-insight-section='career-hot-jobs']");
+  const directions = section.find("[data-hot-direction]");
+  const titles = section.find("[data-hot-title]");
+  assert.ok(directions.length > 0 && directions.length <= 6);
+  assert.ok(titles.length > 0 && titles.length <= 6);
+  assert.equal(section.find("[data-hot-all]").text(), "查看全部岗位");
+  assert.equal(section.find("[data-hot-all]").attr("href"), "/career-insights/jobs");
+  // 完整方向榜 / 职位榜 / 筛选 / 分页 / 明细都不在本段。
+  assert.equal(section.find("[data-rank-direction]").length, 0);
+  assert.equal(section.find("[data-rank-title]").length, 0);
+  assert.equal(section.find("[data-filter-student-friendly]").length, 0);
+  assert.equal(section.find("[data-page]").length, 0);
+  assert.equal(section.find("[data-catalog-job]").length, 0);
+  assert.doesNotMatch(section.text(), /方向榜|职位榜/);
+  // 热门口径说明只在第 8 段出现，摘要卡不重复整句定义。
+  assert.doesNotMatch(section.text(), new RegExp(HOT_DEFINITION));
+});
+
+test("student advice lists directions, skills and job evidence links into the jobs page", () => {
+  const html = board(SUMMARY, CATALOG);
+  const section = html("[data-insight-section='career-student-advice']");
+  assert.equal(section.find("[data-advice-direction]").length, 2);
+  assert.equal(section.find("[data-advice-direction='ai_algorithm'] a").attr("href"), "/career-insights/jobs?role_family=ai_algorithm&page=1&page_size=20");
+  assert.equal(section.find("[data-advice-skill='python']").attr("href"), "/career-insights/jobs?skill=python&page=1&page_size=20");
+  assert.equal(section.find("[data-advice-evidence] a").first().attr("href"), "/career-insights/jobs?student_friendly=yes&page=1&page_size=20");
+  assert.match(section.text(), /需补技能/);
+  assert.match(section.text(), /岗位证据/);
+});
+
+test("summary cards and advice cap their lists at the documented limits", () => {
+  const html = board(SUMMARY, MANY);
+  const hot = html("[data-insight-section='career-hot-jobs']");
+  assert.equal(hot.find("[data-hot-direction]").length, HOT_JOBS_SUMMARY_LIMIT);
+  assert.equal(hot.find("[data-hot-title]").length, HOT_JOBS_SUMMARY_LIMIT);
+  assert.equal(HOT_JOBS_SUMMARY_LIMIT, 6);
+
+  const advice = html("[data-insight-section='career-student-advice']");
+  assert.equal(advice.find("[data-advice-direction]").length, ADVICE_DIRECTION_LIMIT);
+  assert.equal(advice.find("[data-advice-skill]").length, ADVICE_SKILL_LIMIT);
+  assert.equal(ADVICE_DIRECTION_LIMIT, 3);
+  assert.equal(ADVICE_SKILL_LIMIT, 5);
 });
 
 test("policy linkage is hidden when there is no shared theme", () => {
   const withoutThemes: SummaryResponseV1 = { ...SUMMARY, shared_themes: [] };
   const hidden = board(withoutThemes, CATALOG);
   assert.equal(hidden("[data-insight-section='career-policy-jobs']").length, 0);
-  assert.equal(sectionIds(hidden).length, 6);
+  assert.equal(sectionIds(hidden).length, 7);
+  assert.deepEqual(sectionIds(hidden), EXPECTED_SECTIONS.filter((id) => id !== "career-policy-jobs"));
 
   const shown = board(SUMMARY, CATALOG);
   assert.equal(shown("[data-insight-section='career-policy-jobs']").length, 1);
@@ -242,12 +580,41 @@ test("policy linkage is hidden when there is no shared theme", () => {
   assert.match(shown("[data-insight-section='career-policy-jobs']").text(), /不表示因果关系/);
 });
 
+test("the method section discloses sources, window, sample, unknown semantics and the citation rule", () => {
+  const html = board(SUMMARY, CATALOG);
+  const section = html("[data-insight-section='career-method']");
+  assert.equal(section.find("[data-method-source]").text(), "2 个来源");
+  assert.equal(section.find("[data-method-sample]").text(), "12 个有效岗位 · 3 家公司");
+  assert.equal(section.find("[data-method-observed-days]").attr("data-method-observed-days"), "multi");
+  assert.match(section.text(), /采集窗口/);
+  assert.match(section.text(), /30 天/);
+  assert.equal(section.find("[data-method-unknown-policy]").length, 1);
+  assert.equal(section.find("[data-method-citation]").text(), COLLECTOR_CITATION);
+  assert.match(section.text(), /必须随数字一起引用/);
+  assert.match(section.text(), /unknown 单列/);
+  assert.equal(section.find("[data-method-limitation]").first().text(), HOT_DEFINITION);
+  assert.equal(html.text().split(HOT_DEFINITION).length - 1, 1);
+});
+
+test("the method section says 窗口未知 instead of inventing a window when catalog fails", () => {
+  const html = board(SUMMARY, null);
+  const window = html("[data-insight-section='career-method'] [data-method-window]");
+  assert.equal(window.attr("data-method-window"), "unknown");
+  assert.equal(window.text(), "窗口未知");
+  assert.doesNotMatch(window.text(), /30 天/);
+
+  const full = board(SUMMARY, CATALOG)("[data-insight-section='career-method'] [data-method-window]");
+  assert.equal(full.attr("data-method-window"), "30");
+  assert.equal(full.text(), "30 天");
+});
+
 test("an empty catalog asks to keep observing instead of inventing trends", () => {
   const empty: CareerCatalogResponseV1 = { ...CATALOG, sample_size: 0, directions: [], titles: [], skills: [] };
   const html = board(SUMMARY, empty);
   assert.match(html("[data-job-trend-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
   assert.match(html("[data-hot-jobs-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
-  assert.match(board(SUMMARY, CATALOG)("[data-hot-definition]").text(), /热门指当前有效岗位数量/);
+  assert.match(html("[data-advice-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
+  assert.match(html("[data-skill-trend-empty]").text(), new RegExp(INSUFFICIENT_DATA_TEXT));
 });
 
 test("the catalog page ranks directions and titles and links evidence", () => {

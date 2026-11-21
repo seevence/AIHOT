@@ -218,6 +218,12 @@
 - 5433 `aihot_test`：`ingest.test.ts` + `repository.test.ts` 共 16 tests / 16 pass / 0 fail（含 3 条刷新场景：版本升级刷新、旧哈希跨版本刷新、同版本派生变化刷新，均不新增 observation）。
 - 未写 15432：生产库仅执行 `SELECT`。worktree 下 `scripts/migrate.ts` 的 `REPO_ROOT` 解析到主仓库，global setup 不会应用本 worktree 的新迁移；本次在 5433 模板库直接调用 `runMigrations(process.cwd())` 应用 0163 后再跑 DB 测试。
 
+## 11-21 新增：日报评论的「样本」与占比口径（2026-11-21）
+
+- `/api/site/career-insights/daily-comment` 的 `sample_size` = **当日有观测的岗位数**（2026-11-21 实测 60），与 `/api/site/career-insights/daily` 的「全库样本」（同实测约 222）同名不同义；页面分别写「当日观测样本」与「全部样本」，引用时必须带限定词。
+- 评论 facts 显式给出技能占比的分母（当日带技能岗位数，2026-11-21 为 45）与方向未归类（unknown）岗位数（36，当日 60 样本内），并声明 unknown 单列、不进入方向榜与任何占比分母；prompt 要求模型引用占比时一并说明分母。
+- 评论数字走与研判相同的白名单校验：只允许输入里出现的数字（含证据标题数字片段、date/as_of 日期片段），编造数字拒绝。
+
 ## 11-20 后全量样本与职族口径（2026-11-20）
 
 - 引用来源：完整口径见 `career-collector-roadmap.md` 的「LLM 归一化兜底与职族精度（2026-11-20）」节（`llm-0.1` → `llm-0.2` → `llm-0.3` 三次落地、回填对账与 `90494b8` 的 ASCII 词边界修复；该节已按最终值 120/63.8% 更新）；本节只登记引用规则，不复制该节的过程数字。

@@ -186,6 +186,30 @@ function collectNumbers(value: unknown, out: number[]): void {
   }
 }
 
+/**
+ * 输入里所有字符串值中的连续数字片段（证据标题的职位号如 J107214、方向/技能 id、UUID 等）。
+ * 这些字符串本身就是模型输入的一部分，模型引用其中的数字是 grounded 的，不能判成编造。
+ * 但只在 token 与片段精确相等时放行，输入里没有的数字（如 999）仍然会被拒绝。
+ */
+function collectStringNumberFragments(value: unknown, out: Set<string>): void {
+  if (typeof value === "string") {
+    for (const fragment of value.match(/\d+/gu) ?? []) out.add(fragment);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringNumberFragments(item, out);
+    return;
+  }
+  if (isRecord(value)) {
+    for (const item of Object.values(value)) collectStringNumberFragments(item, out);
+  }
+}
+
+/** token 的纯数字文本（去掉千分位逗号与百分号），用于与输入字符串里的数字片段精确匹配。 */
+function tokenDigitText(token: NumberToken): string {
+  return token.raw.replaceAll(",", "").replace(/%$/u, "");
+}
+
 function decimalDigits(raw: string): number {
   const dot = raw.indexOf(".");
   return dot < 0 ? 0 : raw.length - dot - 1;
@@ -217,10 +241,12 @@ function equalAt(value: number, target: number, digits: number): boolean {
   return Math.round(value * factor) === Math.round(target * factor);
 }
 
-/** as_of 里的年、月、日片段可以原样引用，不算编造。 */
-function dateTokens(input: CareerBriefInputV1): Set<number> {
+/** 日期文本（as_of、日报的数据日期）里的年、月、日片段可以原样引用，不算编造。 */
+function dateTokens(dateTexts: readonly string[]): Set<number> {
   const tokens = new Set<number>();
-  for (const match of input.as_of.matchAll(DATE_TOKEN)) tokens.add(Number(match[0]));
+  for (const text of dateTexts) {
+    for (const match of text.matchAll(DATE_TOKEN)) tokens.add(Number(match[0]));
+  }
   return tokens;
 }
 
@@ -230,11 +256,18 @@ function isDateToken(token: NumberToken, dates: ReadonlySet<number>): boolean {
 }
 
 /**
- * 引用判定：等值、百分比换算，或按输出自身精度舍入后相等。
+ * 引用判定：token 与输入字符串里的数字片段精确相等、等于某个数值、日期片段，
+ * 或按输出自身精度舍入后相等。
  * 0.426573… 可被引成 0.4266（4 位）、0.43、42.7%、42.66%；
  * 整数（0 位小数）只认精确相等，因此 43%（把 42.65% 粗舍）会被拒绝。
  */
-function matchesKnownNumber(token: NumberToken, known: readonly number[], dates: ReadonlySet<number>): boolean {
+function matchesKnownNumber(
+  token: NumberToken,
+  known: readonly number[],
+  dates: ReadonlySet<number>,
+  stringFragments: ReadonlySet<string>,
+): boolean {
+  if (stringFragments.has(tokenDigitText(token))) return true;
   if (isDateToken(token, dates)) return true;
   return known.some((value) => {
     if (!Number.isFinite(value)) return false;
@@ -254,18 +287,28 @@ function numberContext(text: string, token: NumberToken): string {
   return characters.length <= CONTEXT_CHARS ? snippet : characters.slice(0, CONTEXT_CHARS).join("");
 }
 
-function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly string[]): void {
+/**
+ * 数字白名单校验（就业研判与日报 AI 评论共用）：values 里所有数值、以及所有字符串值里的连续数字片段
+ * 都可以被引用；dateTexts 里的年/月/日片段同样放行。引用判定的精度规则见 matchesKnownNumber。
+ */
+export function assertKnownNumbers(values: unknown, dateTexts: readonly string[], texts: readonly string[]): void {
   const known: number[] = [];
-  collectNumbers(input, known);
-  const dates = dateTokens(input);
+  collectNumbers(values, known);
+  const stringFragments = new Set<string>();
+  collectStringNumberFragments(values, stringFragments);
+  const dates = dateTokens(dateTexts);
   for (const text of texts) {
     for (const token of numberTokens(text)) {
-      if (matchesKnownNumber(token, known, dates)) continue;
+      if (matchesKnownNumber(token, known, dates, stringFragments)) continue;
       throw new CareerBriefValidationError(
         `Model output contains a number absent from the aggregate input: ${token.raw} (context: ${numberContext(text, token)}).`,
       );
     }
   }
+}
+
+function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly string[]): void {
+  assertKnownNumbers(input, [input.as_of], texts);
 }
 
 function parseConfidence(value: unknown): CareerBriefV1["confidence"] {

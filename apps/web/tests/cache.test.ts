@@ -6,7 +6,7 @@ import { SIGN_IN_HOME } from "@aihot/contracts/admin";
 import { isPrivatePage } from "@aihot/contracts/http-policy";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
-import { careerApi, fakeApi, startWebServer, type WebServer } from "./web-server.ts";
+import { careerApi, careerBriefFixture, fakeApi, startWebServer, type WebServer } from "./web-server.ts";
 
 let web: WebServer;
 let origin: string;
@@ -65,7 +65,7 @@ test("public route subsets produce the same complete navigation data; the home h
     const res = await fetch(`${origin}/_.data${query}`);
     assert.equal(res.status, 200);
     assert.match(res.headers.get("Cache-Control")!, /^public,/);
-    // The workbench home keeps its own minute for the six career reads; it no longer inherits the
+    // The workbench home keeps its own minute for its career reads; it no longer inherits the
     // selected timeline deadline, so the bound is the minute rather than @deadline.
     const expires = res.headers.get("X-Accel-Expires")!;
     assert.match(expires, /^@\d+$/);
@@ -101,7 +101,16 @@ test("HTML and navigation share freshness; cookies do not personalize public res
   const html = await fetch(`${origin}/`);
   assert.equal(html.status, 200);
   assert.match(html.headers.get("X-Accel-Expires")!, /^@\d+$/, "the home keeps its own minute");
-  assert.match(await html.text(), /就业数据工作台/);
+  const home = await html.text();
+  assert.match(home, /就业数据工作台/);
+  // Five blocks only: the signal cards, the Top 6 job list, the skills advice and the latest-job list
+  // now live on the insights and jobs pages, so the home must neither render nor fetch them.
+  for (const id of ["home-overview", "home-brief", "home-indicators", "home-daily", "home-top-directions"]) {
+    assert.match(home, new RegExp(`id="${id}"`), id);
+  }
+  for (const removed of ["值得注意的信号", "热门岗位 Top 6", "热门技能与准备建议", "最新岗位"]) {
+    assert.doesNotMatch(home, new RegExp(removed), removed);
+  }
   // The api's deadline also fixes the result's own expiry, so reads seconds apart compare byte for byte.
   const plain = await fetch(`${origin}/_.data`);
   const signedIn = await fetch(`${origin}/_.data?_routes=root`, { headers: { cookie: "admin_session=private; reader=returning" } });
@@ -115,6 +124,53 @@ test("HTML and navigation share freshness; cookies do not personalize public res
   assert.equal(signedIn.headers.get("Set-Cookie"), null);
   assert.equal(await signedIn.text(), await plain.text());
   assert.ok(apiCookies.every((cookie) => !cookie));
+});
+
+test("the home renders three brief conclusions only, keeps the daily entry and reads no removed block", async () => {
+  const hits: string[] = [];
+  const briefApi = fakeApi((url, res) => {
+    if (!url.pathname.startsWith("/api/site/career-insights/")) return undefined;
+    hits.push(url.pathname + url.search);
+    if (url.pathname === "/api/site/career-insights/brief") return careerBriefFixture();
+    // The daily read fails on purpose: its entry is navigation, so it stays while the block degrades.
+    if (url.pathname === "/api/site/career-insights/daily") {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: { code: "internal_error", message: "fixture" } }));
+      return undefined;
+    }
+    return careerApi(url, res);
+  });
+  const briefHome = await startWebServer(briefApi);
+  try {
+    const html = await (await fetch(`${briefHome.origin}/`)).text();
+    // The home shows at most three inferences and three actions; what is not shown is not shipped either,
+    // so the marker text must not even appear in the inline navigation payload.
+    for (const shown of ["INFERENCE-1", "INFERENCE-2", "INFERENCE-3", "ACTION-1", "ACTION-2", "ACTION-3"]) {
+      assert.match(html, new RegExp(shown), shown);
+    }
+    for (const hidden of ["INFERENCE-4", "INFERENCE-5", "ACTION-4", "ACTION-5", "FACT-ONLY", "LIMITATION-ONLY", "EVIDENCE-ONLY"]) {
+      assert.doesNotMatch(html, new RegExp(hidden), hidden);
+    }
+    assert.match(html, /中置信/, "the conclusion badge names the brief's confidence");
+  assert.doesNotMatch(html, /置信度中/, "the home uses the site-wide confidence wording, not its old local one");
+    // Adjacent JSX text nodes are split by comment markers in SSR; the rendered sentence still reads whole.
+    const rendered = html.replace(/<!--[\s\S]*?-->/g, "");
+    assert.match(rendered, /最新就业日报：本区块暂时不可用/, "only the daily block degrades");
+    assert.match(rendered, /unknown 不等于不友好/, "the student-friendly indicator carries its definition");
+    assert.match(rendered, /查看今日日报/, "the daily entry is navigation and stays on a failed read");
+    // Four career reads only: signals and the latest-jobs list are no longer part of the home.
+    assert.deepEqual(
+      hits.filter((path) => path.startsWith("/api/site/career-insights")).sort(),
+      [
+        "/api/site/career-insights/brief",
+        "/api/site/career-insights/catalog?limit=3",
+        "/api/site/career-insights/daily",
+        "/api/site/career-insights/summary",
+      ],
+    );
+  } finally {
+    await briefHome.stop();
+  }
 });
 
 test("missing routes cannot be hidden by a root-only request; errors and redirects stay uncached", async () => {
