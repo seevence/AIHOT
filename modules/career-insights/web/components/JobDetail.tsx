@@ -7,6 +7,7 @@ import {
   skillLabel,
 } from "../labels";
 import { CareerTime } from "../time";
+import { JobStarButton } from "./JobStarButton";
 
 type Fact = { label: string; value: string; dateTime?: boolean };
 
@@ -38,7 +39,10 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
       <Link to={backHref} className="inline-flex text-[13px] text-ink-3 hover:text-ink">← 返回职位列表</Link>
 
       <header>
-        <h1 data-page-title="" className="text-[26px] font-bold leading-snug text-ink break-words">{job.title}</h1>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <h1 data-page-title="" className="min-w-0 text-[26px] font-bold leading-snug text-ink break-words">{job.title}</h1>
+          <JobStarButton id={job.id} title={job.title} company={job.company_name} roleFamily={job.role_family} locations={job.locations} />
+        </div>
         <p className="mt-2 text-[15px] text-ink-3 break-words">
           {[job.company_name, job.locations.join("、")].filter(Boolean).join(" · ")}
         </p>

@@ -7,6 +7,8 @@ import { Presence } from "../components/ui/Presence";
 import { edgeTtl } from "../lib/api.server";
 import { pageMeta } from "../lib/seo";
 import { exportBundle, importBundle, removeStar, useStarred, type ImportReport } from "../lib/local-state";
+import { removeStarredJob, useStarredJobs } from "../../../../modules/career-insights/web/job-favorites.ts";
+import { ROLE_FAMILY_LABELS } from "../../../../modules/career-insights/web/labels.ts";
 import { fullDateTime } from "../lib/format";
 import { IconBookmark, IconDownload, IconClose } from "../components/icons";
 import { readSnapshot, restoreAnchor, useSaveOnLeave } from "../lib/restore";
@@ -35,6 +37,7 @@ function reportText(r: ImportReport): string {
 
 export default function StarredPage() {
   const starred = useStarred();
+  const starredJobs = useStarredJobs();
   const [mounted, setMounted] = useState(false);
   const [availability, setAvailability] = useState<Record<string, ItemAvailability>>({});
   const [notice, setNotice] = useState<{ kind: "ok" | "error"; text: string } | null>(null);
@@ -137,6 +140,42 @@ export default function StarredPage() {
           </button>
         </div>
       </Presence>
+      {mounted && (
+        <section data-starred-jobs="" aria-labelledby="starred-jobs-title" className="mt-6">
+          <h2 id="starred-jobs-title" className="text-[18px] font-semibold text-ink">收藏的岗位</h2>
+          {starredJobs.length === 0 ? (
+            <p className="mt-2 text-[13px] leading-relaxed text-ink-3">还没有收藏的岗位，在热门岗位或职位详情点收藏</p>
+          ) : (
+            <ul className="mt-3 divide-y divide-line-soft overflow-hidden rounded-card border border-line bg-surface">
+              {starredJobs.map((job) => (
+                <li key={job.id} data-starred-job={job.id} className="flex items-start justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <h3 className="text-[15px] font-semibold leading-[1.6] text-ink">
+                      <Link viewTransition to={`/career-insights/jobs/${encodeURIComponent(job.id)}`} className="break-words transition-colors hover:text-accent">
+                        {job.title}
+                      </Link>
+                    </h3>
+                    <p className="mt-1 text-[12.5px] leading-relaxed text-ink-3 break-words">
+                      {[job.company, job.locations?.join("、") || "地点未知", ROLE_FAMILY_LABELS[job.roleFamily ?? "unknown"]].join(" · ")}
+                    </p>
+                    <p className="mt-1 text-[11.5px] text-ink-4">
+                      收藏于 <span className="num">{fullDateTime(job.savedAt)}</span>
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    aria-label={`移除收藏：${job.title}`}
+                    onClick={() => removeStarredJob(job.id)}
+                    className="shrink-0 text-[12.5px] text-ink-3 transition-colors hover:text-accent"
+                  >
+                    移除
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      )}
       {!mounted ? null : starred.length === 0 ? (
         <div className="mt-3 flex flex-col items-center rounded-card border border-dashed border-line-strong px-6 py-12 text-center">
           <IconBookmark size={20} className="text-ink-4" />
