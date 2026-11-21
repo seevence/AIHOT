@@ -41,7 +41,8 @@ test("midnight preserves a missing edition; each date recovers only when its rep
 test("recent gap detection uses report activity and each edition's overdue time", async () => {
   await sql`INSERT INTO job_runs(job,started_at,status) VALUES('reports.compose',${new Date(at("2026-10-05"))},'failed')`;
   await report("2026-10-06");
-  const findings = await collectFindings(at("2026-10-07", "09:59"));
+  // 早于当天出刊时间（EDITION_TIMES.daily，现为 06:10）：10-07 还没到点，不应算缺口。
+  const findings = await collectFindings(at("2026-10-07", "05:59"));
   assert.deepEqual(daily(findings.map(f => f.key)), [key("2026-10-05")]);
   await report("2026-09-01");
   assert.deepEqual(daily((await collectFindings(at("2026-10-07"))).map(f => f.key)),
