@@ -34,7 +34,7 @@ test("the daily page renders the cached AI comment with its numbers and confiden
   assert.match(rendered, /今日新增岗位集中在 AI 应用开发方向/);
   assert.match(
     rendered,
-    /生成于 2026年10月4日 16:00 · 中置信 · 样本 12 个岗位 · 今日新增 3/,
+    /生成于 2026年10月4日 16:00 · 中置信 · 当日观测样本 12 个岗位 · 今日新增 3/,
     "the metadata line reads the cache's generated_at in Beijing time, the shared confidence label and its counts",
   );
   assert.ok(rendered.indexOf("今日概况") < rendered.indexOf("AI 评论"), "the comment follows the day's figures");
