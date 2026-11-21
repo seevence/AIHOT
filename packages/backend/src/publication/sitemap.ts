@@ -44,11 +44,9 @@ type Entry = SitemapEntry & { section?: string; newsAt?: Date | null };
  */
 export async function loadDiscoveryEntries(at = new Date(), limits?: { urls: number }): Promise<Entry[]> {
   const entries: Entry[] = [];
-  const [activity] = limits ? [] : await sql<{ selected: string | null; listed: string | null }[]>`
+  const [activity] = limits ? [] : await sql<{ selected: string | null }[]>`
     SELECT md5(string_agg(p.article_id || ':' || p.revision::text, ',' ORDER BY p.timeline_at DESC, p.article_id)
-             FILTER (WHERE ${selectedCondition(at)})) AS selected,
-           md5(string_agg(p.article_id || ':' || p.revision::text, ',' ORDER BY p.timeline_at DESC, p.article_id)
-             FILTER (WHERE ${listedCondition(at)})) AS listed
+             FILTER (WHERE ${selectedCondition(at)})) AS selected
     FROM publications p WHERE ${listedCondition(at)}`;
   const reports = await sql<{ kind: string; key: string; t: Date | null; changed: Date; revision: string }[]>`
     SELECT r.kind, r.key,
@@ -63,21 +61,23 @@ export async function loadDiscoveryEntries(at = new Date(), limits?: { urls: num
     ) citations ON true ORDER BY r.kind, r.key DESC`;
   const reportRevision = (kind: string) => sha256(stableJson(reports.filter((r) => r.kind === kind)));
   const topics = await topicPageCounts(at, !limits);
+  // /all 与 /topics 已改成占位页并 noindex：路由还在，但不进 sitemap。
   entries.push(
     { loc: "/", revision: activity?.selected ?? "", changefreq: "hourly", priority: 1 },
-    { loc: "/all", revision: activity?.listed ?? "", changefreq: "hourly", priority: 0.9 },
     { loc: "/daily", revision: reportRevision("daily"), changefreq: "daily", priority: 0.9 },
     { loc: "/hot", revision: limits ? undefined : sha256(stableJson((await latestHotRanking())?.entries ?? [])), changefreq: "hourly", priority: 0.9 },
     { loc: "/daily/archive", revision: reportRevision("daily"), changefreq: "daily", priority: 0.7 },
-    { loc: "/weekly", revision: reportRevision("weekly"), changefreq: "weekly", priority: 0.7 },
-    { loc: "/monthly", revision: reportRevision("monthly"), changefreq: "monthly", priority: 0.6 },
-    { loc: "/topics", revision: sha256(stableJson(topics)), changefreq: "daily", priority: 0.7 },
     { loc: "/agent", revision: sha256(stableJson([SITE, ACCESS, AGENT])), changefreq: "weekly", priority: 0.7 },
     { loc: "/about", revision: sha256(stableJson(ABOUT)), changefreq: "monthly", priority: 0.5 },
     { loc: "/terms", revision: sha256(stableJson([POLICY.terms, await readFile(path.join(REPO_ROOT, "site/pages/terms.md"), "utf8")])), changefreq: "monthly", priority: 0.4 },
     { loc: "/privacy", revision: sha256(stableJson([POLICY.privacy, await readFile(path.join(REPO_ROOT, "site/pages/privacy.md"), "utf8")])), changefreq: "monthly", priority: 0.4 },
     { loc: "/changelog", revision: sha256(stableJson(loadChangelog())), changefreq: "weekly", priority: 0.5 },
   );
+  // 最新一期页（/weekly、/monthly）要有一期才不是空页：该刊还没有任何一期时不进 sitemap。
+  for (const kind of ["weekly", "monthly"] as const) {
+    if (!reports.some((report) => report.kind === kind)) continue;
+    entries.push({ loc: `/${kind}`, revision: reportRevision(kind), changefreq: kind, priority: kind === "weekly" ? 0.7 : 0.6 });
+  }
   for (const r of reports) entries.push({ loc: `/${r.kind}/${r.key}`, lastmod: r.t, newsAt: r.changed, revision: r.revision, changefreq: "monthly", priority: 0.6 });
   for (const t of topics) {
     if (!t.indexable) continue;

@@ -11,6 +11,7 @@ import {
 import { Pagination } from "../components/Pagination";
 import { PolicyList } from "../components/PolicyList";
 import { CareerError, CareerLoading, CareerPending, FixtureNotice } from "../components/CareerStates";
+import { careerPoliciesMeta } from "../seo";
 
 const POLICY_PAGE_SIZE_OPTIONS = [20, 50, 100] as const;
 
@@ -68,8 +69,9 @@ export function headers() {
   return { "Cache-Control": "no-store" };
 }
 
-export function meta() {
-  return [{ title: "政策文件 · 职业洞察" }];
+/** 标题/描述/canonical 见 web/seo.ts；来源与主题筛选是浏览视图，canonical 回到政策页本身。 */
+export function meta({ loaderData }: { loaderData?: Awaited<ReturnType<typeof loader>> }) {
+  return careerPoliciesMeta(loaderData?.policies.data_origin);
 }
 
 export const HydrateFallback = CareerLoading;
