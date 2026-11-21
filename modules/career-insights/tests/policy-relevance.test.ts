@@ -164,6 +164,20 @@ test("支持、指导行业发展的政策也算相关（新型储能、中医�
   }
 });
 
+test("国家战略/行动方案与守信激励/信用/营商环境类政策也算相关", () => {
+  for (const title of [
+    "关于印发《实施全面节约战略行动方案》的通知",
+    "关于深入实施国家重大区域发展战略的意见",
+    "关于印发《扩大内需战略规划纲要》的通知",
+    "关于印发《全国守信激励措施基础清单(2026年版)》的通知",
+    "关于完善社会信用体系建设构建以信用为基础的新型监管机制的指导意见",
+    "关于持续优化营商环境的实施意见",
+    "关于印发涉企收费清单的通知",
+  ]) {
+    assert.equal(isCareerRelevantPolicy(title), true, title);
+  }
+});
+
 test("选举、任免、外事、军事、纪念表彰等与经济社会发展无关的政务文件判为无关", () => {
   for (const title of [
     "中共中央发出通知 部署党的二十一大代表选举工作",
@@ -172,6 +186,7 @@ test("选举、任免、外事、军事、纪念表彰等与经济社会发展�
     "中华人民共和国国防动员法",
     "关于举行纪念活动周年庆典的通知",
     "关于表彰全国就业创业先进集体和个人的决定",
+    "中共中央印发《中国共产党地方委员会工作条例》",
     "关于做好2027年元旦春节期间有关工作的通知",
   ]) {
     assert.equal(isCareerRelevantPolicy(title), false, title);
@@ -196,12 +211,12 @@ test("判定结果带命中词和原因，采集拒绝可复用同一句解释",
   });
 });
 
-test("生产库现有 6 条按宽口径保留 2 条：新型储能与中医药，其余 4 条隐藏", () => {
+test("生产库现有 6 条按宽口径保留 4 条：储能、中医药、守信清单、节约战略", () => {
   const shown = DEPLOYED_POLICIES.filter((policy) => isCareerRelevantPolicy(policy.title));
   assert.deepEqual(
     shown.map((policy) => policy.id),
-    ["t20261113_1408810", "content_7085591"],
-    "只有新型储能实施方案和中医药条例属于就业/产业发展相关",
+    ["t20261113_1408810", "content_7085591", "t20261109_1408709", "t20261103_1408504"],
+    "产业发展、守信清单与国家战略行动方案都显示；党委条例与选举通知隐藏",
   );
 });
 
@@ -243,14 +258,20 @@ test("列表、分面、日报计数、研判与评论输入只含相关政策",
   });
 
   const listed = await repository.listPolicies({ page: 1, page_size: 20 });
-  assert.equal(listed.total, 3);
+  assert.equal(listed.total, 5);
   assert.deepEqual(
     listed.items.map((item) => item.policy_item_id),
-    ["t20261121_900001", "t20261113_1408810", "content_7085591"],
+    [
+      "t20261121_900001",
+      "t20261113_1408810",
+      "content_7085591",
+      "t20261109_1408709",
+      "t20261103_1408504",
+    ],
   );
   assert.ok(listed.items.every((item) => isCareerRelevantPolicy(item.title)));
   assert.deepEqual(listed.facets.sources, [
-    { source_key: "ndrc-policy", count: 2 },
+    { source_key: "ndrc-policy", count: 4 },
     { source_key: "state-council-policy", count: 1 },
   ]);
   assert.deepEqual(listed.facets.themes, [
@@ -259,11 +280,11 @@ test("列表、分面、日报计数、研判与评论输入只含相关政策",
   ]);
 
   const evidence = await listPolicyEvidence(sql);
-  assert.equal(evidence.length, 3);
+  assert.equal(evidence.length, 5);
   assert.ok(evidence.every((ref) => isCareerRelevantPolicy(ref.title)));
 
   const daily = await loadCareerDaily(sql);
-  assert.equal(daily.policies_total, 3);
+  assert.equal(daily.policies_total, 5);
   assert.equal(daily.new_policies_today, 1, "今天新增的两条里只有相关的那条计数");
 
   const commentInput = await loadDailyCommentInput(sql, daily.date);
@@ -280,7 +301,7 @@ test("列表、分面、日报计数、研判与评论输入只含相关政策",
 
   const brief = await buildCareerBriefInput(sql, { limit: 10, window_days: 30 });
   const policyEvidence = brief.evidence_candidates.filter((candidate) => candidate.kind === "policy");
-  assert.equal(policyEvidence.length, 3);
+  assert.equal(policyEvidence.length, 5);
   assert.ok(policyEvidence.every((candidate) => isCareerRelevantPolicy(candidate.title)));
 });
 
@@ -290,29 +311,45 @@ test("采集入库拒绝无关政策，并把拒绝数计入 rejected 与运行�
     batchOf([
       policy(),
       policy({
-        policy_item_id: "p-election",
-        title: "中共中央发出通知 部署党的二十一大代表选举工作",
+        policy_item_id: "p-credit",
+        title: "关于印发《全国守信激励措施基础清单(2026年版)》的通知",
         content_hash: "c".repeat(64),
       }),
       policy({
-        policy_item_id: "p-no-keyword",
-        title: "关于印发《全国守信激励措施基础清单(2026年版)》的通知",
+        policy_item_id: "p-strategy",
+        title: "关于印发《实施全面节约战略行动方案》的通知",
         content_hash: "d".repeat(64),
+      }),
+      policy({
+        policy_item_id: "p-election",
+        title: "中共中央发出通知 部署党的二十一大代表选举工作",
+        content_hash: "e".repeat(64),
+      }),
+      policy({
+        policy_item_id: "p-party-regulation",
+        title: "中共中央印发《中国共产党地方委员会工作条例》",
+        content_hash: "f".repeat(64),
       }),
     ]),
   );
 
-  assert.equal(result.accepted, 1);
+  assert.equal(result.accepted, 3, "就业、守信清单、国家战略行动方案都入库");
   assert.equal(result.updated, 0);
   assert.equal(result.duplicates, 0);
   assert.equal(result.rejected, 2);
   assert.deepEqual(result.errors, [
-    { index: 1, code: "policy_irrelevant", message: "title contains an excluded topic: 选举" },
-    { index: 2, code: "policy_irrelevant", message: "title has no employment or industry-development keyword" },
+    { index: 3, code: "policy_irrelevant", message: "title contains an excluded topic: 选举" },
+    { index: 4, code: "policy_irrelevant", message: "title has no employment or industry-development keyword" },
   ]);
 
   const rows = await sql<{ title: string }[]>`SELECT title FROM career_policies`;
-  assert.deepEqual(rows.map((row) => row.title), ["关于做好高校毕业生就业创业工作的通知"]);
+  assert.equal(rows.length, 3);
+  assert.ok(rows.every((row) => isCareerRelevantPolicy(row.title)));
+  assert.equal(
+    rows.some((row) => row.title.includes("选举") || row.title.includes("地方委员会工作条例")),
+    false,
+    "被拒绝的两条不进库",
+  );
 
   const runs = await sql<{ status: string; error: string | null }[]>`
     SELECT status, error FROM career_ingest_runs`;
