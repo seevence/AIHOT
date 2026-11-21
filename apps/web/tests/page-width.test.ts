@@ -15,8 +15,9 @@ import { FIXTURE_AT as at, fakeApi, feedItem, itemDetail, startWebServer, visit,
 
 const longText = "查看完整说明 https://example.org/announcements/" + "a".repeat(100) + "。";
 const longTitle = "一条很长的标题".repeat(30);
+const longUrl = "https://example.org/positions/" + "c".repeat(120);
 const keys = { daily: "2026-10-15", weekly: "2026-W42", monthly: "2026-10" };
-/** The home workbench's data: numbers that let every block render its real layout, not just its fallback. */
+/** The career pages' data: numbers that let every block render its real layout, not just its fallback. */
 const careerSummary = {
   contract_version: "0.1", data_origin: "live", as_of: at, sample_size: 12, company_count: 3, source_count: 2,
   first_observed_at: at, last_observed_at: at, has_multiple_snapshots: true, dictionary_version: "0.1", shared_themes: [], warnings: [],
@@ -31,7 +32,10 @@ const careerCatalog = {
     role_family: "ai_algorithm", job_count: 7, company_count: 3, new_in_window: 4, student_friendly_count: 5,
     top_skills: [{ skill: "python", count: 6 }, { skill: "large_language_models", count: 4 }, { skill: "pytorch", count: 3 }],
   }],
-  titles: [],
+  titles: [{
+    title_key: "fixture-title", title_display: longTitle, job_count: 7, company_count: 3, cities: ["北京"],
+    top_skills: [{ skill: "python", count: 6 }], student_friendly_count: 5, latest_published_at: at,
+  }],
   skills: [{ skill: "python", job_count: 6, share: 0.75 }, { skill: "large_language_models", job_count: 4, share: 0.5 }],
 };
 const outline = Array.from({ length: 4 }, (_, i) => ({ id: `part-${i}`, level: 2, text: `第${i + 1}部分` }));
@@ -59,6 +63,29 @@ const api = fakeApi((url) => {
   }
   if (path === "/api/site/career-insights/summary") return careerSummary;
   if (path === "/api/site/career-insights/catalog") return careerCatalog;
+  // The insights page keeps the complete brief and the signal reasons; the home now only links there.
+  if (path === "/api/site/career-insights/signals") {
+    return {
+      contract_version: "0.1", data_origin: "live", window_days: 30, skipped: [], generated_at: at,
+      signals: [{
+        rule: "cross_industry", company: "固定企业", job_id: "fixture-job", job_title: longTitle, confidence: "high",
+        evidence: { company_job_count: 10, ai_family_job_count: 6, ai_family_ratio: 0.6, matched_terms: ["机械"] },
+        reason_text: longText, source_key: "fixture", official_url: longUrl, first_seen_at: at,
+      }],
+    };
+  }
+  // The jobs page keeps the full ranking and every job row, whose title and official URL can be unbroken.
+  if (path === "/api/site/career-insights/jobs") {
+    return {
+      contract_version: "0.1", data_origin: "live", as_of: at, page: 1, page_size: 20, total: 1,
+      filters: { page: 1, page_size: 20 },
+      items: [{
+        id: "fixture-job", company_name: "固定企业", title: longTitle, role_family: "ai_algorithm",
+        locations: ["北京"], employment_type: "campus", student_friendly: "yes", skills: ["python"],
+        published_at: at, first_seen_at: at, last_seen_at: at, official_url: longUrl,
+      }],
+    };
+  }
   if (path === "/api/site/pool") {
     // The list page's widest line is 同一件事，精选收录的是《…》: an unbroken long title in one row.
     return {
@@ -151,6 +178,23 @@ const PAGES: Array<{ path: string; ready: (page: Page, shell: Shell) => Promise<
       await expect(page.getByRole("heading", { level: 1, name: "就业数据工作台" })).toBeVisible();
       await expect(page.getByRole("heading", { level: 2, name: "今日概览" })).toBeVisible();
       await expect(page.getByRole("heading", { level: 2, name: "AI 就业研判" })).toBeVisible();
+    },
+  },
+  {
+    path: "/career-insights",
+    ready: async (page: Page) => {
+      // The insights page now holds the longest text the home gave up: the complete brief and signal reasons.
+      await expect(page.getByRole("heading", { level: 1, name: "职业洞察" })).toBeVisible();
+      // The signal's unbroken reason text is the widest line the home moved here.
+      await expect(page.locator("[data-signal-reason='cross_industry']")).toBeVisible();
+    },
+  },
+  {
+    path: "/career-insights/jobs",
+    ready: async (page: Page) => {
+      // The jobs page holds the full ranking and job rows, including their unbroken official URLs.
+      await expect(page.getByRole("heading", { level: 1, name: "热门岗位" })).toBeVisible();
+      await expect(page.locator("[data-catalog-job='fixture-job']")).toBeVisible();
     },
   },
 ];

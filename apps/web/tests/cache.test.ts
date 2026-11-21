@@ -6,7 +6,7 @@ import { SIGN_IN_HOME } from "@aihot/contracts/admin";
 import { isPrivatePage } from "@aihot/contracts/http-policy";
 import { CATEGORY_KEYS } from "@aihot/contracts/taxonomy";
 import { UNSAFE_decodeViaTurboStream } from "react-router";
-import { careerApi, fakeApi, startWebServer, type WebServer } from "./web-server.ts";
+import { careerApi, careerBriefFixture, fakeApi, startWebServer, type WebServer } from "./web-server.ts";
 
 let web: WebServer;
 let origin: string;
@@ -124,6 +124,52 @@ test("HTML and navigation share freshness; cookies do not personalize public res
   assert.equal(signedIn.headers.get("Set-Cookie"), null);
   assert.equal(await signedIn.text(), await plain.text());
   assert.ok(apiCookies.every((cookie) => !cookie));
+});
+
+test("the home renders three brief conclusions only, keeps the daily entry and reads no removed block", async () => {
+  const hits: string[] = [];
+  const briefApi = fakeApi((url, res) => {
+    if (!url.pathname.startsWith("/api/site/career-insights/")) return undefined;
+    hits.push(url.pathname + url.search);
+    if (url.pathname === "/api/site/career-insights/brief") return careerBriefFixture();
+    // The daily read fails on purpose: its entry is navigation, so it stays while the block degrades.
+    if (url.pathname === "/api/site/career-insights/daily") {
+      res.statusCode = 503;
+      res.end(JSON.stringify({ error: { code: "internal_error", message: "fixture" } }));
+      return undefined;
+    }
+    return careerApi(url, res);
+  });
+  const briefHome = await startWebServer(briefApi);
+  try {
+    const html = await (await fetch(`${briefHome.origin}/`)).text();
+    // The home shows at most three inferences and three actions; what is not shown is not shipped either,
+    // so the marker text must not even appear in the inline navigation payload.
+    for (const shown of ["INFERENCE-1", "INFERENCE-2", "INFERENCE-3", "ACTION-1", "ACTION-2", "ACTION-3"]) {
+      assert.match(html, new RegExp(shown), shown);
+    }
+    for (const hidden of ["INFERENCE-4", "INFERENCE-5", "ACTION-4", "ACTION-5", "FACT-ONLY", "LIMITATION-ONLY", "EVIDENCE-ONLY"]) {
+      assert.doesNotMatch(html, new RegExp(hidden), hidden);
+    }
+    assert.match(html, /置信度中/, "the conclusion badge names the brief's confidence");
+    // Adjacent JSX text nodes are split by comment markers in SSR; the rendered sentence still reads whole.
+    const rendered = html.replace(/<!--[\s\S]*?-->/g, "");
+    assert.match(rendered, /最新就业日报：本区块暂时不可用/, "only the daily block degrades");
+    assert.match(rendered, /unknown 不等于不友好/, "the student-friendly indicator carries its definition");
+    assert.match(rendered, /查看今日日报/, "the daily entry is navigation and stays on a failed read");
+    // Four career reads only: signals and the latest-jobs list are no longer part of the home.
+    assert.deepEqual(
+      hits.filter((path) => path.startsWith("/api/site/career-insights")).sort(),
+      [
+        "/api/site/career-insights/brief",
+        "/api/site/career-insights/catalog?limit=3",
+        "/api/site/career-insights/daily",
+        "/api/site/career-insights/summary",
+      ],
+    );
+  } finally {
+    await briefHome.stop();
+  }
 });
 
 test("missing routes cannot be hidden by a root-only request; errors and redirects stay uncached", async () => {

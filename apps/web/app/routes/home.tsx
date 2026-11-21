@@ -13,7 +13,7 @@ import { pageReuse } from "../lib/page-reuse";
 import { pageMeta, siteLd } from "../lib/seo";
 import type { Screen } from "../components/shell/screens";
 import type { HomeBriefState } from "../features/home/contracts.ts";
-import { HOME_CATALOG_LIMIT } from "../features/home/contracts.ts";
+import { HOME_BRIEF_LIMIT, HOME_CATALOG_LIMIT } from "../features/home/contracts.ts";
 import { HomeWorkbench } from "../features/home/HomeWorkbench.tsx";
 import {
   careerBriefPath,
@@ -46,7 +46,17 @@ async function settledBrief(signal: AbortSignal): Promise<HomeBriefState> {
     const data = await loadCareerBrief<CareerBriefV1>(signal);
     if (data === null) return { status: "empty" };
     const { generated_at, sample_size, confidence, inferences, actions } = data;
-    return { status: "ok", data: { generated_at, sample_size, confidence, inferences, actions } };
+    // 首页只放结论：多出来的推断/建议既不渲染，也不进页面 payload。
+    return {
+      status: "ok",
+      data: {
+        generated_at,
+        sample_size,
+        confidence,
+        inferences: inferences.slice(0, HOME_BRIEF_LIMIT),
+        actions: actions.slice(0, HOME_BRIEF_LIMIT),
+      },
+    };
   } catch (error) {
     if (!signal.aborted) logError(error, { msg: "home block failed", method: "GET", path: careerBriefPath() });
     return { status: "failed" };

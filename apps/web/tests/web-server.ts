@@ -9,6 +9,7 @@ import { fileURLToPath } from "node:url";
 import type { Page } from "@playwright/test";
 import type { DataRouter } from "react-router";
 import type { FeedItemSummary, SiteItemDetail } from "@aihot/contracts/site";
+import type { CareerBriefV1 } from "@aihot/career-insights/contracts";
 
 /** When the synthetic reports were published. */
 export const FIXTURE_AT = "2026-10-04T08:00:00.000Z";
@@ -48,6 +49,23 @@ export function careerApi(url: URL, res: ServerResponse): unknown {
     default:
       return undefined;
   }
+}
+
+/**
+ * A cached brief (the api's 200 answer) with five inferences/actions and marker text for the parts
+ * only the insights page may show. Tests inject it where the home would otherwise read the 204.
+ */
+export function careerBriefFixture(overrides: Partial<CareerBriefV1> = {}): CareerBriefV1 {
+  const at = FIXTURE_AT;
+  return {
+    contract_version: "0.1", generated_at: at, as_of: at, sample_size: 12, window_days: 30,
+    facts: ["FACT-ONLY-IN-INSIGHTS"],
+    inferences: ["INFERENCE-1", "INFERENCE-2", "INFERENCE-3", "INFERENCE-4", "INFERENCE-5"],
+    actions: ["ACTION-1", "ACTION-2", "ACTION-3", "ACTION-4", "ACTION-5"],
+    evidence: [{ kind: "job", id: "EVIDENCE-ONLY-IN-INSIGHTS", title: "EVIDENCE-ONLY-IN-INSIGHTS" }],
+    limitations: ["LIMITATION-ONLY-IN-INSIGHTS"], confidence: "medium",
+    ...overrides,
+  };
 }
 
 /** A report as list cards show it; the fields a test does not name are fixed. */

@@ -14,7 +14,7 @@ import { ROLE_FAMILY_LABELS } from "../../../../../modules/career-insights/web/l
 import { UNKNOWN_RATIO_LABEL, formatRatioPercent } from "../../../../../modules/career-insights/web/feeds.ts";
 import { CareerTime } from "../../../../../modules/career-insights/web/time.ts";
 import type { HomeBriefState } from "./contracts.ts";
-import { HOME_CATALOG_LIMIT } from "./contracts.ts";
+import { HOME_BRIEF_LIMIT, HOME_CATALOG_LIMIT } from "./contracts.ts";
 import {
   BLOCK_UNAVAILABLE,
   BLOCK_UNAVAILABLE_HINT,
@@ -27,9 +27,6 @@ const SECTION_CLASS = "rounded-card border border-line bg-surface p-5";
 const JOBS_CATALOG_HREF = "/career-insights/jobs";
 
 const CONFIDENCE_LABELS = { low: "置信度低", medium: "置信度中", high: "置信度高" } as const;
-// 研判只放结论：趋势判断与可以做的事各最多 3 条，完整 facts/limitations/evidence 在洞察页。
-const BRIEF_INFERENCES_LIMIT = 3;
-const BRIEF_ACTIONS_LIMIT = 3;
 
 /** 区块级降级：不整页失败，也不隐藏其它区块。 */
 function Unavailable({ title }: { title: string }) {
@@ -124,11 +121,11 @@ function Brief({ brief }: { brief: HomeBriefState }) {
                   {CONFIDENCE_LABELS[brief.data.confidence]}
                 </span>
               </dt>
-              <dd><ConclusionList lines={brief.data.inferences} limit={BRIEF_INFERENCES_LIMIT} /></dd>
+              <dd><ConclusionList lines={brief.data.inferences} limit={HOME_BRIEF_LIMIT} /></dd>
             </div>
             <div>
               <dt className="text-[12px] font-medium text-ink-4">可以做的事</dt>
-              <dd><ConclusionList lines={brief.data.actions} limit={BRIEF_ACTIONS_LIMIT} /></dd>
+              <dd><ConclusionList lines={brief.data.actions} limit={HOME_BRIEF_LIMIT} /></dd>
             </div>
           </dl>
           <p className="mt-3 text-[11.5px] text-ink-4 break-words">
@@ -166,14 +163,14 @@ function Indicators({ summary }: { summary: SummaryResponseV1 | null }) {
   );
 }
 
-/** 最新就业日报摘要与入口；AI 评论在后续阶段接后端后加。 */
+/** 最新就业日报摘要与入口；AI 评论在后续阶段接后端后加。入口属于导航而非数据，请求失败时也保留。 */
 function DailySummary({ daily }: { daily: CareerDailyResponseV1 | null }) {
   return (
     <section aria-labelledby="home-daily" className={SECTION_CLASS}>
       <SectionHeader
         id="home-daily"
         title="最新就业日报"
-        aside={daily ? <Link to="/daily" className="text-[12px] font-medium text-accent hover:underline">查看今日日报 →</Link> : undefined}
+        aside={<Link to="/daily" className="text-[12px] font-medium text-accent hover:underline">查看今日日报 →</Link>}
       />
       {daily === null ? (
         <Unavailable title="最新就业日报" />
