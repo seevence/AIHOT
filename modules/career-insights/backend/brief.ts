@@ -186,6 +186,30 @@ function collectNumbers(value: unknown, out: number[]): void {
   }
 }
 
+/**
+ * 输入里所有字符串值中的连续数字片段（证据标题的职位号如 J107214、方向/技能 id、UUID 等）。
+ * 这些字符串本身就是模型输入的一部分，模型引用其中的数字是 grounded 的，不能判成编造。
+ * 但只在 token 与片段精确相等时放行，输入里没有的数字（如 999）仍然会被拒绝。
+ */
+function collectStringNumberFragments(value: unknown, out: Set<string>): void {
+  if (typeof value === "string") {
+    for (const fragment of value.match(/\d+/gu) ?? []) out.add(fragment);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectStringNumberFragments(item, out);
+    return;
+  }
+  if (isRecord(value)) {
+    for (const item of Object.values(value)) collectStringNumberFragments(item, out);
+  }
+}
+
+/** token 的纯数字文本（去掉千分位逗号与百分号），用于与输入字符串里的数字片段精确匹配。 */
+function tokenDigitText(token: NumberToken): string {
+  return token.raw.replaceAll(",", "").replace(/%$/u, "");
+}
+
 function decimalDigits(raw: string): number {
   const dot = raw.indexOf(".");
   return dot < 0 ? 0 : raw.length - dot - 1;
@@ -230,11 +254,18 @@ function isDateToken(token: NumberToken, dates: ReadonlySet<number>): boolean {
 }
 
 /**
- * 引用判定：等值、百分比换算，或按输出自身精度舍入后相等。
+ * 引用判定：token 与输入字符串里的数字片段精确相等、等于某个数值、日期片段，
+ * 或按输出自身精度舍入后相等。
  * 0.426573… 可被引成 0.4266（4 位）、0.43、42.7%、42.66%；
  * 整数（0 位小数）只认精确相等，因此 43%（把 42.65% 粗舍）会被拒绝。
  */
-function matchesKnownNumber(token: NumberToken, known: readonly number[], dates: ReadonlySet<number>): boolean {
+function matchesKnownNumber(
+  token: NumberToken,
+  known: readonly number[],
+  dates: ReadonlySet<number>,
+  stringFragments: ReadonlySet<string>,
+): boolean {
+  if (stringFragments.has(tokenDigitText(token))) return true;
   if (isDateToken(token, dates)) return true;
   return known.some((value) => {
     if (!Number.isFinite(value)) return false;
@@ -257,10 +288,12 @@ function numberContext(text: string, token: NumberToken): string {
 function assertOnlyKnownNumbers(input: CareerBriefInputV1, texts: readonly string[]): void {
   const known: number[] = [];
   collectNumbers(input, known);
+  const stringFragments = new Set<string>();
+  collectStringNumberFragments(input, stringFragments);
   const dates = dateTokens(input);
   for (const text of texts) {
     for (const token of numberTokens(text)) {
-      if (matchesKnownNumber(token, known, dates)) continue;
+      if (matchesKnownNumber(token, known, dates, stringFragments)) continue;
       throw new CareerBriefValidationError(
         `Model output contains a number absent from the aggregate input: ${token.raw} (context: ${numberContext(text, token)}).`,
       );
