@@ -2,6 +2,7 @@
 // 岗位下架后收藏仍要显示，所以保存时快照标题、公司等字段；模块不能反向 import apps/web，
 // 因此存储与 hook 都放在这里，/starred 页与岗位 UI 从模块导入。存储失败静默降级，服务端渲染不读 storage。
 import { useSyncExternalStore } from "react";
+import { beijingDate } from "@aihot/contracts/time";
 import type { RoleFamily } from "@aihot/career-insights/contracts";
 
 /** 与文章收藏的 `aihot-starred-items` 分开：两件事的数量上限与字段都不同。 */
@@ -107,6 +108,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
 
+// 能解析的日期仍可能在换成北京时区显示时溢出（如 +275760-09-13），收藏页的 fullDateTime 会抛错；
+// 和文章收藏（apps/web/app/lib/local-state.ts）用同一套可显示性守卫，不可显示就换成收藏时刻。
+function isDisplayableDate(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  try {
+    beijingDate(value);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function normalizeRoleFamily(value: unknown): RoleFamily | undefined {
   return typeof value === "string" && ROLE_FAMILIES.has(value) ? (value as RoleFamily) : undefined;
 }
@@ -123,12 +136,13 @@ function normalizeJob(value: unknown): LocalStarredJob | null {
   const { id, title, company } = value;
   if (typeof id !== "string" || !ID_PATTERN.test(id)) return null;
   if (typeof title !== "string" || title.trim() === "") return null;
-  if (typeof company !== "string") return null;
+  // 空公司会渲染成「 · 地点未知」，当作非法记录丢掉。
+  if (typeof company !== "string" || company.trim() === "") return null;
   const job: LocalStarredJob = {
     id,
     title,
     company,
-    savedAt: typeof value.savedAt === "string" && !Number.isNaN(Date.parse(value.savedAt)) ? value.savedAt : new Date().toISOString(),
+    savedAt: isDisplayableDate(value.savedAt) ? value.savedAt : new Date().toISOString(),
   };
   const roleFamily = normalizeRoleFamily(value.roleFamily);
   if (roleFamily) job.roleFamily = roleFamily;

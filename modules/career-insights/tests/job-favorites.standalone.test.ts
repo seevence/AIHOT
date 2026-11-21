@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { beijingDate } from "@aihot/contracts/time";
 
 const KEY = "aihot-starred-jobs";
 const LIMIT = 200;
@@ -119,6 +120,7 @@ test("damaged or malformed stored data is filtered out instead of shown", async 
     { id: "bad id!", title: "坏 id", company: "公司" },
     { id: "missing-title", company: "公司" },
     { id: "missing-company", title: "缺公司" },
+    { id: "empty-company", title: "空公司", company: "  " },
     { ...valid, title: "重复的 id" },
     { id: "ok-2", title: "标题二", company: "公司二", roleFamily: "not_a_family", locations: ["北京", 3, ""], savedAt: "broken" },
   ]);
@@ -128,7 +130,7 @@ test("damaged or malformed stored data is filtered out instead of shown", async 
   assert.equal(saved[0]!.title, "标题一", "the first copy of a duplicated id wins");
   assert.equal(saved[1]!.roleFamily, undefined, "an unknown role family is dropped");
   assert.deepEqual(saved[1]!.locations, ["北京"], "non-string locations are dropped");
-  assert.ok(!Number.isNaN(Date.parse(saved[1]!.savedAt)), "a damaged saved date is replaced with a displayable one");
+  assert.doesNotThrow(() => beijingDate(saved[1]!.savedAt), "a damaged saved date is replaced with a displayable one");
 
   for (const damaged of ["not json", JSON.stringify({ jobs: [] }), "null", ""]) {
     const { mod: damagedMod } = await reader(damaged);
@@ -139,6 +141,42 @@ test("damaged or malformed stored data is filtered out instead of shown", async 
   const { mod: writable } = await reader("not json");
   assert.equal(writable.toggleStarredJob(valid), true);
   assert.deepEqual(starredJobs(writable), ["ok-1"]);
+});
+
+test("saved dates that cannot be displayed in Beijing time are replaced instead of breaking the page", async () => {
+  // +275760-09-13 是 JS 能表示的最大瞬间：Date.parse 通过，但 +8 小时后 toISOString 抛 RangeError。
+  const raw = JSON.stringify([
+    { id: "max-date", title: "最大日期", company: "公司", savedAt: "+275760-09-13T00:00:00.000Z" },
+    { id: "bad-date", title: "坏日期", company: "公司", savedAt: "broken" },
+  ]);
+  const { mod } = await reader(raw);
+  const saved = mod.getStarredJobs();
+  assert.deepEqual(saved.map((job) => job.id), ["max-date", "bad-date"]);
+  for (const job of saved) {
+    assert.doesNotThrow(() => beijingDate(job.savedAt), `${job.id} 的收藏日期必须能显示`);
+    assert.ok(Date.parse(job.savedAt) > Date.now() - 60_000, "an undisplayable date falls back to the save time");
+  }
+});
+
+test("stored jobs beyond the 200-item window are ignored on read", async () => {
+  const raw = JSON.stringify(Array.from({ length: LIMIT + 25 }, (_, i) => ({
+    id: `stored-${i}`, title: `岗位 ${i}`, company: "公司", savedAt: "2026-11-20T10:00:00.000Z",
+  })));
+  const { mod } = await reader(raw);
+  assert.equal(mod.getStarredJobs().length, LIMIT);
+  assert.equal(mod.getStarredJobs()[0]!.id, "stored-0");
+});
+
+test("job favorites and article favorites never share a key", async () => {
+  const article = { id: "article-1", title: "文章收藏", summary: null, sourceName: "来源", savedAt: "2026-11-20T10:00:00.000Z", publishedAt: null, score: null, aiSelected: false };
+  const { mod, values } = await reader();
+  values.set("aihot-starred-items", JSON.stringify([article]));
+  assert.equal(mod.toggleStarredJob({ id: "job-1", title: "岗位", company: "公司" }), true);
+  assert.deepEqual(JSON.parse(values.get("aihot-starred-items")!), [article], "岗位收藏不写文章收藏的 key");
+  assert.deepEqual(JSON.parse(values.get(KEY)!).map((job: { id: string }) => job.id), ["job-1"]);
+  mod.removeStarredJob("job-1");
+  assert.deepEqual(JSON.parse(values.get("aihot-starred-items")!), [article], "移除岗位也不碰文章收藏");
+  assert.equal(values.get(KEY), "[]");
 });
 
 test("another tab's write refreshes the snapshot and notifies subscribers", async () => {

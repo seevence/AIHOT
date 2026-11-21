@@ -102,6 +102,10 @@ test("starring a job on its detail page lists it on /starred, and 移除 removes
     await expect(row).toContainText("北京、上海");
     await expect(row).toContainText("AI 算法");
     await expect(row.getByRole("link", { name: JOB_TITLE })).toHaveAttribute("href", `/career-insights/jobs/${JOB_ID}`);
+    // 岗位收藏只写自己的 key，不碰文章收藏。
+    const stored = await page.evaluate(() => ({ jobs: localStorage.getItem("aihot-starred-jobs"), articles: localStorage.getItem("aihot-starred-items") }));
+    assert.ok(stored.jobs?.includes(JOB_ID), "the job is stored under aihot-starred-jobs");
+    assert.equal(stored.articles, null, "job favorites never write the article favorites key");
 
     // 重新打开 /starred 是一次新的页面加载：收藏仍然在（localStorage 持久化）。
     await visit(page, `${web.origin}/starred`);
@@ -110,10 +114,34 @@ test("starring a job on its detail page lists it on /starred, and 移除 removes
     await page.getByRole("button", { name: `移除收藏：${JOB_TITLE}` }).click();
     await expect(page.locator(`[data-starred-job="${JOB_ID}"]`)).toHaveCount(0);
     await expect(block).toContainText("还没有收藏的岗位，在热门岗位或职位详情点收藏");
+    await expect(block.getByRole("link", { name: "热门岗位" })).toHaveAttribute("href", "/career-insights/jobs");
+    await expect(page.getByText("还没有收藏的文章。", { exact: false })).toBeVisible();
+    const afterRemove = await page.evaluate(() => ({ jobs: localStorage.getItem("aihot-starred-jobs"), articles: localStorage.getItem("aihot-starred-items") }));
+    assert.equal(afterRemove.jobs, "[]");
+    assert.equal(afterRemove.articles, null);
 
     // 回到详情页，按钮已恢复未收藏。
     await visit(page, `${web.origin}/career-insights/jobs/${JOB_ID}`);
     await expect(page.locator("[data-job-star]")).toHaveAttribute("data-job-star", "off");
+    assert.deepEqual(errors, [], "hydration must not log errors");
+  } finally {
+    await context.close();
+  }
+});
+
+test("a stored job whose saved date cannot be displayed does not fail /starred", async () => {
+  const { context, page, errors } = await openPage();
+  try {
+    // +275760-09-13 是 JS 最大瞬间：+8 小时后格式化会抛 RangeError，旧数据不能让收藏页 500。
+    await page.addInitScript(() => localStorage.setItem("aihot-starred-jobs", JSON.stringify([
+      { id: "11111111-1111-4111-8111-111111111111", title: "日期守卫岗位", company: "示例公司", savedAt: "+275760-09-13T00:00:00.000Z" },
+    ])));
+    const response = await page.goto(`${web.origin}/starred`);
+    assert.equal(response?.status(), 200);
+    const row = page.locator(`[data-starred-job="11111111-1111-4111-8111-111111111111"]`);
+    await expect(row).toBeVisible();
+    await expect(row).toContainText("日期守卫岗位");
+    await expect(row).toContainText("收藏于");
     assert.deepEqual(errors, [], "hydration must not log errors");
   } finally {
     await context.close();
