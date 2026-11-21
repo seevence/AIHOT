@@ -32,12 +32,13 @@ export const POLICY_SOURCE_TIER_LABELS: Readonly<Record<string, string>> = {
   other_public: "其他公开来源",
 };
 
+/** 与 data/dictionaries.ts 的 ROLE_FAMILY_LABELS 一致；unknown 站内统一写「未归类」。 */
 export const ROLE_FAMILY_LABELS: Record<RoleFamily, string> = {
   ai_algorithm: "AI 算法",
-  ai_application_development: "AI 应用开发",
+  ai_application_development: "软件 / AI 应用开发",
   data: "数据",
-  ai_product_operations: "AI 产品与运营",
-  unknown: "未知",
+  ai_product_operations: "AI 产品 / 运营",
+  unknown: "未归类",
 };
 
 export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
@@ -72,6 +73,8 @@ const CONFIDENCE_LABELS: Readonly<Record<ConfidenceLevel, string>> = {
 export function confidenceLabel(confidence: ConfidenceLevel): string {
   return CONFIDENCE_LABELS[confidence];
 }
+
+/** 与 data/dictionaries.ts 的 SKILL_LABELS 全量同步（45 项）；web 不能直接 import 后者，因为 data 包依赖 node:crypto。 */
 export const SKILL_LABELS: Readonly<Record<string, string>> = {
   python: "Python",
   sql: "SQL",
@@ -85,12 +88,39 @@ export const SKILL_LABELS: Readonly<Record<string, string>> = {
   data_analysis: "数据分析",
   data_mining: "数据挖掘",
   data_engineering: "数据工程",
+  data_science: "数据科学",
+  data_visualization: "数据可视化",
   spark: "Spark",
   java: "Java",
   javascript: "JavaScript",
   typescript: "TypeScript",
   react: "React",
   nodejs: "Node.js",
+  cpp: "C++",
+  go: "Go",
+  docker: "Docker",
+  kubernetes: "Kubernetes",
+  linux: "Linux",
+  git: "Git",
+  redis: "Redis",
+  mysql: "MySQL",
+  postgresql: "PostgreSQL",
+  microservices: "微服务",
+  distributed_systems: "分布式系统",
+  recommendation_systems: "推荐系统",
+  search_algorithms: "搜索算法",
+  retrieval_augmented_generation: "RAG 检索增强",
+  ai_agents: "智能体",
+  prompt_engineering: "提示词工程",
+  fine_tuning: "模型微调",
+  product_design: "产品设计",
+  user_research: "用户研究",
+  ab_testing: "A/B 测试",
+  operations_analysis: "运营分析",
+  growth_operations: "用户增长",
+  algorithms: "数据结构与算法",
+  english: "英语",
+  electron: "Electron",
 };
 
 export function skillLabel(skillId: string): string {
