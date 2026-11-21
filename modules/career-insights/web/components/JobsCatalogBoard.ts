@@ -1,4 +1,4 @@
-// 岗位目录页（C-CATALOG@1 的展示侧）：方向榜、职位榜与岗位明细，筛选全部由 URL 参数驱动。
+// 岗位目录页（C-CATALOG@1 的展示侧）：方向榜、筛选岗位与岗位明细，筛选全部由 URL 参数驱动。
 // 纯展示与纯函数，客户端组件不引入任何 .server 模块；收藏按钮（.tsx）由路由注入，见 JobRowStarProps。
 import { createElement as h, type ComponentType, type ReactElement } from "react";
 import { Link } from "react-router";
@@ -33,7 +33,7 @@ export function buildCatalogHref(filters: JobFiltersV1, patch: Partial<JobFilter
   return `${CATALOG_PATH}?${serializeJobFilters({ ...filters, ...patch })}`;
 }
 
-/** 城市候选来自职位榜的城市取值范围，按出现频次降序取前几个。 */
+/** 城市候选来自岗位目录里职位的城市取值范围，按出现频次降序取前几个。 */
 export function catalogCityOptions(titles: readonly CareerTitleV1[]): string[] {
   const counts = new Map<string, number>();
   for (const title of titles) {
@@ -45,7 +45,7 @@ export function catalogCityOptions(titles: readonly CareerTitleV1[]): string[] {
     .map(([city]) => city);
 }
 
-/** 学生友好筛选只保留明确标注的职位；城市筛选按职位榜的城市取值范围匹配。 */
+/** 学生友好筛选只保留明确标注的职位；城市筛选按岗位目录的城市取值范围匹配。 */
 export function filterTitles(titles: readonly CareerTitleV1[], filters: JobFiltersV1): CareerTitleV1[] {
   const city = filters.city?.trim();
   const studentOnly = filters.student_friendly === "yes";
@@ -111,11 +111,11 @@ function SearchForm({ filters }: { filters: JobFiltersV1 }): ReactElement {
       ),
     ),
     keyword === ""
-      ? h("p", { "data-search-hint": "", className: `mt-2 ${MUTED_CLASS}` }, "也可以点方向/职位榜进入对应筛选。")
+      ? h("p", { "data-search-hint": "", className: `mt-2 ${MUTED_CLASS}` }, "也可以点方向进入对应筛选。")
       : h(
           "p",
           { "data-search-current": "", className: `mt-2 ${MUTED_CLASS}` },
-          `当前搜索“${keyword}” · 也可以点方向/职位榜进入对应筛选。`,
+          `当前搜索“${keyword}” · 也可以点方向进入对应筛选。`,
         ),
   );
 }
@@ -217,56 +217,6 @@ function DirectionRanking({ catalog, filters }: { catalog: CareerCatalogResponse
                 ),
                 "查看该方向岗位",
               ),
-            ),
-          ),
-        ),
-  );
-}
-
-function TitleRanking({ catalog, filters }: { catalog: CareerCatalogResponseV1; filters: JobFiltersV1 }): ReactElement {
-  const titles = filterTitles(catalog.titles, filters).slice(0, TITLE_RANKING_LIMIT);
-  return h(
-    "section",
-    { "aria-labelledby": "catalog-titles", "data-section": "title-ranking", className: CARD_CLASS },
-    h("h2", { id: "catalog-titles", className: "text-[16px] font-semibold text-ink" }, "职位榜"),
-    h("p", { className: MUTED_CLASS }, "按标准化职位名聚合岗位数量，跨城市不重复累加同一职位；热门指当前有效岗位数量。"),
-    titles.length === 0
-      ? h("p", { "data-titles-empty": "", role: "status", className: "mt-3 text-[14px] font-medium text-ink-2" }, CATALOG_EMPTY_TEXT)
-      : h(
-          "ul",
-          { className: "mt-3 divide-y divide-line-soft" },
-          ...titles.map((title) =>
-            h(
-              "li",
-              { key: title.title_key, "data-catalog-title": title.title_key, className: "py-3" },
-              h(
-                "div",
-                { className: "flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1" },
-                h("span", { className: "text-[14px] font-medium text-ink break-words" }, title.title_display),
-                h("span", { "data-rank-count": String(title.job_count), className: "num text-[14px] font-semibold text-ink whitespace-nowrap" }, `${title.job_count} 个岗位`),
-              ),
-              h(
-                "p",
-                { className: `mt-1 ${MUTED_CLASS}` },
-                `${title.company_count} 家公司 · ${title.cities.length > 0 ? title.cities.join("、") : "城市未知"} · 学生友好 ${title.student_friendly_count} · 最近发布 ${publishedAtText(title.latest_published_at)}`,
-              ),
-              title.top_skills.length > 0
-                ? h(
-                    "div",
-                    { className: "mt-2 flex flex-wrap items-center gap-1.5" },
-                    ...title.top_skills.map((entry) =>
-                      h("span", { key: entry.skill, className: "inline-flex h-6 items-center rounded-full border border-line-strong px-2.5 text-[11.5px] text-ink-2" }, `${skillLabel(entry.skill)} ${entry.count}`),
-                    ),
-                    h(
-                      Link,
-                      Object.assign(
-                        { to: withJobsListAnchor(buildCatalogHref(filters, { skill: title.top_skills[0]?.skill, page: 1 })), className: "text-[12.5px] font-medium text-accent hover:underline" },
-                        { "data-title-evidence": title.title_key },
-                      ),
-                      "查看证据",
-                    ),
-                  )
-                : null,
             ),
           ),
         ),
@@ -397,7 +347,7 @@ export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
             ),
           )
         : null,
-      h("p", { className: "mt-1 text-[13px] leading-relaxed text-ink-3" }, "方向榜与职位榜按当前有效岗位数量排序，不代表新闻热度、公司热度或未来增长。"),
+      h("p", { className: "mt-1 text-[13px] leading-relaxed text-ink-3" }, "方向榜按当前有效岗位数量排序，不代表新闻热度、公司热度或未来增长。"),
       h(
         "p",
         { className: `mt-2 ${MUTED_CLASS}` },
@@ -412,7 +362,6 @@ export function JobsCatalogBoard({ catalog, jobs, filters, starButton }: {
       : null,
     h(DirectionRanking, { catalog, filters }),
     h(FilterBar, { catalog, filters }),
-    h(TitleRanking, { catalog, filters }),
     h(JobListSection, { jobs, filters, Star: starButton }),
   );
 }

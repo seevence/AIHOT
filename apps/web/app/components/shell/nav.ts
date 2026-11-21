@@ -20,7 +20,7 @@ export interface NavItem {
 }
 
 /**
- * The main navigation: 首页, 热门岗位, 职业洞察, 就业日报 and 收藏. 全部, 就业热点 and 主题 are listed too, but
+ * The main navigation: 首页, 热门岗位, 就业热点, 职业洞察 and 就业日报. 全部 and 主题 are listed but
  * NAV.hidden keeps them out of the way in unless the site puts them back; a hidden entry still opens.
  */
 const SECTIONS: Array<{ title: string; items: NavItem[] }> = [
@@ -29,11 +29,10 @@ const SECTIONS: Array<{ title: string; items: NavItem[] }> = [
     items: [
       { to: "/", label: "首页", icon: IconBolt, end: true },
       { to: "/career-insights/jobs", label: "热门岗位", icon: IconList },
+      { to: "/hot", label: "就业热点", icon: IconFlame },
       { to: "/career-insights", label: "职业洞察", icon: IconChart },
       { to: "/daily", label: withSubject("日报"), icon: IconDoc, covers: ["/weekly", "/monthly"] },
-      { to: "/starred", label: "收藏", icon: IconBookmark },
       { to: "/all", label: subjectAfter("全部", "动态"), icon: IconList },
-      { to: "/hot", label: "就业热点", icon: IconFlame },
       { to: "/topics", label: "主题", icon: IconGrid },
     ],
   },
@@ -44,6 +43,8 @@ const SECTIONS: Array<{ title: string; items: NavItem[] }> = [
       { to: "/about", label: "关于", icon: IconHeart },
       { to: "/changelog", label: "更新日志", icon: IconHistory, changelog: true },
       { to: "/feedback", label: "反馈", icon: IconMessage },
+      // 收藏放在侧栏最下面：它是个人入口，不参与内容浏览的阅读顺序。
+      { to: "/starred", label: "收藏", icon: IconBookmark },
     ],
   },
 ];
