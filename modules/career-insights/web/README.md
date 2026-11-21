@@ -2,8 +2,8 @@
 
 ## 页面
 
-- `/career-insights`：通过正式 HTTP API 并行读取 summary 与 jobs，展示样本、指标、共享主题和职位列表。
-  （已更新：顶部新增“值得注意的信号”卡片，并行读取 `/api/site/career-insights/signals?limit=5`；指标卡与 unknown 口径不变。）
+- `/`（首页，2026-11-21 L1）：5 段 —— 今日概览 / AI 就业研判（只留 inferences ≤3 + actions ≤3） / 需求变化三指标（学生友好岗位带口径注） / 最新就业日报摘要+入口 / 热门方向 Top3 一行入口；不再请求 signals 与 latest jobs。
+- `/career-insights`（2026-11-21 L2）：8 段 —— AI 趋势研判（完整 facts/inferences/actions/limitations/evidence）/ 不同寻常的信号（带数字依据与原文链接，skipped 分组提示）/ 岗位趋势 / 技能趋势 / 热门岗位摘要卡 + 跳转 jobs / 学生就业建议 / 政策与岗位联动（无共同主题整段隐藏）/ 数据范围与方法。通过正式 HTTP API 并行读取 summary、catalog、signals、brief，逐块降级。
 - `/career-insights/jobs/:id`：读取职位详情与观测记录。
 - `/career-insights/policies`：政策列表页，通过正式 HTTP API 读取 `/api/site/career-insights/policies`，支持 `source_key`、`theme`、`page`、`page_size` 查询参数与分页；参数非法时显示页面级错误状态，不回退 fixture。
 - `/hot`：企业招聘热度榜，读取 `/api/site/career-insights/hot?limit=10`（公司、岗位数、前 3 个职族、最近发布日期）。
