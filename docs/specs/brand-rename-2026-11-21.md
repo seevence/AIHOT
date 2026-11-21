@@ -39,6 +39,12 @@
 
 （工具名由 `MCP_TOOL_NAMES`/前缀生成；部署后以 `/api/mcp` 的 `tools/list` 实测为 `thewind_get_latest / thewind_search / thewind_get_hot_topics / thewind_get_story / thewind_get_daily / thewind_get_weekly / thewind_get_monthly`。）
 
+## 部署与升级说明（5.0.0）
+
+- **公开接口版本主版本升级**：`interfaceVersion 4.0.0 → 5.0.0`，MCP 工具名由 `myhot_*` 改为 `thewind_*`（映射见上表）。当前无已知外部 MCP 接入；若有，升级前按上表通知接入方改工具名，旧工具名会直接失效（无兼容别名）。
+- **部署**：改名是配置值变更，client bundle 内嵌站名 → 必须重建 web 产物（`npm run build -w @aihot/web` / docker 重建镜像）后重启 api/worker/web；`/manifest.webmanifest`、图标、`/og/*` 分享图、RSS/llms/openapi 在 CDN/社媒侧可能有小时级到天级缓存，切换后如需立即生效可清一次 CDN 缓存（og 图按内容重新生成，无需手工删 `.data/ogcache`）。
+- **回滚**：`git revert` 改名 commit 后重建 web 产物并重启即可；无数据库/存储迁移。回滚会让 MCP 工具名回到 `myhot_*`，同样需要通知接入方。
+
 ## 明确保留（B/C 档，不改）
 
 - npm workspace 包名 `@aihot/*`、仓库名 `seevence/AIHOT`、上游 `KKKKhazix/AIHOT`、LICENSE/NOTICE（法律归属，NOTICE 明确「AIHOT 名称与 Logo 不在 MIT 许可内、请用你自己的名字」，与本次改名一致）。
