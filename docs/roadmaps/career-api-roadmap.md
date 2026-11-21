@@ -711,6 +711,16 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 - 实测 `GET /api/site/career-insights/brief` → **HTTP 200**（缓存已生成，不再是「待生成首版」时的 204）；响应 `confidence="low"`、`limitations` 5 条、`evidence` 4 条（均为职位）。无缓存 204 路径由 `tests/career-brief.test.ts` 的「the brief route answers 204 without a cache and 200 with no-store when cached」覆盖。
 - 已知 minor：`facts` 的 60 字截断会把以英文 id 列举的句子截断（实测一条为「岗位方向共4个：ai_application_development、ai_product_operations、dat」），不影响数字校验。
 
+### 就业日报 AI 评论 `GET /api/site/career-insights/daily-comment`（L3b-1 `0b69f95`）
+
+- 后台预生成 + 页面只读缓存（用户拍板）：`career.ingest` 每日管线在「采集 → 有预算 LLM 兜底 → 研判」之后串行第四步，子进程跑 `scripts/build-career-daily-comment.ts --json`（env 强制 `MODEL_CALLS_ENABLED=true`，worker 全局开关不动）；失败只记 `job_runs.detail.comment.ok=false`，不失败 job；页面 `/daily` 通过接口只读缓存，永不触发模型。
+- 当日聚合口径（Asia/Shanghai 自然日）：`sample_size` = 当日有观测的岗位数（**注意与 `/daily` 既有「全库样本」同名字段不同义**，页面分别写「当日观测样本」与「全部样本」）；`as_of` = 该样本 `MAX(last_seen_at)`；`new_jobs` = 当日 `first_seen`；方向 Top3 排除 unknown；技能 share 分母 = 当日带技能岗位数；新增政策按当日 `first_seen`，标题截 60 字进模型输入。
+- 口径披露：facts 显式给出「技能占比的分母：当日带技能岗位 N 个」与「当日方向未归类（unknown）岗位 M 个：单列，不进入方向榜与任何占比的分母」；prompt 要求引用占比时同时说明分母、不得把 unknown 计入分母。
+- 数字白名单：复用 brief 抽出的 `assertKnownNumbers`，只允许输入里出现的数字（含证据标题数字片段、`date`/`as_of` 日期片段），编造 999 拒绝；comment ≤400 字；confidence low/medium/high。
+- 缓存表 `career_daily_comments`（`0165`，UNIQUE(comment_date, prompt_version)），读缓存取该日最新 `generated_at`；契约只加 `CareerDailyCommentResponseV1`，openapi 同步。
+- 2026-11-21 真实生成（receipt 332→334）：date 2026-11-21、as_of 2026-11-21T01:29:35Z、sample_size 60（当日有观测岗位）、new_jobs 34、confidence medium；页面 `/daily` 渲染「AI 评论」区块（无缓存整块隐藏）。
+- 评审 review-l3b1：PASS with minors（变异验证：comment 步骤移到 ingest 前 → 顺序测试失败；去掉数字校验 → 2 条编造数字测试失败）；minor 已处理（facts 分母/unknown 单列 + 页面文案「当日观测样本」+ 首页置信度文案统一为「低置信/中置信/高置信」）。
+
 ### stale 判定修复：`normalizer/llm-*` 视为当前版本（`3b12577`）
 
 - 问题：`summary.ts` 的 stale 计数原为 `normalizer_version <> NORMALIZER_VERSION`，LLM 兜底回填写入的 `normalizer/llm-*` 被误判为旧版本，真实库会冒 `stale_data` 警告。
@@ -762,6 +772,7 @@ curl -s "$BASE/api/site/career-insights/policies?page=1&page_size=5&source_key=n
 
 - **2026-11-19**：`origin/feat/integration` = `a5191f7`（stage 合并并推送）；本地后续提交 `254c7dc`。
 - 本次同步：D2/D3 阶段状态与 review 列由「待独立 review」更新为已合入 + PASS，并登记 `e9dddd5` / `e0bc809` / `9c6c83a` / `5df5856` 四项收敛提交。- **2026-11-19**：`b3375cc`（PR #12 已合入主线）——新增「policies facets 口径补充」：`facets.themes` 的 count 之和可小于 `total`（无主题政策不进入 themes 计数）、`facets.sources` 只统计 `published_at` 非空的政策（与列表可见集合一致）、facets 为全量分面不随分页/筛选变化。仅补文档，接口行为与历史结论未变。
+- **2026-11-21**：新增「就业日报 AI 评论」`GET /api/site/career-insights/daily-comment`（`0b69f95` + 页面 `d5241d5`）：后台预生成、`career_daily_comments` 缓存、当日聚合口径、数字白名单与分母/unknown 披露；每日管线变四步串行；真实生成 receipt 334（当日样本 60、新增 34、medium）。
 - **2026-11-21**：研判改为每日管线后台预生成（`454c01d`）：`career.ingest` 串行第三步跑 `scripts/build-career-brief.ts --json`，detail 增加 `brief`；修复数字校验对输入字符串数字片段的误判（`5024652`）；真实生成 as_of 2026-11-21T01:29Z、样本 222、观测日 3、receipt 331（usage 2887）。页面 `/brief` 只读缓存。
 - **2026-11-21**：`career.ingest` 改为「采集 → 有预算 LLM 兜底」同 job 串行（`d9bb313`）并修正预算为 80 行/12 万 token（`ae329f1`）；独立 `career.llm-normalize` schedule 已删除。brief 仍为离线脚本/人工触发，页面只读缓存。
 - **2026-11-20**：PR #16（`1782bbd`，tip `15cecc6`）合入岗位目录（`fd94961`）、异常信号（`9f01746`）、就业热点榜与就业日报（`0833650`，openapi `f6d1a82`）、离线 LLM 研判与 `0164_career_briefs`（`083d9f7` / `ce49bd8`）、`career.ingest` 告警（`ecce052` / `f58b9ca`）、stale 判定修复（`3b12577`）、政策 facets（`c3ea09b`）与城市候选/fixture 端口收尾（`15cecc6`）；本机实测 `/brief` 已由 204 变为 200。`bb5b24a`、`96e8f99` 为 `feat/stage-merge` 上未进 main 的本地提交。

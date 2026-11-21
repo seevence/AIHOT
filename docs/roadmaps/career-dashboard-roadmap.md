@@ -212,6 +212,8 @@
 - **L2 洞察页 8 段**（`c499bf4` + minors `682c0de`）：AI 趋势研判（完整 facts/inferences/actions/limitations/evidence + 置信度 + as_of + 样本） / 不同寻常的信号（从首页移入，带数字依据 + 官方原文链接 + skipped 分组提示） / 岗位趋势 / 技能趋势 / 热门岗位摘要卡 + 跳转 jobs / 学生就业建议 / 政策与岗位联动（无共同主题整段隐藏） / 数据范围与方法。热门岗位不再放完整榜/筛选/分页（完整榜单只在 `/career-insights/jobs`）。
 - **独立评审**：review-l1 PASS with minors（变异验证：把「值得注意的信号」加回首页 → `cache.test.ts` 失败）；review-l2 PASS with minors（变异验证：删第 2 段信号 → 5 条测试失败；政策段不隐藏 / 摘要卡跳转改错 / 去掉 skipped 提示各触发 1 条失败）。minor 修复：`682c0de`（不可用态与样本不足文案分开、补 4 条信号规则与摘要卡/建议上限断言、catalog 失败不再编「30 天」窗口）与 L1 minors（研判上限 3、学生友好口径、请求面与宽页断言）。
 - **验证**：干净副本 `test:web` **53/53**；主要 standalone `career-insights-board` 19/19、board+feeds 27/27；`tsc -p modules` 0；`npm run build -w @aihot/web` 成功。
+- **L4-a 清理（`865e3a1`）**：删除无线上入口的 `CareerDashboard.tsx` 与 `CareerSignals` 旧包装（保留 `CareerSignalItems`，信号断言迁到新渲染）；新增 `labels.ts` 的 `confidenceLabel()` 统一「低置信/中置信/高置信」，首页本地「置信度低/中/高」常量改为引用同一函数；`HOT_DEFINITION` 只保留在方法段一处。
+- **L3b 日报 AI 评论（`0b69f95` 后端 + `d5241d5` 页面）**：`/daily` 新增「AI 评论」区块（正文 + 「生成于 … · 中置信 · 当日观测样本 N 个岗位 · 今日新增 M」），无缓存/失败整块隐藏；后台由每日管线第四步预生成并写 `career_daily_comments`，页面只读缓存；真实生成 receipt 334。
 - **已知限制 / 待办（L4 收口）**：置信度文案首页「低/中/高」与洞察页「低置信」待统一；`CareerDashboard.tsx` 与 `CareerSignals` 旧包装已无线上入口（死代码待清）；`modules/career-insights/web/README.md` 与 E8 的「8 区块/七段」口径已被本节取代。
 
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）

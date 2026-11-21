@@ -7,7 +7,7 @@
 - `/career-insights/jobs/:id`：读取职位详情与观测记录。
 - `/career-insights/policies`：政策列表页，通过正式 HTTP API 读取 `/api/site/career-insights/policies`，支持 `source_key`、`theme`、`page`、`page_size` 查询参数与分页；参数非法时显示页面级错误状态，不回退 fixture。
 - `/hot`：企业招聘热度榜，读取 `/api/site/career-insights/hot?limit=10`（公司、岗位数、前 3 个职族、最近发布日期）。
-- `/daily`：就业日报，读取 `/api/site/career-insights/daily`（当日各来源采集结果、今日新增与库表计数、空技能岗位占比）。
+- `/daily`：就业日报，读取 `/api/site/career-insights/daily`（当日各来源采集结果、今日新增与库表计数、空技能岗位占比），并读取 `/api/site/career-insights/daily-comment` 渲染「AI 评论」区块（后台预生成的当日点评 + 生成时间/置信度/当日观测样本/今日新增；无缓存或失败时整块隐藏，页面永不触发模型）。
   （已更新：`/daily` 由站点日报改为就业日报；站点日报的 `/weekly`、`/monthly` 仍走 `/api/site/reports/*`。）
 
 正式页面只使用 `@aihot/web/lib/api.server` 请求 `/api/site/career-insights/*`，不导入 fixture、数据库或密钥。API 返回 503 时页面显示“数据尚未就绪”，不会自动回退 fixture；加载、空态、请求错误和单快照均有独立可见状态。
