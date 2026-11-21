@@ -255,6 +255,14 @@
   - SEO/安全/缓存：meta 与 JobPosting.description 清洗抓取长句（150+ 岗位受影响）、JobPosting.datePosted 优先 published_at、关键词搜索页 noindex 且不输出 ItemList、/daily/archive 退出 sitemap、career 页面 60s 共享缓存、web/api 补 nosniff/X-Frame-Options/Referrer-Policy 安全头；
   - /agent 页补齐就业模块接入说明（MCP 4 个 thewind_* 工具、/api/v1/career/*、三份 RSS），工具计数 7→11 与 MCP/llms 一致。
 
+- **E9 七次调整（2026-11-21 晚，手机端专项适配）**：
+  - 手机上下单：热门岗位页把搜索/筛选放到方向榜之前（桌面用 CSS order 还原原顺序）；搜索框 44 高、16px 字号（避免 iOS 聚焦自动放大），提交后带 #catalog-jobs 直接落到岗位明细。
+  - 触控目标：收藏按钮（列表/详情/吸顶栏）44 高、筛选 chip 与政策 chip 44 高、分页/清除按键 44 高、收藏页「移除/导入/导出」44 高命中区；小文字链接补透明命中区。
+  - 岗位详情页增加手机吸顶栏（返回职位列表 + 收藏），滚到页面深处也能返回/收藏；隐藏桌面重复返回链接。
+  - 手机安全区：PhoneBar 与锚点 scroll-padding 处理 safe-area-inset-top/bottom，PWA/刘海屏不被遮挡。
+  - 可读性与滚动提示：手机端 10.5–11.5px 辅助文字提到 12px；横向滚动的 Agent 表格加右侧渐隐提示；按下态反馈与 touch-action 优化。
+  - 验证：390×844 chromium 实测搜索框首屏 top=222/44 高/16px、chip 44、收藏 50×44、搜索提交 scrollY=1397 落到明细、详情吸顶栏可见、无 console 错误；web 测试 90/90、board 30/30。
+
 ## 待多角色协同（非 E 职责，需 A / C / D 处理）
 
 | # | 事项 | 负责角色 | 现状 | 影响 / 触发条件 |

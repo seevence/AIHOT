@@ -168,7 +168,7 @@ function DailySummary({ daily }: { daily: CareerDailyResponseV1 | null }) {
       <SectionHeader
         id="home-daily"
         title="最新就业日报"
-        aside={<Link to="/daily" className="text-[12px] font-medium text-accent hover:underline">查看今日日报 →</Link>}
+        aside={<Link to="/daily" className="inline-flex items-center py-2 -my-2 text-[12px] font-medium text-accent hover:underline">查看今日日报 →</Link>}
       />
       {daily === null ? (
         <Unavailable title="最新就业日报" />
@@ -222,7 +222,7 @@ function DirectionEntry({ catalog }: { catalog: CareerCatalogResponseV1 | null }
             ))}
           </ul>
         )}
-        <Link to={JOBS_CATALOG_HREF} className="text-[12px] font-medium text-accent hover:underline sm:ml-auto">
+        <Link to={JOBS_CATALOG_HREF} className="inline-flex items-center py-2 -my-2 text-[12px] font-medium text-accent hover:underline sm:ml-auto">
           查看全部岗位 →
         </Link>
       </div>

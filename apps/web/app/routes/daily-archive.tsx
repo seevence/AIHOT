@@ -175,7 +175,7 @@ export default function DailyArchive() {
                 to={link.to}
                 viewTransition
                 aria-current={"current" in link ? "page" : undefined}
-                className={`rounded-full px-3.5 py-1.5 text-[13px] transition-colors ${
+                className={`rounded-full px-3.5 py-2.5 text-[13px] transition-colors sm:py-1.5 ${
                   "current" in link
                     ? "bg-accent-soft font-semibold text-accent"
                     : "border border-line-strong bg-surface text-ink-2 hover:border-ink-4 hover:text-ink"

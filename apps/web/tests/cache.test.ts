@@ -75,12 +75,15 @@ test("public route subsets produce the same complete navigation data; the home h
     assert.ok(body.includes("root") && body.includes("routes/home"));
     return body;
   }));
-  assert.ok(answers.every((body) => body === answers[0]));
+  // The four requests can straddle a second boundary, so their expiry timestamps may differ by a second;
+  // the navigation data itself must be identical (freshness is asserted from the headers above).
+  const normalized = (body: string) => body.replace(/"expiresAt",\d+/g, '"expiresAt",0');
+  assert.ok(answers.every((body) => normalized(body) === normalized(answers[0]!)));
   const category = CATEGORY_KEYS.at(-1)!;
   // The workbench home has no category filter: a stray filter changes neither the data nor the cache entry.
   const filtered = await fetch(`${origin}/_.data?category=${category}&_routes=root`);
   const body = await filtered.text();
-  assert.equal(body, answers[0]);
+  assert.equal(normalized(body), normalized(answers[0]!));
 });
 
 test("navigation streams are plain text for download managers, including errors", async () => {

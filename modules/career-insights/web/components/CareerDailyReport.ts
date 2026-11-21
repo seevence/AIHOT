@@ -121,8 +121,8 @@ export function CareerDailyReport({
                 viewTransition: true,
                 "aria-current": link.current ? "page" : undefined,
                 className: link.current
-                  ? "rounded-full bg-accent-soft px-3.5 py-1.5 text-[13px] font-semibold text-accent"
-                  : "rounded-full border border-line-strong bg-surface px-3.5 py-1.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 hover:text-ink",
+                  ? "rounded-full bg-accent-soft px-3.5 py-2.5 text-[13px] font-semibold text-accent sm:py-1.5"
+                  : "rounded-full border border-line-strong bg-surface px-3.5 py-2.5 text-[13px] text-ink-2 transition-colors hover:border-ink-4 hover:text-ink sm:py-1.5",
               },
               link.label,
             ),

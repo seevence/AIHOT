@@ -778,13 +778,13 @@ test("the jobs catalog route is registered by the module", () => {
   assert.match(source, /path: "career-insights\/jobs", file: "web\/routes\/jobs-catalog\.tsx"/);
 });
 // 岗位目录页（热门岗位）的版面顺序、方向榜口径说明、筛选链接与分页锚点。
-test("the jobs catalog page puts the filter block between the direction ranking and the job list", () => {
+test("the jobs catalog page puts search and filters before the direction ranking on phones", () => {
   const html = render(createElement(JobsCatalogBoard, { catalog: CATALOG, jobs: JOBS, filters: FILTERS }));
-  // 按 DOM 顺序取四个区块的 id，而不是在全文里找标题文本。
+  // DOM 顺序就是手机上的顺序（搜索/筛选 → 方向榜 → 明细）；桌面用 CSS order 把方向榜放回筛选之前。
   const order = html("[id='catalog-directions'], [id='catalog-filters'], [id='catalog-jobs']")
     .map((_, element) => html(element).attr("id"))
     .get();
-  assert.deepEqual(order, ["catalog-directions", "catalog-filters", "catalog-jobs"]);
+  assert.deepEqual(order, ["catalog-filters", "catalog-directions", "catalog-jobs"]);
 });
 
 test("the direction ranking states its classified scope and discloses the unclassified jobs", () => {
@@ -870,7 +870,8 @@ test("the keyword search box submits to the catalog path and keeps the other fil
 
   assert.equal(form.length, 1);
   assert.equal(form.attr("method"), "get");
-  assert.equal(form.attr("action"), "/career-insights/jobs");
+  // 提交后落在岗位明细（#catalog-jobs），手机上不用再从页首往下滚两屏。
+  assert.equal(form.attr("action"), "/career-insights/jobs#catalog-jobs");
   assert.equal(form.attr("role"), "search");
 
   const input = form.find("[data-search-input]");

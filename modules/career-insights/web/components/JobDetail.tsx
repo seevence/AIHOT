@@ -9,6 +9,7 @@ import {
   skillLabel,
 } from "../labels";
 import { CareerTime } from "../time";
+import { PhoneBar } from "@aihot/web/components/shell/PhoneBar";
 import { JobStarButton } from "./JobStarButton";
 
 type Fact = { label: string; value: string; dateTime?: boolean; note?: string };
@@ -50,7 +51,8 @@ export function JobDetail({ job, backHref }: { job: JobDetailV1; backHref: strin
 
   return (
     <>
-      <Link to={backHref} className="inline-flex text-[13px] text-ink-3 hover:text-ink">← 返回职位列表</Link>
+      <PhoneBar back={{ to: backHref, label: "职位列表" }} title={job.title} actions={<JobStarButton id={job.id} title={job.title} company={job.company_name} roleFamily={job.role_family} locations={job.locations} compact />} />
+      <Link to={backHref} className="hidden text-[13px] text-ink-3 hover:text-ink lg:inline-flex">← 返回职位列表</Link>
 
       <header>
         <div className="flex flex-wrap items-start justify-between gap-3">

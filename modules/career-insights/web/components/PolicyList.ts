@@ -4,7 +4,7 @@ import { buildPoliciesHref, type PolicyListResponse, type PolicyPageFilters } fr
 import { POLICY_SOURCE_OPTIONS, POLICY_SOURCE_TIER_LABELS, THEME_LABELS, policySourceLabel } from "../labels.ts";
 import { CareerDate } from "../time.ts";
 
-const CHIP_CLASS = "inline-flex h-8 items-center rounded-full border px-3 text-[12px] font-medium break-words";
+const CHIP_CLASS = "inline-flex h-11 items-center rounded-full border px-3 text-[12px] font-medium break-words sm:h-8";
 const CHIP_ACTIVE_CLASS = `${CHIP_CLASS} border-accent bg-accent text-accent-contrast`;
 const CHIP_IDLE_CLASS = `${CHIP_CLASS} border-line-strong text-ink-2`;
 
@@ -141,7 +141,7 @@ export function PolicyList({ policies, filters }: { policies: PolicyListResponse
               Link,
               {
                 to: hrefForPage(1),
-                className: "mt-3 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2",
+                className: "mt-3 inline-flex h-11 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2 sm:h-9",
               },
               "回到第 1 页",
             ),
@@ -162,7 +162,7 @@ export function PolicyList({ policies, filters }: { policies: PolicyListResponse
                   Link,
                   {
                     to: buildPoliciesHref({ page: 1, page_size: filters.page_size }),
-                    className: "mt-4 inline-flex h-9 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2",
+                    className: "mt-4 inline-flex h-11 items-center rounded-full border border-line-strong px-5 text-[13px] font-medium text-ink-2 sm:h-9",
                   },
                   "清除筛选",
                 )

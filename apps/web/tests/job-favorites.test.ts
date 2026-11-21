@@ -103,7 +103,7 @@ test("starring a job on its detail page lists it on /starred, and 移除 removes
   const { context, page, errors } = await openPage();
   try {
     await visit(page, `${web.origin}/career-insights/jobs/${JOB_ID}`);
-    const detailStar = page.locator("[data-job-star]");
+    const detailStar = page.locator("[data-job-star]:visible");
     await expect(detailStar).toHaveText("收藏");
     await expect(detailStar).toHaveAttribute("aria-pressed", "false");
     await expect(detailStar).toHaveAttribute("data-job-star", "off");
@@ -143,7 +143,7 @@ test("starring a job on its detail page lists it on /starred, and 移除 removes
 
     // 回到详情页，按钮已恢复未收藏。
     await visit(page, `${web.origin}/career-insights/jobs/${JOB_ID}`);
-    await expect(page.locator("[data-job-star]")).toHaveAttribute("data-job-star", "off");
+    await expect(page.locator("[data-job-star]:visible")).toHaveAttribute("data-job-star", "off");
     assert.deepEqual(errors, [], "hydration must not log errors");
   } finally {
     await context.close();
@@ -173,7 +173,7 @@ test("starring a job on a list row has the same effect and survives a reload", a
   const { context, page, errors } = await openPage();
   try {
     await visit(page, `${web.origin}/career-insights/jobs`);
-    const rowStar = page.locator(`[data-catalog-job="${JOB_ID}"] [data-job-star]`);
+    const rowStar = page.locator(`[data-catalog-job="${JOB_ID}"] [data-job-star]:visible`);
     await expect(rowStar).toHaveText("收藏");
     await expect(rowStar).toHaveAttribute("data-job-star", "off");
     await rowStar.click();
@@ -185,13 +185,13 @@ test("starring a job on a list row has the same effect and survives a reload", a
 
     // 重新打开岗位列表，compact 按钮从 localStorage 恢复为已收藏。
     await visit(page, `${web.origin}/career-insights/jobs`);
-    const reloadedStar = page.locator(`[data-catalog-job="${JOB_ID}"] [data-job-star]`);
+    const reloadedStar = page.locator(`[data-catalog-job="${JOB_ID}"] [data-job-star]:visible`);
     await expect(reloadedStar).toHaveText("已收藏");
     await expect(reloadedStar).toHaveAttribute("data-job-star", "on");
 
     // 同一份收藏在详情页也是已收藏状态。
     await visit(page, `${web.origin}/career-insights/jobs/${JOB_ID}`);
-    await expect(page.locator("[data-job-star]")).toHaveText("已收藏");
+    await expect(page.locator("[data-job-star]:visible")).toHaveText("已收藏");
     assert.deepEqual(errors, [], "hydration must not log errors");
   } finally {
     await context.close();
