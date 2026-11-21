@@ -151,7 +151,8 @@ test("the home renders three brief conclusions only, keeps the daily entry and r
     for (const hidden of ["INFERENCE-4", "INFERENCE-5", "ACTION-4", "ACTION-5", "FACT-ONLY", "LIMITATION-ONLY", "EVIDENCE-ONLY"]) {
       assert.doesNotMatch(html, new RegExp(hidden), hidden);
     }
-    assert.match(html, /置信度中/, "the conclusion badge names the brief's confidence");
+    assert.match(html, /中置信/, "the conclusion badge names the brief's confidence");
+  assert.doesNotMatch(html, /置信度中/, "the home uses the site-wide confidence wording, not its old local one");
     // Adjacent JSX text nodes are split by comment markers in SSR; the rendered sentence still reads whole.
     const rendered = html.replace(/<!--[\s\S]*?-->/g, "");
     assert.match(rendered, /最新就业日报：本区块暂时不可用/, "only the daily block degrades");

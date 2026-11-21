@@ -34,7 +34,7 @@ export const UNKNOWN_RATIO_LABEL = "空技能岗位占比";
  */
 export function dailyCommentMeta(comment: CareerDailyCommentResponseV1): string {
   const generatedAt = formatCareerDateTime(comment.generated_at) ?? comment.generated_at;
-  return `生成于 ${generatedAt} · ${confidenceLabel(comment.confidence)} · 样本 ${comment.sample_size} 个岗位 · 今日新增 ${comment.new_jobs}`;
+  return `生成于 ${generatedAt} · ${confidenceLabel(comment.confidence)} · 当日观测样本 ${comment.sample_size} 个岗位 · 今日新增 ${comment.new_jobs}`;
 }
 
 /** 比率按百分比展示；null 表示样本为空，没有可算的占比。 */

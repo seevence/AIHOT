@@ -10,7 +10,7 @@ import type {
   CareerDirectionV1,
   SummaryResponseV1,
 } from "@aihot/career-insights/contracts";
-import { ROLE_FAMILY_LABELS } from "../../../../../modules/career-insights/web/labels.ts";
+import { ROLE_FAMILY_LABELS, confidenceLabel } from "../../../../../modules/career-insights/web/labels.ts";
 import { UNKNOWN_RATIO_LABEL, formatRatioPercent } from "../../../../../modules/career-insights/web/feeds.ts";
 import { CareerTime } from "../../../../../modules/career-insights/web/time.ts";
 import type { HomeBriefState } from "./contracts.ts";
@@ -25,8 +25,6 @@ import {
 
 const SECTION_CLASS = "rounded-card border border-line bg-surface p-5";
 const JOBS_CATALOG_HREF = "/career-insights/jobs";
-
-const CONFIDENCE_LABELS = { low: "置信度低", medium: "置信度中", high: "置信度高" } as const;
 
 /** 区块级降级：不整页失败，也不隐藏其它区块。 */
 function Unavailable({ title }: { title: string }) {
@@ -118,7 +116,7 @@ function Brief({ brief }: { brief: HomeBriefState }) {
               <dt className="flex flex-wrap items-baseline gap-2 text-[12px] font-medium text-ink-4">
                 趋势判断
                 <span className="rounded-full bg-bg-sunk px-2 py-0.5 text-[11px] font-normal text-ink-3">
-                  {CONFIDENCE_LABELS[brief.data.confidence]}
+                  {confidenceLabel(brief.data.confidence)}
                 </span>
               </dt>
               <dd><ConclusionList lines={brief.data.inferences} limit={HOME_BRIEF_LIMIT} /></dd>

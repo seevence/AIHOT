@@ -190,7 +190,7 @@ test("the daily report renders the cached AI comment after the day's figures and
   assert.equal(html("[data-daily-comment-body]").text(), comment.comment);
   assert.equal(
     html("[data-daily-comment-meta]").text(),
-    "生成于 2026年1月1日 08:00 · 中置信 · 样本 128 个岗位 · 今日新增 15",
+    "生成于 2026年1月1日 08:00 · 中置信 · 当日观测样本 128 个岗位 · 今日新增 15",
     "generated_at is read in Beijing time, the confidence uses the shared label and the counts come from the cache",
   );
   // The block sits after both the source results and the day's figures, and nothing follows it here.

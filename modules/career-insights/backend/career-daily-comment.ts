@@ -32,6 +32,7 @@ const SYSTEM_PROMPT = [
   "comment：用 2-3 句中文点评当日的岗位、技能与政策变化，并说明这对学生意味着什么（值得关注的方向、需要准备的技能）；只依据输入里的数字与 facts，不要复述整份汇总。",
   `只能使用输入里已经出现的数字，禁止编造或自行推算新数字；comment 不超过 ${MAX_COMMENT_CHARS} 个字。`,
   "当日新增岗位为 0 且当日没有新增政策时，如实写「今日无新增」，不要编造变化；输入里没有的方向、职位或技能不要写。",
+  "引用技能占比（share）时必须同时说明分母：「当日带技能岗位 N 个」；未归类（unknown）岗位单列，不进入任何占比的分母，不要把 unknown 计入方向或技能占比。",
   "confidence：low、medium、high 之一；样本量小或观察日数不足两个时用 low。",
 ].join("\n");
 
@@ -51,6 +52,10 @@ export interface CareerDailyCommentInputV1 {
   skills: Array<{ skill: string; job_count: number; share: number }>;
   new_policy_count: number;
   new_policies: Array<{ title: string; issuer: string }>;
+  /** 当日带技能岗位数：技能占比（share）的分母，模型引用占比时必须能一并说明分母。 */
+  skills_sample_size: number;
+  /** 当日方向未归类（unknown）岗位数：单列，不进方向榜/占比分母。 */
+  unknown_direction_count: number;
   evidence_candidates: CareerDailyCommentEvidenceV1[];
   /** 给模型的可引用事实；数字都来自上面的聚合字段。 */
   facts: string[];
@@ -212,7 +217,13 @@ function buildFacts(input: Omit<CareerDailyCommentInputV1, "facts">): string[] {
           .map((entry) => `${skillLabel(entry.skill)} ${entry.job_count} 个岗位（占比 ${percentText(entry.share)}）`)
           .join("；"),
     );
+    facts.push(
+      `技能占比的分母：当日带技能岗位 ${input.skills_sample_size} 个（未识别技能的岗位不进分母，占比不等于岗位需求概率）`,
+    );
   }
+  facts.push(
+    `当日方向未归类（unknown）岗位 ${input.unknown_direction_count} 个：单列，不进入方向榜与任何占比的分母`,
+  );
   if (input.new_policy_count === 0) {
     facts.push("当日无新增政策");
   } else {
@@ -277,6 +288,8 @@ export async function loadDailyCommentInput(db: Db, date: string): Promise<Caree
     skills: topSkills(jobs),
     new_policy_count: policies[0]?.new_policy_count ?? 0,
     new_policies: policies.map((policy) => ({ title: clipTitle(policy.title), issuer: policy.issuer })),
+    skills_sample_size: jobs.filter((job) => (job.skills ?? []).length > 0).length,
+    unknown_direction_count: jobs.filter((job) => job.role_family === "unknown").length,
     evidence_candidates: [
       ...newJobEvidence,
       ...policies.map<CareerDailyCommentEvidenceV1>((policy) => ({ kind: "policy", id: policy.id, title: policy.title })),

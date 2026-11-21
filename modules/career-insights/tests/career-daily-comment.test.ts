@@ -46,6 +46,8 @@ function input(overrides: Partial<CareerDailyCommentInputV1> = {}): CareerDailyC
     skills: [{ skill: "python", job_count: 6, share: 0.5 }],
     new_policy_count: 1,
     new_policies: [{ title: "关于促进人工智能就业的通知", issuer: "国家发展和改革委员会" }],
+    skills_sample_size: 12,
+    unknown_direction_count: 0,
     evidence_candidates: [{ kind: "job", id: JOB_ID, title: "大客户服务经理 TAM（J107214）" }],
     facts: ["当日有观测的岗位：12 个"],
     ...overrides,
@@ -293,6 +295,9 @@ test("the daily input aggregates the Asia/Shanghai day: sample, new jobs, top di
   assert.ok(day.facts.includes("当日首次观测到的新岗位：2 个"));
   assert.ok(day.facts.some((fact) => fact.includes("方向 Top3：AI 算法 4 个岗位；数据 1 个岗位")));
   assert.ok(day.facts.some((fact) => fact.includes("Python 4 个岗位（占比 80.0%）")));
+  // 占比必须带分母、unknown 必须单列（路线图「口径披露」纪律）。
+  assert.ok(day.facts.some((fact) => fact.includes("技能占比的分母：当日带技能岗位 5 个")), day.facts.join(" / "));
+  assert.ok(day.facts.some((fact) => fact.includes("当日方向未归类（unknown）岗位 1 个")));
   assert.ok(day.facts.some((fact) => fact.includes("当日新增政策 1 条：关于促进人工智能就业的通知")));
   assert.equal(JSON.stringify(day).includes("测试科技有限公司"), false, "模型输入里没有公司名");
 });
