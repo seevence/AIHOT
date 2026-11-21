@@ -3,6 +3,7 @@ import type { DataOrigin } from "../contracts/index.ts";
 import type { PolicyEvidenceRefV1 } from "../contracts/job.ts";
 import { InvalidParameterError } from "./errors.ts";
 import { MAX_PAGE, MAX_PAGE_SIZE } from "./limits.ts";
+import { careerPolicyRelevanceSql } from "./policy-relevance.ts";
 import { resolveDataOrigin } from "./provenance.ts";
 const EPOCH_ISO = "1970-01-01T00:00:00.000Z";
 const EXCERPT_LIMIT = 500;
@@ -89,36 +90,39 @@ export async function listPolicies(db: Db, filters: PolicyFiltersV1): Promise<Po
     ${filters.source_key === undefined ? sql`` : sql`AND source_key = ${filters.source_key}`}
     ${filters.theme === undefined ? sql`` : sql`AND theme_ids @> to_jsonb(ARRAY[${filters.theme}::text])`}
   `;
-
+  // 列表、总数、分面与来源/截止时间都只统计通过相关性判定的政策（同一份标题规则），
+  // 页面上的条目、分面计数和日报计数才一致。
   const [rows, totals, latest, origins, sourceFacets, themeFacets] = await Promise.all([
     db<PolicyRow[]>`
       SELECT policy_item_id, title, issuer, published_at, official_url, source_tier, theme_ids, evidence_excerpt
       FROM career_policies
-      WHERE published_at IS NOT NULL ${condition}
+      WHERE published_at IS NOT NULL AND ${careerPolicyRelevanceSql()} ${condition}
       ORDER BY published_at DESC, policy_item_id ASC
       LIMIT ${pageSize} OFFSET ${(page - 1) * pageSize}`,
     db<{ total: number }[]>`
       SELECT COUNT(*)::int AS total
       FROM career_policies
-      WHERE published_at IS NOT NULL ${condition}`,
+      WHERE published_at IS NOT NULL AND ${careerPolicyRelevanceSql()} ${condition}`,
     db<{ as_of: Date | null }[]>`
       SELECT MAX(fetched_at) AS as_of
-      FROM career_policies`,
+      FROM career_policies
+      WHERE ${careerPolicyRelevanceSql()}`,
     db<{ data_origin: string; n: number }[]>`
       SELECT data_origin, COUNT(*)::int AS n
       FROM career_policies
+      WHERE ${careerPolicyRelevanceSql()}
       GROUP BY data_origin`,
     db<PolicySourceFacetV1[]>`
       SELECT source_key, COUNT(*)::int AS count
       FROM career_policies
-      WHERE published_at IS NOT NULL
+      WHERE published_at IS NOT NULL AND ${careerPolicyRelevanceSql()}
       GROUP BY source_key
       ORDER BY source_key ASC`,
     db<PolicyThemeFacetV1[]>`
       SELECT theme AS theme_id, COUNT(*)::int AS count
       FROM career_policies policy
       CROSS JOIN LATERAL jsonb_array_elements_text(COALESCE(policy.theme_ids, '[]'::jsonb)) AS theme
-      WHERE policy.published_at IS NOT NULL
+      WHERE policy.published_at IS NOT NULL AND ${careerPolicyRelevanceSql()}
       GROUP BY theme
       ORDER BY count DESC, theme ASC`,
   ]);

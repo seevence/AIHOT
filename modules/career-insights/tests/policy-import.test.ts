@@ -199,16 +199,16 @@ test("re-importing a batch of a stored policy keeps a single row", async () => {
   const collectEnvelope = {
     ...envelope,
     source_key: "state-council-policy",
-    source_issuer: "中共中央",
+    source_issuer: "国务院",
   };
   const batch = policyBatchFromDrafts(
     [
       draft({
         sourceKey: "state-council-policy",
-        title: "中共中央印发《中国共产党地方委员会工作条例》",
+        title: "关于做好高校毕业生就业创业工作的通知",
         url,
-        documentNumber: "中发〔2026〕9号",
-        bodyRaw: "中共中央印发《中国共产党地方委员会工作条例》。",
+        documentNumber: "国发〔2026〕9号",
+        bodyRaw: "促进高校毕业生就业创业。",
         publishedAt: "2026-11-15T00:00:00.000Z",
       }),
     ],
@@ -230,10 +230,11 @@ test("re-importing a batch of a stored policy keeps a single row", async () => {
 test("a draft without any theme keyword still writes with an empty theme array", async () => {
   const batch = policyBatchFromDrafts(
     [
+      // 相关但没有任何主题关键词：判定只要求就业/产业发展相关，不要求能归到某个主题。
       draft({
-        title: "关于做好冬季供暖工作的通知",
-        bodyRaw: "保障居民冬季供暖。",
-        documentNumber: "发改能源〔2026〕9号",
+        title: "关于规范劳务派遣用工管理的通知",
+        bodyRaw: "规范劳务派遣用工管理。",
+        documentNumber: "发改就业〔2026〕9号",
       }),
     ],
     envelope,

@@ -9,6 +9,7 @@ import type { RoleFamily } from "../contracts/job.ts";
 import { ROLE_FAMILY_LABELS, SKILL_LABELS } from "../data/dictionaries.ts";
 import { assertKnownNumbers, CareerBriefValidationError } from "./brief.ts";
 import { InvalidParameterError } from "./errors.ts";
+import { careerPolicyRelevanceSql } from "./policy-relevance.ts";
 
 export const CAREER_DAILY_COMMENT_PROMPT_VERSION = "career-daily-comment/1";
 export const CAREER_DAILY_COMMENT_PURPOSE = "career-daily-comment";
@@ -258,6 +259,7 @@ export async function loadDailyCommentInput(db: Db, date: string): Promise<Caree
       SELECT policy.id::text AS id, policy.title, policy.issuer, (COUNT(*) OVER ())::int AS new_policy_count
       FROM career_policies policy
       WHERE (policy.first_seen_at AT TIME ZONE ${BEIJING_TIMEZONE})::date = ${date}::date
+        AND ${careerPolicyRelevanceSql()}
       ORDER BY policy.first_seen_at DESC, policy.id ASC
       LIMIT ${NEW_SAMPLE_LIMIT}::int`,
     db<ObservationDaysRow[]>`

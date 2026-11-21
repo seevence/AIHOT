@@ -7,6 +7,7 @@ import { BEIJING_TIMEZONE } from "@aihot/contracts/time";
 import type { CareerBriefV1 } from "../contracts/insights.ts";
 import { ROLE_FAMILY_LABELS, SKILL_LABELS } from "../data/dictionaries.ts";
 import { loadCareerCatalog, type CareerCatalogOptions } from "./career-catalog.ts";
+import { careerPolicyRelevanceSql } from "./policy-relevance.ts";
 
 export const CAREER_BRIEF_PROMPT_VERSION = "career-brief/2";
 export const CAREER_BRIEF_PURPOSE = "career-brief";
@@ -241,6 +242,7 @@ export async function buildCareerBriefInput(db: Db, options: CareerBriefInputOpt
     db<PolicyEvidenceRow[]>`
       SELECT id::text AS id, title
       FROM career_policies
+      WHERE ${careerPolicyRelevanceSql()}
       ORDER BY last_seen_at DESC, id ASC
       LIMIT ${POLICY_EVIDENCE_LIMIT}`,
   ]);
