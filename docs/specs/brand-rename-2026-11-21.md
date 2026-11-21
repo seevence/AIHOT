@@ -31,13 +31,13 @@
 |---|---|
 | `myhot_get_latest` | `thewind_get_latest` |
 | `myhot_search` | `thewind_search` |
-| `myhot_get_hot` | `thewind_get_hot` |
+| `myhot_get_hot_topics` | `thewind_get_hot_topics` |
 | `myhot_get_story` | `thewind_get_story` |
 | `myhot_get_daily` | `thewind_get_daily` |
 | `myhot_get_weekly` | `thewind_get_weekly` |
 | `myhot_get_monthly` | `thewind_get_monthly` |
 
-（工具名由 `MCP_TOOL_NAMES`/前缀生成；以 `/api/mcp` 的 `tools/list` 实测为准。）
+（工具名由 `MCP_TOOL_NAMES`/前缀生成；部署后以 `/api/mcp` 的 `tools/list` 实测为 `thewind_get_latest / thewind_search / thewind_get_hot_topics / thewind_get_story / thewind_get_daily / thewind_get_weekly / thewind_get_monthly`。）
 
 ## 明确保留（B/C 档，不改）
 
