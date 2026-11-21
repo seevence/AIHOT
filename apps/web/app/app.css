@@ -464,7 +464,6 @@
   bottom: 0;
   width: 28px;
   pointer-events: none;
-  border-radius: inherit;
   background: linear-gradient(to right, transparent, var(--surface));
 }
 
