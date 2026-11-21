@@ -4,7 +4,7 @@
 
 - `/`（首页，2026-11-21 L1 + 中文化）：5 段 —— 今日概览 / AI 就业研判（只留 inferences ≤3 + actions ≤3） / 需求变化三指标（学生友好岗位带口径注） / 最新就业日报摘要+入口 / 热门方向 Top3 一行入口；不再请求 signals 与 latest jobs。
 - `/career-insights`（2026-11-21 L2 + E9 二次调整）：**6 段** —— AI 趋势研判（完整 facts/inferences/actions/limitations/evidence，含「给学生的建议」子块）/ 不同寻常的信号（带数字依据与原文链接，skipped 分组提示）/ 岗位趋势 / 技能趋势 / 政策与岗位联动（无共同主题整段隐藏）/ 数据范围与方法。领域词（职族/技能 ID、英文字段名）在渲染前统一中文化；通过正式 HTTP API 并行读取 summary、catalog、signals、brief，逐块降级。
-- `/career-insights/jobs`：热门岗位页 —— 方向榜 → 筛选岗位 → 职位榜 → 岗位明细（明细带 `#catalog-jobs` 锚点，翻页保留滚动位置）；筛选真实生效（城市/仅学生友好收窄职位榜与明细）；筛选/翻页链接用 `preventScrollReset`，不会把读者弹回页顶。岗位行有「收藏」按钮（本地收藏，见下）。
+- `/career-insights/jobs`：热门岗位页 —— 方向榜 → 筛选岗位 → 职位榜 → 岗位明细（明细带 `#catalog-jobs` 锚点，翻页落到岗位明细顶部、不回到页顶）；筛选真实生效（城市/仅学生友好收窄职位榜与明细）；筛选/方向/职位证据链接用 `preventScrollReset` 保持当前位置；翻页靠 `#catalog-jobs` 锚点落到岗位明细。岗位行有「收藏」按钮（本地收藏，见下）。
 - `/starred`：收藏页（浏览器本地）—— 文章收藏 + 「收藏的岗位」区块（岗位快照、中文职族/公司/城市/收藏时间、移除、跳职位详情）。岗位收藏存在 `aihot-starred-jobs`（上限 200），与文章收藏相互独立。
 - `/career-insights/jobs/:id`：读取职位详情与观测记录。
 - `/career-insights/policies`：政策列表页，通过正式 HTTP API 读取 `/api/site/career-insights/policies`，支持 `source_key`、`theme`、`page`、`page_size` 查询参数与分页；参数非法时显示页面级错误状态，不回退 fixture。
