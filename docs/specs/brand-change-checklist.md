@@ -1,6 +1,7 @@
-# 品牌改造清单：AIHOT → 就业HOT（D 提供，归属待队长裁定）
+# 品牌改造清单：AIHOT → 就业HOT（D 提供；已被 THEWIND 定稿取代）
 
-> 状态：清单完成，**未执行任何 site/ 改动**
+> 状态：**已被 2026-11-21 的 THEWIND 定稿取代**（用户拍板站名 THEWIND，A 档品牌 + B1 公开技术标识已执行，见 `docs/specs/brand-rename-2026-11-21.md`）。本文件保留为历史清单：文中「就业HOT」工作名不再使用。
+> 原状态：清单完成，**未执行任何 site/ 改动**
 > 归属：`site/site.ts`、`site/changelog.json`、`site/brand/**` 未出现在云端 `ROADMAP.md` 任何角色的独占写集中（BLK-01）
 > 建议：由 A 执行，或由队长书面授权 D 以单个 commit 执行
 > 日期：2026-11-17
