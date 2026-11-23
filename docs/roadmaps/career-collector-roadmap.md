@@ -470,7 +470,34 @@ B 侧落地要点：
 - **研判真实生成（L3a 验收，2026-11-21 10:00 CST）**：`node --env-file=../AIHOT/.env scripts/build-career-brief.ts --json` → exit 0、stdout 单行 JSON：`as_of=2026-11-21T01:29:35Z, sample_size=222, observation_days=3, confidence=low, receipt_id=331, model=default`；usage total 2887（prompt 2094 / completion 793）；`career_briefs` 新增一行（旧 2026-11-20 行保留，按 `(as_of,prompt_version)` upsert）。`GET /brief` 返回 200 且 sample_size=222，证明页面只读缓存。
 - **数字校验修复（`5024652`，L3a 验收发现）**：研判生成曾因「证据标题里的数字片段（`J107214`）被判编造」而永远失败；修复为把输入**所有字符串值里的连续数字片段**加入白名单（精确匹配才放行），并补 3 条断言（标题内数字通过、输入外 999 拒绝、43% 仍按百分比语义拒绝）；`career-brief` 测试 13→16、原有 0.4266→42.7% 等语义不变。
 
+## 2026-11-21 晚：信源扩容（E10）
+
+### 新增来源（全部真实 live 验证、样本与回放测试齐备）
+
+| 来源 | 类型 | 规模/入口 | 关键约束 |
+|---|---|---|---|
+| 华为官方招聘 | 招聘 | 社招 603 条，公开 JSON（`/recruitmentPosition/pub/getJobPage`） | 列表含职责/要求，免详情；校招正文为占位未纳入 |
+| 网易官方招聘 | 招聘 | 2602 条，公开 JSON（`/api/hr163/position/queryPage`） | 列表含 description/requirement |
+| 滴滴官方招聘 | 招聘 | 994 条，公开 JSON（`/recruit-portal-service/api/job/front/list`） | 列表含 jobDuty/jobQualification |
+| 荣耀官方招聘 | 招聘 | 386 条，公开表单 JSON（北森托管） | 列表无正文，逐条取详情；按 postId 去重 |
+| 中国建筑社会招聘 | 招聘 | 71 条公告，静态 HTML | 公告正文含联系人整条跳过；页面模板 `<script>` 含验证码生成器 |
+| 人社部中国就业网 | 政策 | 中央政策栏目，静态 HTML | mohrss.gov.cn 主站被 EdgeOne 挑战，改用 chinajob 子站 |
+| 长沙人社局劳动就业公告 | 政策 | TRS 静态 HTML（站点 SiteDomain 为 http） | https 持续 502，按站点自身 http 地址采集，notes 标注明文风险 |
+| 湖南省教育厅通知公告 | 政策 | TRS 静态 HTML | 无风控，直接启用 |
+| 教育部公告公示 | 政策 | 原禁用，现启用 | 全站 HTTPS→HTTP 302；fetch 门禁仅对 `/jyb_xxgk/s5743/s5744/` 同 host 同 path 精确放行 |
+
+### 共享层修复（两个 block-detector 误判）
+- **JSON 正文**：华为安全类岗位正文含「安全验证」，被 CAPTCHA 文案扫描误判为拦截页；改为 JSON 响应不做正文标记扫描，验证码/付费墙由状态码与重定向判断。
+- **HTML 模板**：中国建筑页面 `<script>` 内嵌「验证码」生成器、登录框 `input placeholder="请输入验证码"`，整页扫描误判；改为先剔除 script/style/注释/标签、只扫可见文本，真实验证码页仍能识别。
+- 两条都有回归测试（JSON 业务词、input 占位符不误判；可见「验证码」仍识别）。
+
+### 验证与数据（2026-11-21 晚，真实网络）
+- 测试：collector 全量 **211/211** 通过，`tsc -p modules` 0；14 个启用源全部 live 采集成功。
+- 入库：`ingest-career.ts --live --pages 2` → **jobs 369 / observations 659 / policies 10**；招聘 8 源（腾讯 90、美团 89、百度 52、华为 40、中国建筑 34、荣耀 24、滴滴 20、网易 20）；政策 5 源有数据。
+- 部署：`aihot-app` 镜像重建并重启 api/worker/web，`/api/health` ok；次日 06:10 cron 自动带全部 14 源运行。
 ## 最近更新
+
+- **2026-11-21（晚）**：信源扩容到 14 个（招聘 8 + 政策 6），新增华为/网易/滴滴/荣耀/中国建筑/人社部中国就业网/长沙人社局/湖南省教育厅并启用教育部；修复 block-detector 对 JSON 正文与 HTML 模板的两类误判；采集测试 211/211，入库 jobs 369 / observations 659 / policies 10。
 
 - **2026-11-21**：每日管线扩为 `career.ingest` 单 job 串行三步（采集 → 有预算 LLM 兜底 → 研判预生成，`454c01d`/`5024652`）；修复研判数字校验对输入字符串数字片段的误判，真实生成成功（as_of 2026-11-21、样本 222、观测日 3、receipt 331）。
 - **2026-11-21**：每日管线改为 `career.ingest` 单 job 串行（采集 → 有预算 LLM 兜底），修复 pg-boss 补跑错序（`d9bb313`）与预算偏小（`ae329f1`）；今日补跑 47 行、0 失败；新增本节「每日管线：采集 → 有预算的 LLM 兜底」。
